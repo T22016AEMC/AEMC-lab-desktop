@@ -47,6 +47,11 @@ export interface Entity {
   foodId: number | null
   /** 追尾巴時轉圈的角度 */
   spin: number
+  /** 與其他生物的分離量（像素／秒），由 computeSeparation 每個影格更新 */
+  sepX: number
+  sepY: number
+  /** 反方向移動持續了多久：超過一小段時間才轉身，避免來回抖動 */
+  flipT: number
 }
 
 export interface Pellet {

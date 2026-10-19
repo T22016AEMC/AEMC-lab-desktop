@@ -20,7 +20,14 @@ export function phaseOf(hour: number): Phase {
   return 'night'
 }
 
-/** 夜晚：陸地寵物睡覺、池塘生物游得比較慢 */
+/** 陸地寵物的睡覺時間（預設 23:00 到隔天 6:00，可在 balance.ts 調整） */
+export function isSleepTime(hour: number): boolean {
+  const { startHour, endHour } = BALANCE.sleep
+  const h = ((hour % 24) + 24) % 24
+  return startHour > endHour ? h >= startHour || h < endHour : h >= startHour && h < endHour
+}
+
+/** 夜晚（天空變暗）：池塘生物游得比較慢。陸地寵物睡覺改用 isSleepTime */
 export function isNight(hour: number): boolean {
   return phaseOf(hour) === 'night'
 }

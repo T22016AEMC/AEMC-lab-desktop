@@ -1,7 +1,7 @@
 import { LAND_CAPACITY, POND_CAPACITY } from '../config/balance'
 import { SPECIES, type SpeciesId } from '../config/species'
 import type { Pet, SaveData } from '../save/types'
-import { isNight } from './worldTime'
+import { isSleepTime } from './worldTime'
 
 export const landUsed = (pets: Pet[]): number => pets.filter((p) => SPECIES[p.species].domain === 'land').length
 export const pondUsed = (pets: Pet[]): number =>
@@ -25,9 +25,9 @@ export function adoptCheck(save: Pick<SaveData, 'pets' | 'points'>, species: Spe
   return { ok: true }
 }
 
-/** 陸地寵物是否正在睡覺：夜晚且沒有被叫醒 */
+/** 陸地寵物是否正在睡覺：在睡覺時間內，而且沒有被叫醒（或叫醒／互動後已閒置超過一段時間） */
 export function isSleeping(pet: Pet, hour: number, nowMs: number): boolean {
   if (SPECIES[pet.species].domain !== 'land') return false
-  if (!isNight(hour)) return false
+  if (!isSleepTime(hour)) return false
   return !(pet.awakeUntil !== undefined && pet.awakeUntil > nowMs)
 }

@@ -1,4 +1,5 @@
 import { createEntity, refreshAppearance, startAnim, updateEntity, bodyHalf, type Env } from '../ai/behaviors'
+import { computeSeparation } from '../ai/separation'
 import type { Entity, Pellet } from '../ai/entity'
 import { coatOf } from '../config/species'
 import type { Pet } from '../save/types'
@@ -48,6 +49,8 @@ export class FarmEngine {
   /** 上一次繪製的順序（最後畫的在最上層），點擊判定用 */
   private order: Entity[] = []
   private rand: () => number = Math.random
+  /** 生物之間的柔和分離（測試時可關閉來比較前後差異） */
+  separation = true
 
   setSize(cssW: number, cssH: number): void {
     this.layout = makeLayout(cssW, cssH)
@@ -130,10 +133,10 @@ export class FarmEngine {
     const sunny = !night && f.weather !== 'rain' && f.weather !== 'snow' && f.hour > 8 && f.hour < 17
     const env = this.env(night, sunny)
 
-    for (const e of this.entities.values()) {
-      e.sleeping = isSleeping(e.pet, f.hour, f.nowMs)
-      updateEntity(e, dt, env)
-    }
+    const all = [...this.entities.values()]
+    for (const e of all) e.sleeping = isSleeping(e.pet, f.hour, f.nowMs)
+    if (this.separation) computeSeparation(all)
+    for (const e of all) updateEntity(e, dt, env)
 
     // 飼料下沉，沉到沙地後過幾秒消失
     for (const p of this.pellets) {

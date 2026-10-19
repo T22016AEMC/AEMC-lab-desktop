@@ -42,7 +42,7 @@ export function drawQuadruped(ctx: CanvasRenderingContext2D, e: Entity, colors: 
   const belly = colors.belly
   const earC = colors.ear
   const dark = colors.dark ?? '#2b2230'
-  const happy = a === 'pet' || a === 'groom' || a === 'walk' || (isDog && e.state === 'run')
+  const happy = a === 'pet' || a === 'groom' || a === 'walk' || (isDog && (e.state === 'run' || a === 'wake'))
   const eating = a === 'eat'
 
   ctx.save()
@@ -254,9 +254,18 @@ export function drawQuadruped(ctx: CanvasRenderingContext2D, e: Entity, colors: 
   ell(ctx, hr * 0.32, hr * 0.28, hr * 0.2, hr * 0.12, 'rgba(255,120,150,0.45)')
   const eyeClosed = pose === 'lie' || a === 'groom' || (a === 'pet' && !isDog)
   eye(ctx, hr * 0.38, -hr * 0.1, hr * 0.15, eyeClosed, dark)
-  if (a === 'wake') {
-    // 被叫醒：眼睛瞇、嘴巴張開打哈欠
+  if (a === 'wake' && !isDog) {
+    // 貓被叫醒：不開心，嘴巴張開打哈欠
     ell(ctx, hr * 0.72, hr * 0.52, hr * 0.2, hr * 0.26, '#7a2a3a')
+  }
+  if (e.sleeping && a === 'pet') {
+    // 睡夢中被撫摸：嘴角上揚的微笑
+    ctx.strokeStyle = dark
+    ctx.lineWidth = 1.8
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.arc(hr * 0.72, hr * 0.32, hr * 0.28, 0.1 * Math.PI, 0.9 * Math.PI)
+    ctx.stroke()
   }
   ctx.restore()
 

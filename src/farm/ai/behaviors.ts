@@ -88,6 +88,9 @@ export function createEntity(pet: Pet, nowMs: number, layout: Layout, rand: () =
     school: [],
     foodId: null,
     spin: 0,
+    sepX: 0,
+    sepY: 0,
+    flipT: 0,
   }
   refreshAppearance(e, pet, nowMs, layout)
   const land = landRect(layout)
@@ -213,6 +216,17 @@ function updateLand(e: Entity, dt: number, env: Env): void {
       e.anim = null
     }
     e.moving = false
+    // 睡夢中被撫摸：不會醒來，冒出愉快的泡泡與愛心
+    const sa = e.anim
+    if (sa) {
+      sa.t += dt
+      if (sa.t >= sa.dur) e.anim = null
+      else if (sa.kind === 'pet') {
+        const persp = perspective(e.y)
+        if (env.rand() < dt * 2.5) env.fx.add({ kind: 'heart', x: e.x + rr(env.rand, -20, 24), y: e.y - 50 * e.sizeK * persp, vy: -22, life: 1.4, size: 8 })
+        if (env.rand() < dt * 1.2) env.fx.add({ kind: 'puff', x: e.x + 30 * e.facing, y: e.y - 58 * e.sizeK * persp, vy: -18, life: 1.6, size: 15, text: '嘿嘿~' })
+      }
+    }
     e.noticeT -= dt
     if (e.noticeT <= 0) {
       e.noticeT = 1.6
@@ -257,6 +271,14 @@ function updateLand(e: Entity, dt: number, env: Env): void {
     if (a.kind === 'groom' && env.rand() < dt * 5) {
       env.fx.add({ kind: 'sparkle', x: e.x + rr(env.rand, -30, 30), y: e.y - rr(env.rand, 20, 60) * e.sizeK * persp, life: 0.7, size: 12, color: '#fff3a0' })
     }
+    if (a.kind === 'wake') {
+      const persp2 = perspective(e.y)
+      if (e.pet.species === 'dog' && env.rand() < dt * 5) {
+        env.fx.add({ kind: 'heart', x: e.x + rr(env.rand, -22, 26), y: e.y - 62 * e.sizeK * persp2, vy: -30, life: 1.3, size: 8 })
+      } else if (e.pet.species === 'cat' && env.rand() < dt * 2.2) {
+        env.fx.add({ kind: 'puff', x: e.x + 28 * e.facing, y: e.y - 58 * e.sizeK * persp2, vy: -20, life: 1.4, size: 14, text: '哼！' })
+      }
+    }
     if (a.kind === 'eat' && env.rand() < dt * 6) {
       env.fx.add({ kind: 'crumb', x: e.x + 30 * e.facing, y: e.y - 6, vx: rr(env.rand, -30, 30), vy: -rr(env.rand, 20, 50), ay: 160, life: 0.5, size: 2.4, color: '#c58b4b' })
     }
@@ -285,8 +307,8 @@ function updateLand(e: Entity, dt: number, env: Env): void {
     if (e.stateT <= 0) nextLandState(e, env)
   }
 
-  e.x += e.vx * dt
-  e.y += e.vy * dt
+  e.x += (e.vx + e.sepX) * dt
+  e.y += (e.vy + e.sepY) * dt
   e.moving = Math.hypot(e.vx, e.vy) > 8
   if (Math.abs(e.vx) > 3) e.facing = e.vx > 0 ? 1 : -1
 }
@@ -301,8 +323,8 @@ function steer(e: Entity, tx: number, ty: number, speed: number, dt: number): bo
   const d = Math.hypot(dx, dy)
   const arrived = d < 12
   const k = Math.min(1, dt * 1.6)
-  const wantX = arrived ? 0 : (dx / d) * speed
-  const wantY = arrived ? 0 : (dy / d) * speed * 0.55
+  const wantX = (arrived ? 0 : (dx / d) * speed) + e.sepX
+  const wantY = (arrived ? 0 : (dy / d) * speed * 0.55) + e.sepY
   e.vx += (wantX - e.vx) * k
   e.vy += (wantY - e.vy) * k
   return arrived
@@ -502,7 +524,15 @@ function updateSea(e: Entity, dt: number, env: Env): void {
   e.x += e.vx * dt
   e.y += e.vy * dt
   e.moving = Math.hypot(e.vx, e.vy) > 6
-  if (Math.abs(e.vx) > 6) e.facing = e.vx > 0 ? 1 : -1
+  // 反方向游超過 0.4 秒才轉身，避免被推開時來回翻面
+  const want = e.vx > 0 ? 1 : -1
+  if (Math.abs(e.vx) > 8 && want !== e.facing) {
+    e.flipT += dt
+    if (e.flipT > 0.4) {
+      e.facing = want
+      e.flipT = 0
+    }
+  } else e.flipT = 0
 
   // 小丑魚：3 隻成群，跟著領頭的位置游
   if (e.school.length) {
@@ -512,10 +542,9 @@ function updateSea(e: Entity, dt: number, env: Env): void {
       const gx = e.x - e.facing * f.ox + wobx
       const gy = e.y + f.oy + woby
       const k = Math.min(1, dt * 3.2)
-      const px = f.x
       f.x += (gx - f.x) * k
       f.y += (gy - f.y) * k
-      if (Math.abs(f.x - px) > 0.05) f.facing = f.x - px >= 0 ? 1 : -1
+      f.facing = e.facing
     }
   }
 }

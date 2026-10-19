@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useClock } from '../../hooks/useClock'
 import { SPECIES, SPECIES_LIST, type SpeciesId } from '../config/species'
 import { worldHour } from '../overrides'
 import { adoptCheck } from '../sim/rules'
@@ -14,7 +13,12 @@ export function CommandPanel() {
   const save = useFarmStore((s) => s.save)
   const runAction = useFarmStore((s) => s.runAction)
   const adoptPet = useFarmStore((s) => s.adoptPet)
-  const now = useClock() // 每分鐘更新一次，讓睡覺狀態等條件跟著時間變化
+  // 睡覺等條件依時間而定：每 5 秒重新計算一次可用的指令
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 5000)
+    return () => window.clearInterval(t)
+  }, [])
 
   const [open, setOpen] = useState(true)
   const [action, setAction] = useState<ActionId>('feed')
@@ -24,9 +28,9 @@ export function CommandPanel() {
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
-  // 睡覺等條件依時間而定：存檔變動或每分鐘重新計算
+  // 存檔變動或每次 tick 重新計算
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const ctx = useMemo(() => ({ nowMs: Date.now(), hour: worldHour(Date.now()) }), [now, save])
+  const ctx = useMemo(() => ({ nowMs: Date.now(), hour: worldHour(Date.now()) }), [tick, save])
   const actions = useMemo(() => (save ? listActions(save, ctx) : []), [save, ctx])
   const targets = useMemo(() => (save && action !== 'adopt' ? listTargets(save, action, ctx) : []), [save, action, ctx])
 

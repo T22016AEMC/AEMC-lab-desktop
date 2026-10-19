@@ -60,8 +60,9 @@ function applicable(action: ActionId, pet: Pet): boolean {
     case 'walk':
       return pet.species === 'dog'
     case 'groom':
-    case 'wake':
       return pet.species === 'cat'
+    case 'wake':
+      return sp.domain === 'land'
     default:
       return false
   }
@@ -83,8 +84,13 @@ export function listTargets(save: SaveData, action: ActionId, ctx: Ctx): TargetO
       if (sleeping) out.push({ id: pet.id, label })
       continue
     }
+    // 撫摸：睡覺時也可以（不會醒來，心情小幅上升）
+    if (action === 'pet') {
+      out.push({ id: pet.id, label: sleeping ? `${label}・睡夢中` : label })
+      continue
+    }
     let reason: string | undefined
-    if (sleeping) reason = `${pet.name}正在睡覺`
+    if (sleeping) reason = `${pet.name}正在睡覺，可以先叫醒`
     out.push({ id: pet.id, label, disabledReason: reason })
   }
   return out
@@ -98,7 +104,7 @@ export function listActions(save: SaveData, ctx: Ctx): ActionOption[] {
     const targets = listTargets(save, id, ctx)
     const usable = targets.filter((t) => !t.disabledReason)
     let disabledReason: string | undefined
-    if (id === 'wake' && targets.length === 0) disabledReason = '沒有正在睡覺的貓'
+    if (id === 'wake' && targets.length === 0) disabledReason = '沒有正在睡覺的寵物'
     else if (targets.length === 0) {
       disabledReason =
         id === 'walk' ? '沒有狗可以散步' : id === 'groom' ? '沒有貓可以梳毛' : id === 'pet' ? '沒有可以撫摸的寵物' : '沒有適合的寵物'
@@ -174,9 +180,14 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, targetId: st
   }
 
   const pet = next.pets.find((p) => p.id === targetId)!
+  const sleeping = isSleeping(pet, ctx.hour, ctx.nowMs)
+  const land = SPECIES[pet.species].domain === 'land'
   let delta: Delta = {}
   let anim: Extract<FarmEffect, { kind: 'anim' }>['anim'] | null = null
   let awakeUntil = pet.awakeUntil
+  // 互動之後保持清醒；若仍在睡覺時間內，閒置超過 idleMinutes 就會自己回去睡
+  const stayAwakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
+  if (land && !(action === 'pet' && sleeping)) awakeUntil = stayAwakeUntil
   switch (action) {
     case 'feed': {
       const b = BALANCE.feed
@@ -185,7 +196,8 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, targetId: st
       break
     }
     case 'pet':
-      delta = { mood: BALANCE.pet.mood }
+      // 睡夢中被摸：不會醒來（awakeUntil 不變），心情只小幅上升
+      delta = { mood: sleeping ? BALANCE.petSleeping.mood : BALANCE.pet.mood }
       anim = 'pet'
       break
     case 'bath':
@@ -204,8 +216,7 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, targetId: st
       anim = 'groom'
       break
     case 'wake':
-      delta = { mood: BALANCE.wake.mood }
-      awakeUntil = ctx.nowMs + BALANCE.wake.awakeMinutes * 60_000
+      delta = { mood: pet.species === 'cat' ? BALANCE.wake.moodCat : BALANCE.wake.moodDog }
       anim = 'wake'
       break
   }
