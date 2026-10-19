@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getApp } from '../config/registry'
 import { DEFAULT_MIN_SIZE, clamp, getMetrics, visibleRect, workArea } from '../lib/layout'
 import { useUIStore } from '../store/uiStore'
@@ -259,7 +259,17 @@ export function Window({ id }: { id: string }) {
               onOpenInTab={openInTab}
             />
           ) : (
-            Content && <Content active={isActive} minimized={minimized} />
+            Content && (
+              <Suspense
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-slate-900 text-sm text-white/70">
+                    載入中…
+                  </div>
+                }
+              >
+                <Content active={isActive} minimized={minimized} />
+              </Suspense>
+            )
           )}
           {shield && <div className="absolute inset-0 z-10" />}
         </div>

@@ -12,6 +12,7 @@ macOS 風格的虛擬桌面網頁，用來集中開啟部署在網路上的小�
 - 視窗系統：紅黃綠按鈕、拖曳、邊緣與角落縮放、雙擊標題列最大化、最小化動畫、置頂、同一程式只開一個視窗
 - 外部程式以 iframe 嵌入（不加 sandbox，可上傳與下載檔案），有載入中動畫與逾時提示
 - 手機橫向適配（視窗一律最大化、Dock 與選單列縮小）、直拿時提示轉為橫向
+- 5 個內建小遊戲（踩地雷、2048、貪食蛇、彈珠台、飛機打怪），收在啟動台的「遊戲」資料夾
 - PWA：可「加到主畫面」，`display: fullscreen`、`orientation: landscape`
 
 ## 本機啟動
@@ -53,9 +54,28 @@ npm run preview    # 網址 http://localhost:4173/
 
 Render 免費方案冷啟動可能需要 30 秒以上，視窗會顯示「載入中…」，60 秒後仍未載入才會出現逾時提示。
 
-## 內建程式
+## 內建程式與小遊戲
 
-`src/config/builtinApps.ts` 用來登錄「內建程式」：不使用 iframe，直接在視窗中渲染 React 元件（階段二的小遊戲會使用）。元件會收到 `active`（是否為作用中視窗）與 `minimized`（是否最小化）兩個屬性。`category: 'games'` 的程式會歸入啟動台的「遊戲」資料夾，且只有開啟時才出現在 Dock。
+`src/config/builtinApps.ts` 用來登錄「內建程式」：不使用 iframe，直接在視窗中渲染 React 元件。元件會收到 `active`（是否為作用中視窗）與 `minimized`（是否最小化）兩個屬性。`category: 'games'` 的程式會歸入啟動台的「遊戲」資料夾，不顯示在桌面圖示，只有開啟時才出現在 Dock。
+
+目前的 5 個遊戲（程式碼在 `src/games/<遊戲名稱>/`，共用的暫停、結算畫面、音效、縮放畫布在 `src/games/shared/`）：
+
+| 遊戲 | 資料夾 | 操作 |
+| --- | --- | --- |
+| 踩地雷 | `minesweeper` | 初級 9×9、中級 16×16、高級 30×16；左鍵翻開、右鍵插旗、點數字快速翻開；觸控輕點翻開、長按插旗。最高紀錄是各難度的最短時間 |
+| 2048 | `game2048` | 方向鍵或 WASD；觸控滑動 |
+| 貪食蛇 | `snake` | 方向鍵或 WASD；觸控滑動或螢幕方向鍵；分數越高速度越快 |
+| 彈珠台 | `pinball` | Z／← 左擋板、/／→ 右擋板；按住空白鍵蓄力、放開發射；觸控點畫面左半邊或右半邊，用「發射」按鈕蓄力。物理使用 matter-js，3 顆球 |
+| 飛機打怪 | `shooter` | 自動射擊；方向鍵、WASD 或拖曳移動。每 5 波一隻 Boss；P 火力升級（最高 5 級）、S 護盾 |
+
+共通行為：
+
+- 全部用 Canvas 或 React 繪製，沒有外部圖片；畫面隨視窗大小縮放。
+- 有開始畫面、暫停（P 或 Esc）、遊戲結束畫面。視窗最小化、不是作用中視窗、分頁隱藏或瀏覽器失去焦點時會自動暫停。
+- 最高分存在 localStorage（鍵名 `aemc-desktop:<遊戲>:best`），讀寫都有 try/catch，無痕模式也不會出錯。
+- 音效用 WebAudio 合成，預設關閉，視窗右上角的喇叭按鈕可開關。
+
+新增遊戲的做法：在 `src/games/<名稱>/index.tsx` 寫一個接收 `BuiltinAppProps` 的元件（可用 `useGameStatus` 與 `GameShell`），再到 `builtinApps.ts` 登錄。
 
 ## 部署到 GitHub Pages
 
@@ -77,6 +97,7 @@ src/
 ├─ config/        apps.ts（外部程式清單）、builtinApps.ts（內建程式）、registry.ts
 ├─ store/         windowStore.ts（視窗管理）、uiStore.ts（開機、啟動台、版面尺寸）
 ├─ components/    BootScreen、MenuBar、AboutDialog、Desktop、DesktopIcon、Dock、Launchpad、Window、RotateHint …
-├─ hooks/         useClock、useMediaQuery、useViewportSync
+├─ games/         minesweeper、game2048、snake、pinball、shooter、shared（共用元件）
+├─ hooks/         useClock、useMediaQuery、useViewportSync、useIframeFocusSync
 └─ lib/           layout、fullscreen、format、icon、dock
 ```

@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, LazyExoticComponent } from 'react'
 
 export interface Size {
   width: number
@@ -47,7 +47,7 @@ export interface BuiltinAppProps {
 /** 內建程式：不使用 iframe，直接在視窗中渲染 React 元件 */
 export interface BuiltinApp extends AppBase {
   kind: 'builtin'
-  component: ComponentType<BuiltinAppProps>
+  component: ComponentType<BuiltinAppProps> | LazyExoticComponent<ComponentType<BuiltinAppProps>>
   /** 放進啟動台的哪個資料夾；沒有就直接列在啟動台 */
   category?: 'games'
   /** 是否顯示在桌面圖示（預設否） */
