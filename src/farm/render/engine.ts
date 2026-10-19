@@ -1,14 +1,12 @@
 import { createEntity, refreshAppearance, startAnim, updateEntity, bodyHalf, type Env } from '../ai/behaviors'
 import { computeSeparation } from '../ai/separation'
 import type { Entity, Pellet } from '../ai/entity'
-import { coatOf } from '../config/species'
 import type { Pet } from '../save/types'
 import type { FarmEffect } from '../sim/commands'
 import { isSleeping } from '../sim/rules'
 import { lowStatNotices } from '../sim/stats'
 import { isNight, type Weather } from '../sim/worldTime'
-import { drawQuadruped } from './creatures/quadruped'
-import { drawSea } from './creatures/sea'
+import { drawLand, drawSea, landSize } from './creatures/art'
 import { Particles } from './effects'
 import {
   SAND_TOP,
@@ -92,7 +90,7 @@ export class FarmEngine {
         const n = st && this.time - st.t < 1.2 ? st.n + 1 : 0
         this.floatStack.set(fx.petId, { n, t: this.time })
         const persp = e.def.domain === 'land' ? perspective(e.y) : 1
-        const top = e.def.domain === 'land' ? 78 * e.sizeK * persp : bodyHalf(e).hh + 20
+        const top = e.def.domain === 'land' ? landSize(e, persp).h : bodyHalf(e).hh + 20
         this.fx.add({
           kind: 'text', x: e.x, y: e.y - top - n * 22, vy: -26, life: 1.9, size: 20,
           text: fx.text, color: fx.tone === 'good' ? '#9dff9d' : '#ffb0a0',
@@ -189,9 +187,8 @@ export class FarmEngine {
     const land = [...this.entities.values()].filter((e) => e.def.domain === 'land').sort((a, b) => a.y - b.y)
     for (const e of land) {
       const persp = perspective(e.y)
-      const coat = coatOf(e.pet.species, e.pet.coat)
       if (e.anim?.kind === 'eat') this.drawBowl(ctx, e, persp)
-      drawQuadruped(ctx, e, coat?.colors ?? {}, persp)
+      drawLand(ctx, e, persp)
       if (e.anim?.kind === 'bath') this.drawFoam(ctx, e, persp)
     }
     this.order = [...sea, ...land]
@@ -255,7 +252,7 @@ export class FarmEngine {
   private headPos(e: Entity): { x: number; y: number } {
     if (e.def.domain === 'land') {
       const persp = perspective(e.y)
-      return { x: e.x, y: e.y - 92 * e.sizeK * persp }
+      return { x: e.x, y: e.y - landSize(e, persp).h - 14 }
     }
     const { hh } = bodyHalf(e)
     if (e.pet.species === 'clownfish') {
@@ -328,10 +325,11 @@ export class FarmEngine {
     for (let i = this.order.length - 1; i >= 0; i--) {
       const e = this.order[i]
       if (e.def.domain === 'land') {
-        const k = e.sizeK * perspective(e.y)
-        const cx = e.x
-        const cy = e.y - 38 * k
-        if (((x - cx) / (56 * k)) ** 2 + ((y - cy) / (52 * k)) ** 2 <= 1) return { kind: 'pet', id: e.id }
+        // 點擊範圍：依實際畫出來的身體大小（寬、高）推算的橢圓，略偏向頭的那一側
+        const { w, h } = landSize(e, perspective(e.y))
+        const cx = e.x + e.facing * w * 0.06
+        const cy = e.y - h * 0.46
+        if (((x - cx) / (w * 0.56)) ** 2 + ((y - cy) / (h * 0.56)) ** 2 <= 1) return { kind: 'pet', id: e.id }
       } else if (e.pet.species === 'clownfish') {
         if (e.school.some((s) => Math.hypot(s.x - x, s.y - y) < 30)) return { kind: 'pet', id: e.id }
       } else {

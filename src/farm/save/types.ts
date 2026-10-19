@@ -1,12 +1,12 @@
 import type { SpeciesId } from '../config/species'
 
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 export interface Pet {
   id: string
   species: SpeciesId
-  /** 毛色 id（只有貓狗有） */
-  coat?: string
+  /** 狗的品種／貓的花色與品種 id（只有貓狗有；v1 存檔的欄位叫 coat，轉換時改名） */
+  variant?: string
   name: string
   /** 領養時間（毫秒時間戳），用來判斷幼年／成年 */
   adoptedAt: number

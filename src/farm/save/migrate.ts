@@ -1,10 +1,16 @@
-import { isSpeciesId } from '../config/species'
+import { SPECIES, isSpeciesId, isVariantId, type SpeciesId } from '../config/species'
 import { CURRENT_SCHEMA_VERSION, type Pet, type SaveData } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
 
-function cleanPet(raw: unknown): Pet | null {
+/** v1 存檔的毛色 → v2 的品種／花色 */
+export const LEGACY_VARIANTS: Partial<Record<SpeciesId, Record<string, string>>> = {
+  dog: { shiba: 'shiba', bw: 'bordercollie', cream: 'poodle', choco: 'golden' },
+  cat: { orange: 'tabby', black: 'black', graywhite: 'britishblue', calico: 'calico' },
+}
+
+function cleanPet(raw: unknown, version: number): Pet | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (!isSpeciesId(r.species) || typeof r.id !== 'string') return null
@@ -19,7 +25,12 @@ function cleanPet(raw: unknown): Pet | null {
     mood: num(r.mood, 70, 0, 100),
     cleanliness: num(r.cleanliness, 70, 0, 100),
   }
-  if (typeof r.coat === 'string') pet.coat = r.coat
+  const variants = SPECIES[r.species].variants
+  if (variants) {
+    // v1 用 coat（舊毛色 id），v2 起用 variant（品種／花色 id）；無法辨識時退回第一個
+    const candidate = version < 2 ? LEGACY_VARIANTS[r.species]?.[String(r.coat)] : r.variant
+    pet.variant = isVariantId(r.species, candidate) ? candidate : variants[0].id
+  }
   if (typeof r.awakeUntil === 'number') pet.awakeUntil = r.awakeUntil
   return pet
 }
@@ -34,9 +45,10 @@ export function migrate(raw: unknown): SaveData | null {
   const version = typeof r.schemaVersion === 'number' ? r.schemaVersion : 0
   if (version < 1 || version > CURRENT_SCHEMA_VERSION) return null
 
-  // if (version === 1) { r = upgradeV1toV2(r) }  ← 未來在這裡串接
+  // v1 → v2：狗貓的毛色改為品種／花色（在 cleanPet 中依 version 轉換）
+  // 之後的版本在這裡逐版串接：if (version === 2) { ... }
 
-  const pets = (Array.isArray(r.pets) ? r.pets : []).map(cleanPet).filter((p): p is Pet => p !== null)
+  const pets = (Array.isArray(r.pets) ? r.pets : []).map((p) => cleanPet(p, version)).filter((p): p is Pet => p !== null)
   const gifts = (r.gifts && typeof r.gifts === 'object' ? r.gifts : {}) as Record<string, unknown>
   const now = Date.now()
   return {

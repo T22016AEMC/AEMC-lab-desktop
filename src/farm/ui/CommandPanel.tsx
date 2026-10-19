@@ -4,6 +4,7 @@ import { worldHour } from '../overrides'
 import { adoptCheck } from '../sim/rules'
 import { listActions, listTargets, type ActionId } from '../sim/commands'
 import { useFarmStore } from '../store/farmStore'
+import { CreaturePreview } from './CreaturePreview'
 
 const sel =
   'w-full rounded-lg border border-white/20 bg-slate-800/80 px-2 py-1.5 text-sm text-white outline-none focus:border-amber-300 disabled:opacity-50'
@@ -24,7 +25,7 @@ export function CommandPanel() {
   const [action, setAction] = useState<ActionId>('feed')
   const [target, setTarget] = useState('')
   const [species, setSpecies] = useState<SpeciesId>('dog')
-  const [coat, setCoat] = useState('')
+  const [variant, setVariant] = useState('')
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
@@ -66,13 +67,13 @@ export function CommandPanel() {
 
   const changeSpecies = (id: SpeciesId) => {
     setSpecies(id)
-    setCoat(SPECIES[id].coats?.[0].id ?? '')
+    setVariant(SPECIES[id].variants?.[0].id ?? '')
   }
 
   const run = () => {
     if (action === 'adopt') {
       const finalName = name.trim() || def.nameIdeas[0]
-      const err = adoptPet({ species, coat: def.coats ? coat || def.coats[0].id : undefined, name: finalName })
+      const err = adoptPet({ species, variant: def.variants ? variant || def.variants[0].id : undefined, name: finalName })
       setMessage(err ? { text: err, ok: false } : { text: `已領養「${finalName}」！`, ok: true })
       if (!err) setName('')
       return
@@ -141,11 +142,14 @@ export function CommandPanel() {
                   })}
                 </select>
               </label>
-              {def.coats && (
+              <div className="flex justify-center rounded-xl bg-gradient-to-b from-sky-200/25 to-sky-300/10 py-1.5" data-testid="adopt-preview">
+                <CreaturePreview species={species} variant={def.variants ? variant || def.variants[0].id : undefined} w={200} h={104} />
+              </div>
+              {def.variants && (
                 <label className="block text-xs text-white/65">
-                  毛色
-                  <select className={`${sel} mt-1`} value={coat || def.coats[0].id} onChange={(e) => setCoat(e.target.value)}>
-                    {def.coats.map((c) => (
+                  {def.variantLabel}
+                  <select className={`${sel} mt-1`} value={variant || def.variants[0].id} onChange={(e) => setVariant(e.target.value)}>
+                    {def.variants.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>

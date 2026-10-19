@@ -52,6 +52,8 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件，改資料格式要同步更新 `migrate.ts`。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。
 - 測試模式（`src/dev/`）只能在 `import.meta.env.DEV` 下條件式動態載入，正式 build 不可包含；改完要檢查 `dist/` 搜尋不到「測試模式」等字串。測試用的修改入口不要放進 `farmStore`。
 - 場景邏輯座標高度固定 900，背景必須畫滿任何比例；生物活動範圍都要限制在各自區域內。純邏輯（`sim/`）不碰 DOM，可在 Node 測試。
+- 生物外觀都在 `src/farm/art/`（部件式 SVG 路徑，`drawCreature(ctx, look)`）；場景（`render/creatures/art.ts` 由實體狀態產生 Look）、領養預覽（`ui/CreaturePreview.tsx`）、圖鑑共用同一套，不可各畫各的。改外觀後碰撞（`bodyHalf`）與點擊範圍都由實際繪製大小推算，要重跑邊界壓力模擬與避讓測試。
+- 存檔 schema 目前是 v2（`Pet.variant`），舊的 `coat` 由 `migrate.ts` 轉換。
 - 第二、三段尚未實作：玩耍指令、7 個建築（座標已在 `config/buildings.ts`）、小程式與遊戲的點數獎勵。
 
 ## 其他約定

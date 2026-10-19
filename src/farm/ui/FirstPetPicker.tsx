@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { LAND_SPECIES, SEA_SPECIES, SPECIES, type SpeciesId } from '../config/species'
 import { useFarmStore } from '../store/farmStore'
+import { CreaturePreview } from './CreaturePreview'
 
 function pickName(id: SpeciesId): string {
   const ideas = SPECIES[id].nameIdeas
@@ -11,19 +12,19 @@ function pickName(id: SpeciesId): string {
 /** 第一次進入（沒有存檔）：選第一隻寵物，免費 */
 export function FirstPetPicker() {
   const [species, setSpecies] = useState<SpeciesId>('dog')
-  const [coat, setCoat] = useState<string>(SPECIES.dog.coats![0].id)
+  const [variant, setVariant] = useState<string>(SPECIES.dog.variants![0].id)
   const [name, setName] = useState(() => pickName('dog'))
   const adoptPet = useFarmStore((s) => s.adoptPet)
   const def = SPECIES[species]
 
   const choose = (id: SpeciesId) => {
     setSpecies(id)
-    setCoat(SPECIES[id].coats?.[0].id ?? '')
+    setVariant(SPECIES[id].variants?.[0].id ?? '')
     setName(pickName(id))
   }
 
   const start = () => {
-    const err = adoptPet({ species, coat: def.coats ? coat : undefined, name })
+    const err = adoptPet({ species, variant: def.variants ? variant : undefined, name })
     if (err) useUIStore.getState().showToast(err)
   }
 
@@ -38,7 +39,7 @@ export function FirstPetPicker() {
           id === species ? 'border-amber-300 bg-amber-200/30 shadow-md' : 'border-white/20 bg-white/10 hover:bg-white/20'
         }`}
       >
-        <span className="text-2xl">{s.emoji}</span>
+        <CreaturePreview species={id} variant={s.variants?.[0].id} w={72} h={46} />
         <span className="font-medium">{s.name}</span>
         {s.groupSize > 1 && <span className="text-[10px] text-white/70">一次 {s.groupSize} 隻</span>}
       </button>
@@ -56,20 +57,24 @@ export function FirstPetPicker() {
         <div className="mt-3 text-xs text-white/60">海洋</div>
         <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-6">{SEA_SPECIES.map((s) => card(s.id))}</div>
 
-        {def.coats && (
+        <div className="mt-4 flex justify-center rounded-2xl bg-gradient-to-b from-sky-200/25 to-sky-300/10 py-2" data-testid="adopt-preview">
+          <CreaturePreview species={species} variant={def.variants ? variant : undefined} w={220} h={130} />
+        </div>
+
+        {def.variants && (
           <div className="mt-4">
-            <div className="text-xs text-white/60">毛色</div>
+            <div className="text-xs text-white/60">{def.variantLabel}</div>
             <div className="mt-1 flex flex-wrap gap-2">
-              {def.coats.map((c) => (
+              {def.variants.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => setCoat(c.id)}
+                  onClick={() => setVariant(c.id)}
                   className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
-                    c.id === coat ? 'border-amber-300 bg-amber-200/25' : 'border-white/20 bg-white/10 hover:bg-white/20'
+                    c.id === variant ? 'border-amber-300 bg-amber-200/25' : 'border-white/20 bg-white/10 hover:bg-white/20'
                   }`}
                 >
-                  <span className="h-4 w-4 rounded-full border border-white/50" style={{ background: c.swatch }} />
+                  <CreaturePreview species={species} variant={c.id} w={44} h={30} />
                   {c.name}
                 </button>
               ))}

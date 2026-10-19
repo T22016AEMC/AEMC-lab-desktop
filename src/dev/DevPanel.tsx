@@ -6,6 +6,7 @@ import { todayKey } from '../farm/sim/points'
 import { PHASE_HOURS, PHASE_NAMES, WEATHER_NAMES, type Phase, type Weather } from '../farm/sim/worldTime'
 import { useFarmStore } from '../farm/store/farmStore'
 import type { Pet, SaveData } from '../farm/save/types'
+import Bestiary from './Bestiary'
 
 /** DEV_PANEL_MARKER：測試模式面板。只在開發環境（import.meta.env.DEV）載入，正式 build 不包含 */
 
@@ -32,6 +33,8 @@ const btn = 'rounded bg-white/15 px-2 py-1 text-[11px] hover:bg-white/25 active:
 
 export default function DevPanel() {
   const [open, setOpen] = useState(false)
+  // 生物圖鑑：按鈕開啟，或網址加上 ?bestiary 直接開啟（方便截圖）
+  const [bestiary, setBestiary] = useState(() => new URLSearchParams(window.location.search).has('bestiary'))
   const [petId, setPetId] = useState('')
   const [, force] = useState(0)
   const save = useFarmStore((s) => s.save)
@@ -51,6 +54,8 @@ export default function DevPanel() {
   }
 
   return (
+    <>
+    {bestiary && <Bestiary onClose={() => setBestiary(false)} />}
     <div className="absolute bottom-24 right-3 z-[9600] text-white" onPointerDown={(e) => e.stopPropagation()}>
       {!open ? (
         <button type="button" onClick={() => setOpen(true)} className="rounded-full bg-fuchsia-600/90 px-3 py-1.5 text-xs font-bold shadow-lg">
@@ -163,6 +168,10 @@ export default function DevPanel() {
             </div>
           )}
 
+          <button className={`${btn} mb-2 w-full py-1.5`} onClick={() => setBestiary(true)}>
+            🐾 生物圖鑑
+          </button>
+
           <button
             className="w-full rounded bg-rose-600/80 px-2 py-1.5 text-[11px] font-bold hover:bg-rose-600"
             onClick={() => {
@@ -174,5 +183,6 @@ export default function DevPanel() {
         </div>
       )}
     </div>
+    </>
   )
 }

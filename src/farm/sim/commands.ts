@@ -1,5 +1,5 @@
 import { BALANCE } from '../config/balance'
-import { SPECIES, coatOf, type SpeciesId } from '../config/species'
+import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet, SaveData } from '../save/types'
 import { clamp100 } from './stats'
 import { adoptCheck, isSleeping } from './rules'
@@ -229,7 +229,7 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, targetId: st
 
 export interface AdoptRequest {
   species: SpeciesId
-  coat?: string
+  variant?: string
   name: string
   /** 第一隻免費 */
   free?: boolean
@@ -251,7 +251,7 @@ export function adopt(save: SaveData, ctx: Ctx, req: AdoptRequest, rand: () => n
   const pet: Pet = {
     id,
     species: req.species,
-    coat: sp.coats ? coatOf(req.species, req.coat)?.id : undefined,
+    variant: sp.variants ? variantOf(req.species, req.variant)?.id : undefined,
     name,
     adoptedAt: ctx.nowMs,
     heightFactor: 0.85 + rand() * 0.3,

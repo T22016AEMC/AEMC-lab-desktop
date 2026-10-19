@@ -12,7 +12,9 @@ import {
   type Layout,
   type Rect,
 } from '../render/layout'
+import { landSize, seaHalf } from '../render/creatures/art'
 import type { Entity, Pellet } from './entity'
+import { appearanceOf } from '../config/appearance'
 
 export interface Env {
   layout: Layout
@@ -37,27 +39,18 @@ export function refreshAppearance(e: Entity, pet: Pet, nowMs: number, layout: La
   e.pet = pet
   e.stage = stageOf(pet, nowMs)
   e.fat = fatness(pet.weight)
-  e.sizeK = pet.heightFactor * stageScale(e.stage) * (e.def.domain === 'sea' ? layout.fit : 1)
+  // 陸地：品種決定基本體型（小 0.82／中 1／大 1.22）；池塘：隨視窗大小縮放
+  const breedK = e.def.domain === 'land' ? appearanceOf(pet.species, pet.variant).sizeScale : 1
+  e.sizeK = pet.heightFactor * stageScale(e.stage) * breedK * (e.def.domain === 'sea' ? layout.fit : 1)
 }
 
 /** 身體的半寬／半高（邏輯像素，含大小與胖瘦），用來限制活動範圍與點擊判定 */
 export function bodyHalf(e: Entity): { hw: number; hh: number } {
   const len = e.def.length * e.sizeK
-  switch (e.pet.species) {
-    case 'crab':
-      return { hw: len * 0.5, hh: len * 0.3 }
-    case 'turtle':
-      return { hw: len * 0.5, hh: len * 0.32 * e.fat }
-    case 'clownfish':
-      return { hw: len * 0.6, hh: len * 0.4 }
-    case 'whaleshark':
-      return { hw: len * 0.5, hh: len * 0.2 * e.fat }
-    case 'beluga':
-    case 'orca':
-      return { hw: len * 0.5, hh: len * 0.2 * e.fat }
-    default:
-      return { hw: len * 0.5, hh: len * 0.45 }
-  }
+  if (e.pet.species === 'clownfish') return { hw: len * 0.6, hh: len * 0.4 }
+  if (e.def.domain === 'sea') return seaHalf(e)
+  const { w, h } = landSize(e)
+  return { hw: w / 2, hh: h / 2 }
 }
 
 export function createEntity(pet: Pet, nowMs: number, layout: Layout, rand: () => number): Entity {

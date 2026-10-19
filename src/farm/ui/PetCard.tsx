@@ -1,4 +1,5 @@
-import { SPECIES, coatOf } from '../config/species'
+import { appearanceOf } from '../config/appearance'
+import { SPECIES } from '../config/species'
 import { heightCm, stageOf, weightLabel } from '../sim/stats'
 import { useFarmStore } from '../store/farmStore'
 
@@ -21,8 +22,8 @@ export function PetCard({ petId, x, y, onClose }: { petId: string; x: number; y:
   if (!pet) return null
   const def = SPECIES[pet.species]
   const stage = stageOf(pet, Date.now())
-  const coat = coatOf(pet.species, pet.coat)
-  const cm = heightCm(pet, def.baseCm, Date.now())
+  const look = appearanceOf(pet.species, pet.variant)
+  const cm = heightCm(pet, look.baseCm, Date.now())
   const width = 240
   const left = Math.max(8, Math.min(x + 18, window.innerWidth - width - 8))
   const top = Math.max(8, y - 40)
@@ -38,8 +39,7 @@ export function PetCard({ petId, x, y, onClose }: { petId: string; x: number; y:
         <div className="min-w-0 flex-1">
           <div className="truncate text-base font-bold">{pet.name}</div>
           <div className="text-xs text-white/70">
-            {def.name}
-            {coat ? `・${coat.name}` : ''}・{stage === 'young' ? '幼年' : '成年'}
+            {look.variant ? look.name : def.name}・{stage === 'young' ? '幼年' : '成年'}
           </div>
         </div>
         <button type="button" onClick={onClose} aria-label="關閉" className="rounded px-1.5 text-white/60 hover:bg-white/15 hover:text-white">

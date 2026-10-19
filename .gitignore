@@ -5,3 +5,4 @@ dev-dist
 *.local
 *.log
 .DS_Store
+screenshots/
