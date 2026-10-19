@@ -1,0 +1,44 @@
+/** 養殖場的數值調整參數，集中在這裡方便微調 */
+export const BALANCE = {
+  startPoints: 30,
+  dailyBonus: 5,
+  /** 領養後滿幾天算成年 */
+  adultDays: 3,
+  /** 每小時下降量 */
+  decayPerHour: { satiety: 4, mood: 3, cleanliness: 2.5 },
+  /** 飽食度很低時，心情額外下降的倍率 */
+  moodExtraDecayWhenHungry: 0.5,
+  /** 離開網站期間補算的下限（已經低於此值的不再往下掉） */
+  offlineFloor: 20,
+  /** 低於此值會冒出提示泡泡 */
+  lowThreshold: 30,
+
+  feed: { satiety: 20, mood: 3, fatAbove: 85, fatGain: 4 },
+  pet: { mood: 8 },
+  bath: { cleanliness: 40, moodDog: 0, moodCat: -3 },
+  walk: { weight: -5, mood: 12, satiety: -8, cleanliness: -10 },
+  groom: { cleanliness: 20, mood: 10 },
+  wake: { mood: -15, awakeMinutes: 3 },
+  feedPond: { satiety: 20, mood: 2, fatAbove: 85, fatGain: 4 },
+  cleanPond: { cleanliness: 30, mood: 2 },
+
+  gift: {
+    moodThreshold: 70,
+    dailyMax: 4,
+    /** 每分鐘（線上時）擲一次的機率 */
+    chancePerMinute: 0.08,
+    minPoints: 1,
+    maxPoints: 3,
+  },
+
+  weatherBlockHours: 4,
+  /** 天氣權重：晴、多雲、雨、雪 */
+  weatherWeights: { sunny: 40, cloudy: 25, rain: 20, snow: 15 },
+
+  /** 存檔節流（毫秒）與數值結算間隔（秒） */
+  saveDebounceMs: 600,
+  statTickSeconds: 10,
+} as const
+
+export const LAND_CAPACITY = 3
+export const POND_CAPACITY = 12

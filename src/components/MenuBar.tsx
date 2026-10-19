@@ -1,6 +1,7 @@
 import { useClock } from '../hooks/useClock'
 import { formatMenuBarTime } from '../lib/format'
 import { getMetrics } from '../lib/layout'
+import { useFarmStore } from '../farm/store/farmStore'
 import { useUIStore } from '../store/uiStore'
 import { useActiveApp } from '../store/windowStore'
 import { Logo } from './Logo'
@@ -11,6 +12,7 @@ export function MenuBar() {
   const aboutOpen = useUIStore((s) => s.aboutOpen)
   const setAboutOpen = useUIStore((s) => s.setAboutOpen)
   const activeApp = useActiveApp()
+  const points = useFarmStore((st) => st.save?.points ?? null)
   const { menuBar } = getMetrics(compact)
 
   return (
@@ -28,7 +30,14 @@ export function MenuBar() {
         </button>
         <span className="truncate px-1 font-semibold">{activeApp ? activeApp.name : '桌面'}</span>
       </div>
-      <time className="shrink-0 px-2 tabular-nums">{formatMenuBarTime(now)}</time>
+      <div className="flex shrink-0 items-center gap-3 px-2">
+        {points !== null && (
+          <span className="tabular-nums" title="點數" aria-label={`點數 ${points}`}>
+            🪙 {points}
+          </span>
+        )}
+        <time className="tabular-nums">{formatMenuBarTime(now)}</time>
+      </div>
     </header>
   )
 }

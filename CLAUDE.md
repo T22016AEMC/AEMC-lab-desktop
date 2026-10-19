@@ -46,6 +46,14 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 階段一（v1.0.0）完成並 build 成功後，先停下來，告知本機預覽指令與網址，等使用者確認畫面後再推送。
 - 推送與部署完成後，才開始階段二（v1.1.0）。
 
+## 寵物養殖場（src/farm/）
+
+- 桌面是養殖場，沒有桌面圖示；Dock 平時只有「啟動台」，程式開啟後才出現圖示。
+- 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件，改資料格式要同步更新 `migrate.ts`。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。
+- 測試模式（`src/dev/`）只能在 `import.meta.env.DEV` 下條件式動態載入，正式 build 不可包含；改完要檢查 `dist/` 搜尋不到「測試模式」等字串。測試用的修改入口不要放進 `farmStore`。
+- 場景邏輯座標高度固定 900，背景必須畫滿任何比例；生物活動範圍都要限制在各自區域內。純邏輯（`sim/`）不碰 DOM，可在 Node 測試。
+- 第二、三段尚未實作：玩耍指令、7 個建築（座標已在 `config/buildings.ts`）、小程式與遊戲的點數獎勵。
+
 ## 其他約定
 
 - 「關於這個桌面」顯示的版本號必須從 `package.json` 讀取，不可寫死。

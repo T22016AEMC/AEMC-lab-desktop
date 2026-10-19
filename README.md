@@ -1,14 +1,14 @@
 # AEMC Lab Desktop
 
-macOS 風格的虛擬桌面網頁，用來集中開啟部署在網路上的小程式（GitHub Pages / Render）。純前端，部署到 GitHub Pages。
+macOS 風格的虛擬桌面網頁，桌面是一座寵物養殖場，用來集中開啟部署在網路上的小程式（GitHub Pages / Render）並內建小遊戲。純前端，部署到 GitHub Pages。
 
 正式網址：https://t22016aemc.github.io/AEMC-lab-desktop/
 
 ## 功能
 
 - 開機畫面，點擊後進入全螢幕（不支援全螢幕的瀏覽器如 iPhone 會直接進桌面）
-- 頂部選單列（Logo →「關於這個桌面」、作用中程式名稱、日期時間）
-- 桌面圖示（滑鼠雙擊、觸控單擊開啟）、底部 Dock（放大效果、執行中圓點）、啟動台（搜尋、遊戲資料夾）
+- 頂部選單列（Logo →「關於這個桌面」、作用中程式名稱、點數、日期時間）
+- 桌面是寵物養殖場（見下方）；底部 Dock 平時只有「啟動台」，開啟的程式才會出現圖示；啟動台（搜尋、遊戲資料夾）是開啟所有程式的入口
 - 視窗系統：紅黃綠按鈕、拖曳、邊緣與角落縮放、雙擊標題列最大化、最小化動畫、置頂、同一程式只開一個視窗
 - 外部程式以 iframe 嵌入（不加 sandbox，可上傳與下載檔案），有載入中動畫與逾時提示
 - 手機橫向適配（視窗一律最大化、Dock 與選單列縮小）、直拿時提示轉為橫向
@@ -30,6 +30,43 @@ npm run dev        # 開發模式，網址 http://localhost:5173/
 npm run build
 npm run preview    # 網址 http://localhost:4173/
 ```
+
+## 寵物養殖場（桌面）
+
+桌面本身就是一個寵物養殖場：左半邊是陸地（草地、小徑、樹），右半邊是側面剖面的海水池塘，上方是天空。所有程式與遊戲都從 Dock 最左邊的「啟動台」開啟，開啟後才會在 Dock 出現該程式的圖示，視窗顯示在養殖場上方。程式碼在 `src/farm/`。
+
+**場景**
+- 以程式繪製（Canvas 2D，可愛扁平風，無外部圖片），30fps。分頁在背景或有視窗最大化時暫停動畫。
+- 畫面高度固定為邏輯座標 900，水平寬度依視窗比例變化；背景一律畫滿，任何比例（16:9、16:10、21:9…）都不會有黑邊，陸地與池塘各佔寬度一半，生物依邏輯座標等比縮放並限制在各自區域內。
+- 日夜依本機實際時間（清晨 5–8、白天 8–17、黃昏 17–19:30、夜晚 19:30–5），天空顏色平滑過渡；夜晚有星星月亮，場景變暗，陸地寵物睡覺，池塘生物游得較慢。
+- 天氣（晴、多雲、下雨、下雪）每 4 小時換一次，以時間為種子，重新整理不會跳變；純視覺效果，不連網。
+
+**寵物**
+| 種類 | 佔用 | 領養點數 |
+| --- | --- | --- |
+| 狗（4 種毛色）、貓（4 種毛色） | 陸地，貓狗合計最多 3 隻 | 15 |
+| 小丑魚（一次 3 隻成群） | 池塘 1 格 | 15 |
+| 帝王蟹 | 1 格 | 15 |
+| 海龜 | 2 格 | 25 |
+| 白鯨、虎鯨 | 3 格 | 35 |
+| 鯨鯊 | 4 格 | 35 |
+
+池塘總容量 12 格。第一隻免費。每隻寵物有身高係數（約 0.85～1.15）、體重（0～100，影響胖瘦）、飽食度／心情／清潔度（0～100，隨時間緩慢下降）。離開網站期間依經過時間補算，但最低不低於 20；任一數值低於 30 時頭上會冒出提示泡泡。領養滿 3 天由幼年成年，外觀變大。
+
+**操作**
+- 左上角「指令面板」：先選動作、再選對象，顯示消耗點數，按「執行」。點數不足或條件不符的選項會顯示為不可選並說明原因。日常指令每次 1 點：餵食、撫摸、洗澡、散步（狗）、梳毛（貓）、叫醒（睡覺中的貓，心情會下降）、餵飼料（整個池塘）、清潔池塘、撫摸（海龜、白鯨）。另有「領養」。
+- 點擊寵物顯示資訊卡（名字、種類、成長階段、三項數值、身高與體重）。
+- 點數：初始 30，每日第一次開啟 +5（以本機日期判斷）；心情高於 70 的寵物每天最多 4 次叼來禮物，點擊領取 +1～3 點。選單列時間左邊顯示目前點數。
+
+**存檔**
+- 單一物件（含 `schemaVersion`），目前存在 localStorage（鍵名 `aemc-desktop:farm-save`，遊戲最高分沿用舊鍵名，不衝突）。
+- 儲存層是 `SaveStorage` 介面（`load`／`save`／`clear`，皆為 Promise），目前實作 `LocalStorageAdapter`，讀寫都包在 try/catch。之後改成帳號綁定的雲端存檔時，只需實作同一介面並呼叫 `setSaveStorage()`。資料格式升級時在 `src/farm/save/migrate.ts` 依 `schemaVersion` 轉換。
+- 數值、容量、點數等調整參數集中在 `src/farm/config/balance.ts` 與 `species.ts`。
+
+**測試模式（只在本機開發環境）**
+`npm run dev` 時畫面右下角會有「🧪 測試模式」面板：點數 +100／+1000、時間快轉 1 小時／1 天、調整寵物各項數值與體重、切換天氣與時段、讓寵物叼禮物、重置養殖場。它透過 `import.meta.env.DEV` 條件式動態載入，正式 build 會被整段移除（`npm run build` 後 `dist/` 內搜尋不到任何測試模式的程式碼）。
+
+**預留給後續階段**：玩耍相關指令、7 個建築（鐘樓、狗窩、貓跳台、食盆、花圃、路燈、珊瑚礁，座標已定義在 `src/farm/config/buildings.ts`）、小程式與遊戲的點數獎勵。
 
 ## 如何新增程式
 
@@ -111,9 +148,11 @@ Vite 的 `base` 讀取環境變數 `BASE_PATH`；Actions 會自動帶入 `/<repo
 
 ```
 src/
+├─ farm/          寵物養殖場：config（物種、數值、建築）、save（存檔與儲存層）、sim（純邏輯）、store、render（Canvas 場景與生物）、ai（行為）、ui（指令面板、資訊卡…）
+├─ dev/           測試模式面板（只在開發環境載入）
 ├─ config/        apps.ts（外部程式清單）、builtinApps.ts（內建程式）、registry.ts
 ├─ store/         windowStore.ts（視窗管理）、uiStore.ts（開機、啟動台、版面尺寸）
-├─ components/    BootScreen、MenuBar、AboutDialog、Desktop、DesktopIcon、Dock、Launchpad、Window、RotateHint …
+├─ components/    BootScreen、MenuBar、AboutDialog、Desktop、Dock、Launchpad、Window、RotateHint …
 ├─ games/         minesweeper、game2048、snake、pinball、shooter、shared（共用元件）
 ├─ hooks/         useClock、useMediaQuery、useViewportSync、useIframeFocusSync
 └─ lib/           layout、fullscreen、format、icon、dock

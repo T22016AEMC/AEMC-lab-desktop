@@ -1,6 +1,6 @@
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'framer-motion'
 import { useRef, type ReactNode } from 'react'
-import { allApps, pinnedInDock } from '../config/registry'
+import { allApps } from '../config/registry'
 import { getMetrics } from '../lib/layout'
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
@@ -80,8 +80,8 @@ export function Dock() {
   const base = getMetrics(compact).dockIcon
   const dotOffset = compact ? -3 : -7
 
-  // 外部程式一律常駐；內建程式（小遊戲）只有開啟時才出現
-  const items = allApps.filter((a) => pinnedInDock(a) || windows[a.id])
+  // 平時只有「啟動台」；程式或遊戲開啟後才出現圖示，關閉後移除
+  const items = allApps.filter((a) => windows[a.id])
 
   return (
     <nav
@@ -104,7 +104,7 @@ export function Dock() {
       >
         <LaunchpadGlyph />
       </DockItem>
-      <div className="mx-0.5 h-[70%] w-px self-center bg-white/30" />
+      {items.length > 0 && <div className="mx-0.5 h-[70%] w-px self-center bg-white/30" />}
       {items.map((app) => (
         <DockItem
           key={app.id}

@@ -60,10 +60,6 @@ export interface BuiltinApp extends AppBase {
   component: ComponentType<BuiltinAppProps> | LazyExoticComponent<ComponentType<BuiltinAppProps>>
   /** 放進啟動台的哪個資料夾；沒有就直接列在啟動台 */
   category?: 'games'
-  /** 是否顯示在桌面圖示（預設否） */
-  showOnDesktop?: boolean
-  /** 是否常駐 Dock（預設否，只有開啟時才出現） */
-  showInDock?: boolean
 }
 
 export type DesktopApp = ExternalApp | BuiltinApp
