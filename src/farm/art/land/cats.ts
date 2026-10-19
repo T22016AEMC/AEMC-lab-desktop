@@ -165,38 +165,12 @@ export const BRITISH: Breed = {
 // ★ 蓬鬆長毛與大毛尾巴；重點色、藍眼睛
 export const RAGDOLL: Breed = {
   kind: 'cat', id: 'ragdoll', L: 66, D: 36, legH: 17, legW: 14, hr: 18.5, skullW: 1.04,
+  // 一條粗、末端漸細的尾巴（走向和其他貓相同：先上翹再往後彎），上緣用 3 個圓丘表現蓬鬆；站、坐、睡姿都用同一款
   tail(c, g) {
-    c.rotate(g.wag * 0.7)
-    // 大而蓬鬆的毛尾巴：整條同一個深褐色，邊緣毛茸茸，由根部往尾端更蓬
-    c.rotate(g.wag * 0.7)
-    // 寬而蓬鬆的羽毛尾巴：先往上翹再往後彎，外緣只有幾個大而柔和的毛尖
-    const P: [Pt, Pt, Pt, Pt] = [[0, 3], [-10, -26], [-38, -14], [-56, -38]]
-    const n = 20
-    const pts = bezierTaper(c, ...P, 13, 21, g.pal.point, { steps: n })
-    for (const [i, side] of [[5, -1], [8, 1], [11, -1], [14, 1], [17, -1]] as const) {
-      const [x, y] = pts[i]
-      const [px, py] = pts[i - 1]
-      const [qx, qy] = pts[i + 1]
-      const tl = Math.hypot(qx - px, qy - py) || 1
-      const tx = (qx - px) / tl
-      const ty = (qy - py) / tl
-      const w = lerp(13, 21, i / n) / 2
-      const bx = x - ty * w * side
-      const by = y + tx * w * side
-      taper(c, bx, by, bx - ty * 8 * side + tx * 12, by + tx * 8 * side + ty * 12, 11, 2, g.pal.point)
-    }
-    const e = pts[n]
-    taper(c, e[0], e[1], e[0] + 10, e[1] - 9, 18, 3, g.pal.point)
+    c.rotate(g.wag * 0.6)
+    bezierTaper(c, ...TAIL_P, 15, 8, g.pal.point, { steps: 22, bumps: [0.3, 0.52, 0.74] })
   },
-  sitTail: (g) => ({ c: g.pal.point, w: 12, len: 1.0, fuzzy: 2 }),
-  lieTail(c, g) {
-    c.rotate(g.wag * 0.7)
-    const d = 'M0 5C-14 5-30-6-33-26C-34-40-27-50-19-53'
-    stroke(c, d, g.pal.point, 23)
-    stroke(c, 'M0 6C-12 6-24-2-28-14', g.pal.body, 14)
-    stroke(c, d, shade(g.pal.point, 0.3), 10, { dash: [2, 5] })
-    part(c, scallopD(-19, -53, 11, 9, 9, 2.6), g.pal.point)
-  },
+  sitTail: (g) => ({ c: g.pal.point, w: 14, len: 1.0, bumps: [0.3, 0.52, 0.74] }),
   ears(c, g, far) {
     catEars(c, g, far, { outer: g.pal.point, inner: shade(g.pal.point, 0.35) })
   },

@@ -51,7 +51,11 @@ export class FarmEngine {
   separation = true
 
   setSize(cssW: number, cssH: number): void {
+    const oldFit = this.layout.fit
     this.layout = makeLayout(cssW, cssH)
+    // 池塘生物的大小隨視窗縮放：視窗大小改變時立刻跟著調整，不必等下次存檔變動
+    const ratio = this.layout.fit / oldFit
+    if (ratio !== 1) for (const e of this.entities.values()) if (e.def.domain === 'sea') e.sizeK *= ratio
   }
 
   private env(night: boolean, sunny: boolean): Env {

@@ -33,7 +33,7 @@ export function makeLayout(cssW: number, cssH: number): Layout {
   const s = cssH / WORLD_H
   const Wl = cssW / s
   const half = Wl / 2
-  return { cssW, cssH, s, Wl, half, fit: Math.min(1, Math.max(0.6, half / 800)) }
+  return { cssW, cssH, s, Wl, half, fit: Math.min(1, Math.max(0.4, half / 800)) }
 }
 
 export interface Rect {

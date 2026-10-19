@@ -210,6 +210,8 @@ export interface TaperOpts {
   rings?: { color: string; every: number }
   /** 毛茸茸的邊緣：沿著尾巴兩側加小圓（同色） */
   fuzzy?: number
+  /** 蓬鬆的圓弧：在尾巴上緣的這些位置（0～1）各加一個柔和的圓丘 */
+  bumps?: number[]
 }
 
 /** 沿一條三次貝茲曲線畫由粗漸細的尾巴（圓頭），回傳取樣點方便再加裝飾 */
@@ -223,6 +225,26 @@ export function bezierTaper(
     const wn = lerp(w0, w1, (i + 1) / n)
     const ring = o.rings && Math.floor(i / o.rings.every) % 2 === 1
     taper(ctx, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], w, wn, ring ? o.rings!.color : color)
+  }
+  if (o.bumps) {
+    for (const f of o.bumps) {
+      const i = Math.max(1, Math.min(n - 1, Math.round(f * n)))
+      const [x, y] = pts[i]
+      const [px, py] = pts[i - 1]
+      const [qx, qy] = pts[i + 1]
+      const tl = Math.hypot(qx - px, qy - py) || 1
+      let nx = -(qy - py) / tl
+      let ny = (qx - px) / tl
+      if (ny > 0) {
+        nx = -nx
+        ny = -ny
+      }
+      const w = lerp(w0, w1, i / n)
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.arc(x + nx * w * 0.32, y + ny * w * 0.32, w * 0.46, 0, TAU)
+      ctx.fill()
+    }
   }
   if (o.fuzzy) {
     for (let i = 1; i < n; i++) {

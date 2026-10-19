@@ -10,12 +10,12 @@ import type { SpeciesId } from '../../config/species'
  * 把實體狀態轉成 Look，再用與圖鑑、領養預覽完全相同的繪圖程式畫出來。
  */
 
-/** 池塘生物：art 設計座標下「身體長度」（對應 def.length），縮放比例 = def.length × sizeK ÷ 這個值 */
+/** 池塘生物：art 設計座標下的「全長」（鼻尖到尾鰭尖，對應 def.length），縮放比例 = def.length × sizeK ÷ 這個值。帝王蟹、小丑魚另計 */
 const SEA_ART_LEN: Partial<Record<SpeciesId, number>> = {
-  orca: 284,
-  beluga: 216,
-  whaleshark: 374,
-  turtle: 146,
+  orca: 398,
+  beluga: 332,
+  whaleshark: 437,
+  turtle: 214,
   crab: 150,
   clownfish: 65,
 }
@@ -25,11 +25,29 @@ export const LAND_K = 0.8
 
 const clampN = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v))
 
-/** 游動時的俯仰角：往下游鼻子朝下；躍出水面時幾乎垂直 */
-function pitchOf(e: Entity): number {
+/** 各物種游動時的最大傾斜角（弧度）：越大隻越小，帝王蟹貼地不傾斜 */
+export function maxPitch(species: SpeciesId): number {
+  switch (species) {
+    case 'whaleshark':
+      return 0.1
+    case 'orca':
+    case 'beluga':
+      return 0.14
+    case 'turtle':
+      return 0.3
+    case 'crab':
+      return 0
+    default:
+      return 0.32
+  }
+}
+
+/** 游動時的俯仰角：往下游鼻子朝下，上限依物種；虎鯨躍出水面時幾乎垂直（不受上限） */
+export function pitchOf(e: Entity): number {
   if (e.state === 'breach') return clampN(Math.atan2(e.vy, Math.max(40, Math.abs(e.vx))), -1.35, 1.35)
-  if (e.state === 'surface') return -0.3
-  return clampN(Math.atan2(e.vy, Math.max(30, Math.abs(e.vx))), -0.45, 0.45) * 0.7
+  const m = maxPitch(e.pet.species)
+  if (e.state === 'surface') return clampN(-0.3, -m, m)
+  return clampN(clampN(Math.atan2(e.vy, Math.max(30, Math.abs(e.vx))), -0.45, 0.45) * 0.7, -m, m)
 }
 
 export function poseOf(e: Entity): Pose {
@@ -71,11 +89,20 @@ export function seaScale(e: Entity): number {
   return (e.def.length * e.sizeK) / (SEA_ART_LEN[e.pet.species] ?? e.def.length)
 }
 
-/** 池塘生物的半寬／半高：由 art 外框推算（外框以中心對齊，所以左右對稱） */
+/**
+ * 池塘生物的半寬／半高：由 art 外框推算（外框以中心對齊，所以左右對稱），
+ * 並把最大傾斜角計入（外框轉過去之後的範圍），所以任何游姿都不會超出池塘或插進沙地。
+ * 胖的時候身體在垂直方向放大，所以高度也跟著放大。
+ */
 export function seaHalf(e: Entity): { hw: number; hh: number } {
   const b = creatureBox(e.pet.species, e.pet.variant)
   const k = seaScale(e)
-  return { hw: ((b.x1 - b.x0) / 2) * k * (e.pet.species === 'crab' ? 0.85 : 1), hh: ((b.y1 - b.y0) / 2) * k * (0.5 + 0.5 * e.fat) }
+  const hw0 = ((b.x1 - b.x0) / 2) * k * (e.pet.species === 'crab' ? 0.65 : 1)
+  const hh0 = ((b.y1 - b.y0) / 2) * k * Math.max(1, e.fat)
+  const m = maxPitch(e.pet.species)
+  const s = Math.sin(m)
+  const c = Math.cos(m)
+  return { hw: hw0 * c + hh0 * s, hh: hw0 * s + hh0 * c }
 }
 
 /** 陸地生物（腳底原點）的實際大小：寬、高（像素） */

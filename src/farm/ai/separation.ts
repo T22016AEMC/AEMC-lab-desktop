@@ -1,4 +1,4 @@
-import { bodyHalf } from './behaviors'
+import { collideHalf } from './behaviors'
 import type { Entity } from './entity'
 
 /** 確定性的小偽亂數（兩隻正好重疊時決定往哪個方向分開，不用每次都不一樣） */
@@ -15,7 +15,7 @@ const smooth = (x: number): number => {
 
 /** 小丑魚群的實際範圍比單隻大 */
 function extent(e: Entity): { hw: number; hh: number } {
-  const b = bodyHalf(e)
+  const b = collideHalf(e)
   return e.school.length ? { hw: b.hw + 34, hh: b.hh + 22 } : b
 }
 
@@ -50,9 +50,9 @@ export function computeSeparation(entities: Entity[]): void {
       const nx = dx / a
       const ny = dy / b
       const d = Math.hypot(nx, ny)
-      if (d >= 1.4) continue
-      // 越近越用力：d=1.4 時為 0，d≤0.7 時達到最大
-      const s = smooth((1.4 - d) / 0.7)
+      if (d >= 1.7) continue
+      // 越近越用力：d=1.7 時為 0，d≤0.8 時達到最大
+      const s = smooth((1.7 - d) / 0.9)
       let ux: number
       let uy: number
       if (d < 1e-3) {
@@ -70,7 +70,7 @@ export function computeSeparation(entities: Entity[]): void {
       const ma = ea.hw * ea.hh
       const mb = eb.hw * eb.hh
       const wa = mb / (ma + mb) // 體型小的那隻分到比較多的避讓量
-      const push = s * 110
+      const push = s * 150
       A.sepX += ux * push * wa * 2
       A.sepY += uy * push * wa * 2 * 0.7
       B.sepX -= ux * push * (1 - wa) * 2
@@ -117,7 +117,7 @@ export function computeSeparation(entities: Entity[]): void {
 
   // 避免加總後過大
   for (const e of entities) {
-    const lim = e.def.domain === 'sea' ? 110 : 30
+    const lim = e.def.domain === 'sea' ? 150 : 30
     const m = Math.hypot(e.sepX, e.sepY)
     if (m > lim) {
       e.sepX *= lim / m

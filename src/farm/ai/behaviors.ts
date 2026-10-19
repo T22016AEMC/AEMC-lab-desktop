@@ -53,6 +53,24 @@ export function bodyHalf(e: Entity): { hw: number; hh: number } {
   return { hw: w / 2, hh: h / 2 }
 }
 
+/**
+ * 避讓用的「身體核心」範圍（和邊界用的 bodyHalf 分開）：只算身體本體，不含尾鰭、胸鰭、傾斜後多出來的部分。
+ * 邊界要保守（任何部件都不能出池塘），避讓若也用同一個範圍，大型生物會因為外框太大而互相推不開。
+ */
+export function collideHalf(e: Entity): { hw: number; hh: number } {
+  const len = e.def.length * e.sizeK
+  switch (e.pet.species) {
+    case 'crab':
+      return { hw: len * 0.5, hh: len * 0.3 }
+    case 'turtle':
+      return { hw: len * 0.5, hh: len * 0.32 * e.fat }
+    case 'clownfish':
+      return { hw: len * 0.6, hh: len * 0.4 }
+    default:
+      return e.def.domain === 'sea' ? { hw: len * 0.5, hh: len * 0.2 * e.fat } : bodyHalf(e)
+  }
+}
+
 export function createEntity(pet: Pet, nowMs: number, layout: Layout, rand: () => number): Entity {
   const def = SPECIES[pet.species]
   const e: Entity = {

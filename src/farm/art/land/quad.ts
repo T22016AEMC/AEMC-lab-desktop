@@ -58,6 +58,7 @@ export interface SitTail {
   /** 長度（以軀幹長為單位） */
   len?: number
   fuzzy?: number
+  bumps?: number[]
 }
 
 /** 在腿上畫一段由透明漸變成指定顏色的色塊（襪子、重點色：顏色是漸層過渡，不是貼上去的硬邊） */
@@ -294,7 +295,7 @@ function drawSitTail(c: C2, g: G, geo: Geo): void {
   const p2: Pt = [toe + len * 0.2, 5]
   const p3: Pt = [toe + len * 0.28, -11 - lift]
   const col = st.c ?? pal.body
-  bezierTaper(c, p0, p1, p2, p3, w0, w0 * 0.66, col, { rings: st.ring ? { color: st.ring, every: 3 } : undefined, fuzzy: st.fuzzy })
+  bezierTaper(c, p0, p1, p2, p3, w0, w0 * 0.66, col, { rings: st.ring ? { color: st.ring, every: 3 } : undefined, fuzzy: st.fuzzy, bumps: st.bumps })
   if (st.tip) circ(c, p3[0], p3[1], w0 * 0.33 + 0.4, st.tip)
 }
 
