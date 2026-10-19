@@ -8,12 +8,13 @@ const SLOW_HINT_MS = 8_000
 type Status = 'loading' | 'loaded' | 'timeout'
 
 interface Props {
+  windowId: string
   url: string
   title: string
   onOpenInTab: () => void
 }
 
-export function IframeContent({ url, title, onOpenInTab }: Props) {
+export function IframeContent({ windowId, url, title, onOpenInTab }: Props) {
   const [status, setStatus] = useState<Status>('loading')
   const [slow, setSlow] = useState(false)
   // 「繼續等待」會讓計時重新開始
@@ -38,6 +39,7 @@ export function IframeContent({ url, title, onOpenInTab }: Props) {
       {/* 不加 sandbox：嵌入的程式需要能選擇本機檔案上傳、下載檔案 */}
       <iframe
         src={url}
+        data-window-id={windowId}
         title={title}
         className="block h-full w-full border-0 bg-white"
         allow="clipboard-read; clipboard-write; fullscreen; autoplay"

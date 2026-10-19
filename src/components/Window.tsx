@@ -128,8 +128,9 @@ export function Window({ id }: { id: string }) {
   const colors = isActive ? LIGHT_COLORS : IDLE_COLORS
   const light = compact ? 'h-3.5 w-3.5' : 'h-3 w-3'
   const Content = app.kind === 'builtin' ? app.component : null
-  // 拖曳中、或非作用中的 iframe 視窗，用透明遮罩擋住 iframe（否則滑鼠事件會被 iframe 吃掉）
-  const shield = interacting || (app.kind === 'external' && !isActive)
+  // 只有拖曳或調整大小時才蓋透明遮罩（否則滑鼠事件會被 iframe 吃掉）；
+  // 點背景視窗的 iframe 由 useIframeFocusSync 偵測焦點後置頂，不靠遮罩
+  const shield = interacting
 
   return (
     <motion.div
@@ -252,6 +253,7 @@ export function Window({ id }: { id: string }) {
           {app.kind === 'external' ? (
             <IframeContent
               key={win.reloadKey}
+              windowId={id}
               url={app.url}
               title={app.name}
               onOpenInTab={openInTab}
