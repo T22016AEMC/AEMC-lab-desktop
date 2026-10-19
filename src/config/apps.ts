@@ -19,8 +19,7 @@ export const apps: ExternalAppConfig[] = [
   {
     id: 'filmaster',
     name: 'FilMaster',
-    icon: '', // 網站沒有提供圖示，使用文字圖示
-    iconColor: ['#2dd4bf', '#0f766e'],
+    icon: 'icons/filmaster.svg', // 原始圖示：FilMaster 標題使用的 lucide-react Cpu（晶片）
     url: 'https://t22016aemc.github.io/FilMaster/',
     openMode: 'window',
     defaultSize: { width: 1100, height: 720 },
@@ -45,8 +44,7 @@ export const apps: ExternalAppConfig[] = [
   {
     id: 'elusim',
     name: 'EluSim',
-    icon: '', // 網站沒有提供圖示，使用文字圖示
-    iconColor: ['#818cf8', '#4338ca'],
+    icon: 'icons/elusim.svg', // 找不到原始檔，依外觀重新繪製的正弦波
     url: 'https://elusim-v1.onrender.com/',
     openMode: 'tab', // 網站以 X-Frame-Options: DENY 禁止嵌入，只能開新分頁
   },
