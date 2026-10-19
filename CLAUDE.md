@@ -18,7 +18,11 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 ## 新增小程式
 
-只修改 `src/config/apps.ts`，不要動其他檔案。
+只修改 `src/config/apps.ts`，不要動其他檔案（若要用圖片圖示，另外把圖片放進 `public/icons/<id>.<副檔名>`）。
+
+- 決定 `openMode` 前先檢查目標網址的回應標頭：有 `X-Frame-Options` 或 CSP `frame-ancestors` 禁止嵌入 → `'tab'`，否則 `'window'`；無法判斷時預設 `'window'` 並告知使用者。Render 免費方案冷啟動要 30～60 秒，檢查時逾時要設長一點並重試。
+- 圖示：優先用網站 `<link rel="icon">`／apple-touch-icon／manifest 中解析度最大的；抓不到或小於 64px 就用文字圖示（`icon: ''`，可加 `iconColor`，每個程式顏色不同）。
+- 尚未上線的程式：設 `status: 'coming-soon'`（`url` 可省略）。桌面、Dock、啟動台顯示半透明圖示加「即將推出」標籤，點擊只出現「XXX 尚未上線，敬請期待」提示。**上線時只需補上 `url` 並刪除 `status` 這一行**。
 
 ## GitHub 與部署
 

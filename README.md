@@ -46,7 +46,24 @@ npm run preview    # 網址 http://localhost:4173/
 }
 ```
 
-使用圖片當圖示：把圖片放進 `public/icons/`，`icon` 寫 `'icons/my-app.png'`。
+使用圖片當圖示：把圖片放進 `public/icons/`，`icon` 寫 `'icons/my-app.png'`（會自動接上部署的子路徑）。網站沒有可用的圖示時，`icon` 寫 `''`，會顯示「文字圖示」：圓角方形、漸層底色，顯示名稱前兩個字母；可用 `iconColor: ['#起', '#迄']` 指定顏色，沒設定就依 id 自動決定。
+
+### 尚未上線的程式（即將推出）
+
+程式還沒上線時，在 `apps.ts` 加一筆並設 `status: 'coming-soon'`，`url` 可以省略：
+
+```ts
+{
+  id: 'autoellipso',
+  name: 'AutoEllipso',
+  icon: '',
+  status: 'coming-soon',
+}
+```
+
+桌面、Dock 與啟動台都會顯示它的圖示，但圖示半透明並加上「即將推出」小標籤；點擊時不開視窗，只顯示「XXX 尚未上線，敬請期待」的提示。
+
+**上線時**只要補上 `url`（需要時調整 `openMode`、`defaultSize`、圖示），並刪除 `status` 這一行即可。
 
 ### 嵌入限制（重要）
 

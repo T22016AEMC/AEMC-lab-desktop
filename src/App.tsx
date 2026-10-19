@@ -5,6 +5,7 @@ import { Dock } from './components/Dock'
 import { Launchpad } from './components/Launchpad'
 import { MenuBar } from './components/MenuBar'
 import { RotateHint } from './components/RotateHint'
+import { Toast } from './components/Toast'
 import { useIframeFocusSync } from './hooks/useIframeFocusSync'
 import { useViewportSync } from './hooks/useViewportSync'
 
@@ -18,6 +19,7 @@ export default function App() {
       <Dock />
       <Launchpad />
       <AboutDialog />
+      <Toast />
       <BootScreen />
       <RotateHint />
     </div>

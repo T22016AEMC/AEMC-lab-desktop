@@ -19,7 +19,7 @@ function AppTile({ app, iconSize, onOpen }: { app: DesktopApp; iconSize: number;
       }}
       className="flex flex-col items-center gap-2 rounded-xl p-2 outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-white/70 active:scale-95"
     >
-      <AppIcon id={app.id} icon={app.icon} size={iconSize} />
+      <AppIcon app={app} size={iconSize} />
       <span className="max-w-full truncate text-sm text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
         {app.name}
       </span>
@@ -46,7 +46,7 @@ function FolderTile({ label, apps, iconSize, onOpen }: { label: string; apps: De
         {Array.from({ length: 4 }, (_, i) => {
           const app = apps[i]
           return app ? (
-            <AppIcon key={app.id} id={app.id} icon={app.icon} size={mini} />
+            <AppIcon key={app.id} app={app} size={mini} />
           ) : (
             <span key={i} className="rounded-[22%] bg-white/10" style={{ width: mini, height: mini }} />
           )

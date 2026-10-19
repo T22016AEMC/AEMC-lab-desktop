@@ -23,9 +23,17 @@ const GRADIENTS: [string, string][] = [
 ]
 
 /** 依 id 決定 emoji 圖示的底色，同一個 app 永遠同一組顏色 */
-export function gradientFor(id: string): string {
+export function gradientFor(id: string, colors?: [string, string]): string {
+  if (colors) return `linear-gradient(145deg, ${colors[0]}, ${colors[1]})`
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
   const [a, b] = GRADIENTS[h % GRADIENTS.length]
   return `linear-gradient(145deg, ${a}, ${b})`
+}
+
+/** 文字圖示顯示的字母：名稱前兩個字（英文字母取首字大寫、次字小寫） */
+export function iconInitials(name: string): string {
+  const t = name.trim()
+  const letters = Array.from(t).slice(0, 2).join('')
+  return /^[a-z]/i.test(letters) ? letters.charAt(0).toUpperCase() + letters.slice(1).toLowerCase() : letters
 }

@@ -68,7 +68,7 @@ export function Window({ id }: { id: string }) {
   const dy = win.minimizeTo ? win.minimizeTo.y - (rect.y + rect.height / 2) : viewport.height
 
   const openInTab = () => {
-    if (app.kind === 'external') window.open(app.url, '_blank', 'noopener,noreferrer')
+    if (app.kind === 'external' && app.url) window.open(app.url, '_blank', 'noopener,noreferrer')
   }
 
   const beginGesture = (e: ReactPointerEvent<HTMLElement>, g: Gesture) => {
@@ -254,7 +254,7 @@ export function Window({ id }: { id: string }) {
             <IframeContent
               key={win.reloadKey}
               windowId={id}
-              url={app.url}
+              url={app.url ?? 'about:blank'}
               title={app.name}
               onOpenInTab={openInTab}
             />

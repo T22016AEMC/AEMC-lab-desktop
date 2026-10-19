@@ -14,12 +14,20 @@ export interface Rect extends Size {
 export interface ExternalAppConfig {
   id: string
   name: string
-  /** emoji，或圖片路徑（放在 public/ 底下，例如 "icons/foo.png"） */
+  /**
+   * emoji，或圖片路徑（放在 public/ 底下，例如 "icons/foo.png"）。
+   * 留空字串 "" 會改用「文字圖示」：圓角方形加漸層底色，顯示名稱前兩個字母。
+   */
   icon: string
-  url: string
-  /** window：在桌面內開視窗（iframe）；tab：用瀏覽器新分頁開啟 */
-  openMode: 'window' | 'tab'
+  /** 程式網址。status 為 "coming-soon" 時可以省略 */
+  url?: string
+  /** window：在桌面內開視窗（iframe）；tab：用瀏覽器新分頁開啟。預設 window */
+  openMode?: 'window' | 'tab'
   defaultSize?: Size
+  /** "coming-soon"：尚未上線。圖示半透明並加「即將推出」標籤，點擊只顯示提示、不開視窗 */
+  status?: 'coming-soon'
+  /** 文字圖示的漸層底色 [起, 迄]；沒設定就依 id 自動決定 */
+  iconColor?: [string, string]
 }
 
 interface AppBase {
@@ -32,8 +40,10 @@ interface AppBase {
 
 export interface ExternalApp extends AppBase {
   kind: 'external'
-  url: string
+  url?: string
   openMode: 'window' | 'tab'
+  status?: 'coming-soon'
+  iconColor?: [string, string]
 }
 
 /** 內建程式的元件會收到的屬性（供小遊戲在最小化或失去焦點時暫停） */

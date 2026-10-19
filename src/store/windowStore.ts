@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getApp } from '../config/registry'
+import { getApp, isComingSoon } from '../config/registry'
 import { getDockTarget } from '../lib/dock'
 import { DEFAULT_MIN_SIZE, DEFAULT_WINDOW_SIZE, clamp, workArea } from '../lib/layout'
 import type { DesktopApp, Rect } from '../types'
@@ -46,6 +46,11 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   zCounter: 100,
 
   openApp: (app) => {
+    // 尚未上線：只顯示提示
+    if (isComingSoon(app)) {
+      useUIStore.getState().showToast(`${app.name} 尚未上線，敬請期待`)
+      return
+    }
     // 新分頁模式：不建立視窗
     if (app.kind === 'external' && app.openMode === 'tab') {
       window.open(app.url, '_blank', 'noopener,noreferrer')

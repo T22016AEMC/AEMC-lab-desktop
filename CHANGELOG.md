@@ -2,6 +2,16 @@
 
 版本號遵循語意化版本；每次修改程式都要在最上方新增一筆（格式固定，建置時會讀取第一筆的日期）。
 
+## [1.2.0] - 2026-10-19
+
+### 新增
+- 加入 5 個正式程式，取代佔位範例：FilMaster、SpecReader、CheMScutter（視窗模式）、EluSim（網站禁止嵌入，改以新分頁開啟）、AutoEllipso
+- 圖示：SpecReader 使用網站提供的圖示（存於 public/icons/specreader.svg），其餘使用「文字圖示」（圓角方形＋漸層底色＋名稱前兩個字母）
+- 「即將推出」狀態（status: coming-soon，url 可省略）：桌面、Dock、啟動台圖示半透明並加標籤，點擊只顯示「尚未上線，敬請期待」提示；AutoEllipso 使用此狀態
+
+### 變更
+- GitHub Actions 升級到最新主版本（checkout v7、setup-node v7、upload-pages-artifact v5、deploy-pages v5），Node 改為 24，消除 Node 20 棄用警告
+
 ## [1.1.0] - 2026-10-19
 
 ### 新增

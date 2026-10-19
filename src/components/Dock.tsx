@@ -117,7 +117,7 @@ export function Dock() {
           dotOffset={dotOffset}
           onClick={() => openApp(app)}
         >
-          <AppIcon id={app.id} icon={app.icon} size="fill" />
+          <AppIcon app={app} size="fill" />
         </DockItem>
       ))}
     </nav>

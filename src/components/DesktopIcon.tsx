@@ -34,7 +34,7 @@ export function DesktopIcon({ app, selected, iconSize, onSelect, onOpen }: Props
       onKeyDown={(e) => e.key === 'Enter' && onOpen()}
     >
       <div className={`rounded-[22%] ${selected ? 'ring-2 ring-white/70' : ''}`}>
-        <AppIcon id={app.id} icon={app.icon} size={iconSize} />
+        <AppIcon app={app} size={iconSize} />
       </div>
       <span
         className={`max-w-full break-words rounded px-1.5 text-center text-xs leading-tight text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)] ${
