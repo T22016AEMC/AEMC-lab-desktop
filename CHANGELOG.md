@@ -2,6 +2,12 @@
 
 版本號遵循語意化版本；每次修改程式都要在最上方新增一筆（格式固定，建置時會讀取第一筆的日期）。
 
+## [2.1.2] - 2026-10-20
+
+### 變更
+- CheMScutter 正式開通：網址 https://t22016aemc.github.io/chemscutter/（GitHub Pages 沒有 X-Frame-Options／frame-ancestors 限制），以視窗開啟；圖示換成提供的原圖（裁切到分子主體、縮成 256×256 PNG）
+- AutoEllipso 正式開通：網址 https://autoellipso.t22016.workers.dev/，移除「即將推出」；網站以 X-Frame-Options: DENY 與 CSP frame-ancestors 'none' 禁止嵌入，改用新分頁開啟；圖示重畫為藍色漸層圓角方形加白色「ΨΔ」（public/icons/autoellipso.svg）
+
 ## [2.1.1] - 2026-10-19
 
 ### 修正

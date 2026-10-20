@@ -35,10 +35,9 @@ export const apps: ExternalAppConfig[] = [
   {
     id: 'chemscutter',
     name: 'CheMScutter',
-    icon: '', // 網站沒有提供圖示，使用文字圖示
-    iconColor: ['#fb923c', '#c2410c'],
+    icon: 'icons/chemscutter.png', // 使用者提供的原圖（裁切到分子主體，縮成 256×256）
     url: 'https://t22016aemc.github.io/chemscutter/',
-    openMode: 'window',
+    openMode: 'window', // GitHub Pages 沒有 X-Frame-Options 或 frame-ancestors 限制，可以嵌入
     defaultSize: { width: 1000, height: 700 },
   },
   {
@@ -51,8 +50,8 @@ export const apps: ExternalAppConfig[] = [
   {
     id: 'autoellipso',
     name: 'AutoEllipso',
-    icon: '',
-    iconColor: ['#94a3b8', '#475569'],
-    status: 'coming-soon', // 尚未上線；上線時補上 url 並刪除這一行
+    icon: 'icons/autoellipso.svg', // 藍色漸層圓角方形加白色「ΨΔ」，依名稱重新繪製
+    url: 'https://autoellipso.t22016.workers.dev/',
+    openMode: 'tab', // 網站以 X-Frame-Options: DENY 與 CSP frame-ancestors 'none' 禁止嵌入，只能開新分頁
   },
 ]
