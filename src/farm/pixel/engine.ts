@@ -4,14 +4,15 @@ import { isSleeping } from '../sim/rules'
 import { lowStatNotices } from '../sim/stats'
 import type { Weather } from '../sim/worldTime'
 import { assets, drawSprite, type Sprite } from './assets'
+import { drawClock } from './clock'
 import {
-  DOOR, HOUSE_H, HOUSE_W, computeLayout, doorRect, fromCss, sceneObjects, toCss, type Layout,
+  DOOR, HOUSE_H, HOUSE_W, computeLayout, doorRect, fromCss, sceneObjects, toCss, towerBase, towerX, type Layout,
 } from './layout'
 import {
   clampActor, computeSeparation, createActor, frameKeyOf, triggerAnim, updateActor, type Actor, type BehaviorEnv,
 } from './pets'
 import {
-  drawClockHands, drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
+  drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
   makeDrops, updateDrops, type Drop,
 } from './scene'
 
@@ -156,9 +157,6 @@ export class PixelEngine {
         y: o.y,
         draw: () => {
           drawSprite(ctx, s, o.x, o.y)
-          // 鐘樓：鐘面是空白的，時針分針依實際時間畫上去（鐘面中心由素材處理時偵測，記在 manifest）
-          const clock = s.meta?.clock
-          if (o.key === 'clocktower' && clock) drawClockHands(ctx, Math.round(o.x - s.ax + clock.cx), Math.round(o.y - s.ay + clock.cy), f.hour, clock.r)
         },
       })
     }
@@ -178,8 +176,12 @@ export class PixelEngine {
     // 天氣
     if (f.weather === 'rain' || f.weather === 'snow') drawDrops(ctx, this.drops, f.weather)
 
-    // 夜晚：暗色疊層，之後再畫路燈光暈與窗戶的光
+    // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
     const dark = drawDarkness(ctx, L, f.hour, f.weather)
+    // 鐘面完全由程式畫，疊在鐘樓上、蓋過原圖那個小鐘面；畫在暗色疊層之後，夜晚也清楚可讀
+    const tower = assets.get('clocktower')
+    const face = tower?.meta?.clock
+    if (tower && face) drawClock(ctx, towerX(L) - tower.ax + face.cx, towerBase(L) - tower.ay + face.cy, f.hour)
     const glow = Math.min(1, Math.max(0, (dark - 0.18) / 0.3))
     if (glow > 0) {
       const lamp = sceneObjects(L).find((o) => o.key === 'lamp')

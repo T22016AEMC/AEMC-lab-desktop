@@ -47,6 +47,16 @@ export function MenuBar() {
       </div>
       <div className="flex shrink-0 items-center gap-3 px-2">
         {petCount !== null && (
+          <button
+            type="button"
+            onClick={() => useUIStore.getState().setAdoptOpen(true)}
+            className="rounded px-2 py-px font-semibold hover:bg-white/20"
+            title="領養寵物"
+          >
+            ＋領養
+          </button>
+        )}
+        {petCount !== null && (
           <span className="tabular-nums" title="寵物數量" aria-label={`寵物 ${petCount}/${PET_CAPACITY}`}>
             🐾 {petCount}/{PET_CAPACITY}
           </span>

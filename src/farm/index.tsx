@@ -264,17 +264,6 @@ export function Farm() {
 
       {selected && <PetMenu ref={menuRef} petId={selected} />}
 
-      {hasSave && assetsReady && (
-        <button
-          type="button"
-          className="px-btn absolute bottom-2 left-2 z-20 px-3 py-1.5 text-sm"
-          onClick={() => useUIStore.getState().setAdoptOpen(true)}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          ＋ 領養
-        </button>
-      )}
-
       {status === 'ready' && assetsReady && !hasSave && <AdoptDialog first />}
       {hasSave && adoptOpen && <AdoptDialog />}
 

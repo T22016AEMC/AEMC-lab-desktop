@@ -2,7 +2,7 @@ import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Layout } from './layout'
-import { petBounds } from './layout'
+import { blockers, petBounds } from './layout'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -91,32 +91,58 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
   const b = petBounds(L)
   const x = rr(rand, b.x0, b.x1)
   const y = rr(rand, b.y0, b.y1)
-  return {
+  const actor: Actor = {
     id: pet.id, pet, x, y, tx: x, ty: y,
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
   }
+  clampActor(actor, L) // 剛好出生在障礙物裡就推出來
+  actor.tx = actor.x
+  actor.ty = actor.y
+  actor.lastX = actor.x
+  actor.lastY = actor.y
+  return actor
 }
 
-/** 把位置限制在活動範圍內（也就是不會走進住家） */
+/** 點是否落在障礙物裡 */
+function blocked(L: Layout, x: number, y: number): boolean {
+  return blockers(L).some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1)
+}
+
+/** 把位置限制在活動範圍內（也就是不會走進住家、不會停在燈柱後面），並把站進障礙物的寵物推到最近的出口 */
 export function clampActor(a: Actor, L: Layout): void {
   const b = petBounds(L)
   a.x = Math.min(b.x1, Math.max(b.x0, a.x))
   a.y = Math.min(b.y1, Math.max(b.y0, a.y))
+  for (const r of blockers(L)) {
+    if (!(a.x > r.x0 && a.x < r.x1 && a.y > r.y0 && a.y < r.y1)) continue
+    const toDown = r.y1 - a.y
+    const toLeft = a.x - r.x0
+    const toRight = r.x1 - a.x
+    const m = Math.min(toDown, toLeft, toRight)
+    if (m === toDown) a.y = Math.min(b.y1, r.y1 + 0.5)
+    else if (m === toLeft && r.x0 - 0.5 >= b.x0) a.x = r.x0 - 0.5
+    else if (m === toRight && r.x1 + 0.5 <= b.x1) a.x = r.x1 + 0.5
+    else a.y = Math.min(b.y1, r.y1 + 0.5)
+  }
 }
 
-/** 挑下一個目標：在範圍內、離其他寵物遠一點 */
+/** 挑下一個目標：在範圍內（草地與小路都會去）、不在障礙物裡、離別的寵物與牠們的目標都遠一點 */
 function pickTarget(a: Actor, env: BehaviorEnv, far = false): void {
   const b = petBounds(env.layout)
   let best = { x: a.x, y: a.y, score: -1 }
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 12; i++) {
     const x = rr(env.rand, b.x0, b.x1)
     const y = rr(env.rand, b.y0, b.y1)
+    if (blocked(env.layout, x, y)) continue
     let near = Infinity
-    for (const o of env.others) if (o !== a) near = Math.min(near, Math.hypot((o.x - x) * 0.7, (o.y - y) * 1.6))
+    for (const o of env.others) {
+      if (o === a) continue
+      near = Math.min(near, Math.hypot((o.x - x) / 46, (o.y - y) / 15), Math.hypot((o.tx - x) / 46, (o.ty - y) / 15))
+    }
     // 想要的是：離別的寵物遠、移動距離適中（散步時要遠）
     const dist = Math.hypot(x - a.x, y - a.y)
-    const score = Math.min(near, 60) + (far ? dist * 0.5 : Math.min(dist, 90) * 0.2) + env.rand() * 8
+    const score = Math.min(near, 2.5) * 40 + (far ? dist * 0.5 : Math.min(dist, 120) * 0.15) + env.rand() * 10
     if (score > best.score) best = { x, y, score }
   }
   a.tx = best.x
@@ -249,8 +275,8 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
         else setAction(a, 'idle', rr(env.rand, 1.5, 4))
       }
       // 靜止時也被輕輕推開，避免疊在一起
-      a.x += a.sepX * dt * 0.6
-      a.y += a.sepY * dt * 0.6
+      a.x += a.sepX * dt * 1.0
+      a.y += a.sepY * dt * 1.0
       break
     }
     default:
@@ -289,21 +315,21 @@ export function computeSeparation(actors: Actor[]): void {
     for (let j = i + 1; j < actors.length; j++) {
       const A = actors[i]
       const B = actors[j]
-      const rx = 40
-      const ry = 12
+      const rx = 50
+      const ry = 16
       let dx = A.x - B.x
       let dy = A.y - B.y
       const d = Math.hypot(dx / rx, dy / ry)
-      if (d >= 1.3) continue
+      if (d >= 1.5) continue
       if (d < 1e-3) {
         dx = (i % 2 ? 1 : -1) * 0.5
         dy = 0.2
       }
-      const s = (1.3 - Math.min(d, 1.3)) / 1.3
+      const s = (1.5 - Math.min(d, 1.5)) / 1.5
       const gl = Math.hypot(dx / (rx * rx), dy / (ry * ry)) || 1
       const ux = dx / (rx * rx) / gl
       const uy = dy / (ry * ry) / gl
-      const push = s * 26
+      const push = s * 60
       // 睡著的不動，由醒著的那隻讓開
       const wa = A.action === 'sleep' ? 0 : B.action === 'sleep' ? 1 : 0.5
       A.sepX += ux * push * wa * 2
@@ -313,9 +339,9 @@ export function computeSeparation(actors: Actor[]): void {
     }
   for (const a of actors) {
     const m = Math.hypot(a.sepX, a.sepY)
-    if (m > 30) {
-      a.sepX *= 30 / m
-      a.sepY *= 30 / m
+    if (m > 55) {
+      a.sepX *= 55 / m
+      a.sepY *= 55 / m
     }
   }
 }

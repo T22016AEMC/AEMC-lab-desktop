@@ -154,56 +154,59 @@ export function drawGlow(ctx: CanvasRenderingContext2D, x: number, y: number, st
   ctx.restore()
 }
 
-/** 鐘樓的時針與分針（像素線）：依實際時間畫在空白的鐘面上；(cx, cy) 是鐘面中心 */
-export function drawClockHands(ctx: CanvasRenderingContext2D, cx: number, cy: number, hour: number, radius = 14): void {
-  const h = ((hour % 12) + 12) % 12
-  const min = (hour % 1) * 60
-  const line = (angle: number, len: number, w: number, color: string): void => {
-    ctx.fillStyle = color
-    const dx = Math.sin(angle)
-    const dy = -Math.cos(angle)
-    for (let t = 0; t <= len; t += 0.5) ctx.fillRect(Math.round(cx + dx * t) - (w > 1 ? 0 : 0), Math.round(cy + dy * t), w, w)
-  }
-  line((min / 60) * Math.PI * 2, Math.max(5, radius * 0.78), 1, '#3b2a1c')
-  line(((h + min / 60) / 12) * Math.PI * 2, Math.max(3, radius * 0.5), 2, '#3b2a1c')
-  ctx.fillStyle = '#b8472c'
-  ctx.fillRect(cx - 1, cy - 1, 2, 2)
-}
-
 export interface Drop {
   x: number
   y: number
   v: number
   ph: number
+  /** 雨絲長度（像素） */
+  len: number
 }
 
-/** 雨滴／雪花（使用 sky 素材），粒子由引擎持有 */
+/**
+ * 雨雪粒子，由引擎持有。雨是細細的淺藍色短線（1 像素寬、4～8 像素長、數量多、速度快），不用水珠素材；
+ * 雪是縮小後的小顆雪花素材，密度適中。
+ */
 export function makeDrops(L: Layout, weather: Weather, prev: Drop[]): Drop[] {
-  const want = weather === 'rain' ? Math.round(L.W / 9) : weather === 'snow' ? Math.round(L.W / 28) : 0
+  const want = weather === 'rain' ? Math.round(L.W / 3.2) : weather === 'snow' ? Math.round(L.W / 22) : 0
   const out = prev.slice(0, want)
-  while (out.length < want) out.push({ x: Math.random() * L.W, y: Math.random() * L.H, v: 0.7 + Math.random() * 0.6, ph: Math.random() * 6.28 })
+  while (out.length < want)
+    out.push({ x: Math.random() * L.W, y: Math.random() * L.H, v: 0.8 + Math.random() * 0.5, ph: Math.random() * 6.28, len: 4 + Math.floor(Math.random() * 5) })
   return out
 }
 
 export function updateDrops(drops: Drop[], L: Layout, weather: Weather, dt: number): void {
   for (const d of drops) {
     if (weather === 'rain') {
-      d.y += 150 * d.v * dt
-      d.x -= 22 * d.v * dt
+      d.y += 260 * d.v * dt
+      d.x -= 40 * d.v * dt
     } else {
-      d.y += 14 * d.v * dt
-      d.x += Math.sin(d.ph + d.y * 0.04) * 8 * dt
+      d.y += 16 * d.v * dt
+      d.x += Math.sin(d.ph + d.y * 0.05) * 7 * dt
     }
-    if (d.y > L.H + 10) { d.y = -16; d.x = Math.random() * L.W }
+    if (d.y > L.H + 10) {
+      d.y = -12
+      d.x = Math.random() * L.W
+    }
     if (d.x < -12) d.x = L.W + 6
     if (d.x > L.W + 12) d.x = -6
   }
 }
 
 export function drawDrops(ctx: CanvasRenderingContext2D, drops: Drop[], weather: Weather): void {
-  const s = assets.get(weather === 'rain' ? 'raindrop' : 'snowflake')
+  if (weather === 'rain') {
+    // 細長的淺藍色雨絲：沿著斜線一格一格畫
+    ctx.fillStyle = 'rgba(180,215,255,0.62)'
+    for (const d of drops) {
+      const x0 = Math.round(d.x)
+      const y0 = Math.round(d.y)
+      for (let i = 0; i < d.len; i++) ctx.fillRect(x0 - Math.floor(i / 5), y0 + i, 1, 1)
+    }
+    return
+  }
+  const s = assets.get('snowflake')
   if (!s) return
-  ctx.globalAlpha = weather === 'rain' ? 0.75 : 0.9
+  ctx.globalAlpha = 0.9
   for (const d of drops) drawSprite(ctx, s, d.x, d.y + s.h)
   ctx.globalAlpha = 1
 }

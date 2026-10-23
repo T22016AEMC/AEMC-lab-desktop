@@ -371,64 +371,107 @@ const DOG_EXTRA = ['jump', 'dig_a', 'dig_b', 'tug', 'belly_up', 'bark']
 const CAT_CORE = ['stand', 'walk_a', 'walk_b', 'sit_a', 'unused_back', 'sleep', 'eat', 'groom']
 const CAT_EXTRA = ['crouch', 'pounce', 'swat', 'tangled']
 
-/** 各檔案的像素格大小覆寫：貓的原圖是放大後再平滑過的，像素格比狗細，統一成跟狗相同的粗細 */
-const P_OVERRIDE = {}
-for (const c of CATS) { P_OVERRIDE[`cat_${c}_core.png`] = 'dogs'; P_OVERRIDE[`cat_${c}_extra.png`] = 'dogs' }
+/**
+ * 站姿目標高度（邏輯像素，±2）。依真實大小排序：
+ * 黃金獵犬 > 哈士奇 > 邊牧 > 柴犬 > 貴賓 > 柯基；布偶貓 > 英短藍貓 > 暹羅 > 橘虎斑 > 三花 = 黑貓。
+ * 每隻動物用自己的像素格大小 p（反推出來），它所有姿勢（core、extra）共用同一個 p。
+ */
+const STAND_HEIGHT = {
+  dog_golden: 46, dog_husky: 43, dog_collie: 41, dog_shiba: 36, dog_poodle: 34, dog_corgi: 31,
+  cat_ragdoll: 33, cat_bluecat: 32, cat_siamese: 31, cat_orange: 30, cat_calico: 29, cat_black: 29,
+}
+/** 反推 p 時的起點（原圖大約的像素格） */
+const P_GUESS = 6.1
+/** 貓 extra 原圖是縮小後再放大的：像素格 = 同一隻貓 core 的 p × 這個倍率（沿用先前與 core 的相對取樣關係） */
+const CAT_EXTRA_RATIO = 0.56
 
 const pCache = {}
-/** 狗與貓共用的像素格大小（原圖估算值的中位數附近）；貓的 extra 原圖是縮小後再放大的，像素格 = 此值 × 0.56 */
-const DOG_P = 6.1
 
-async function sheet({ file, group, prefix, cols, rows, names, minArea = 300, pRange, pFixed, anchorGroupKey }) {
+/**
+ * 處理一張格狀原圖。
+ *  - pFixed：直接指定取樣格大小 p（沒指定就用頻譜估算值）
+ *  - targets：{ 幀名稱: 目標高度（邏輯像素） }，用來「依目標高度反推 p」
+ *  - solveFrom：以這一幀的目標高度求出 p，整張圖的所有幀共用（同一隻動物的所有姿勢大小不會跳）
+ *    沒有 solveFrom 時，targets 裡的每一幀各自求自己的 p（例如裝飾物、特效圖示）
+ *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
+ */
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, solveFrom, pScale = 1 }) {
   const img = await load(file)
   const mask = fgMask(img)
   const { lab, comps: all } = label(mask, img.W, img.H)
   const comps = keepComps(all, minArea)
   const cells = groupCells(comps, cols, rows)
-  // 估算像素格大小 p；同一批生成的素材（所有狗、所有貓）估算值會有 ±15% 的雜訊（尤其是糊掉的圖），
-  // 所以這些素材改用共同的 pFixed，確保「一個像素的視覺大小」在全部動物之間一致
   const e = estimateP(img, mask, pRange)
-  const p = pFixed ?? e.p
-  const amp = e.amp
-  pCache[file] = { p, amp }
-  info(`${file}: ${img.W}×${img.H}，連通塊 ${comps.length}（原 ${all.length}），像素格估算 p=${e.p.toFixed(2)}（強度 ${amp.toFixed(2)}）${pFixed ? `，採用共同值 p=${pFixed.toFixed(2)}` : ''}`)
+  const base = (pFixed ?? e.p) * pScale
+  pCache[file] = { p: base, amp: e.amp }
+
+  const render = (cell, pp) => {
+    const box = [Math.min(...cell.map((c) => c.x0)), Math.min(...cell.map((c) => c.y0)), Math.max(...cell.map((c) => c.x1)), Math.max(...cell.map((c) => c.y1))]
+    const keep = new Set(cell.map((c) => c.id))
+    // 相位：每格各自估算（避開 AI 圖的整體漂移）
+    const clip = [Math.max(0, box[0] - 4), Math.max(0, box[1] - 4), Math.min(img.W - 2, box[2] + 4), Math.min(img.H - 2, box[3] + 4)]
+    const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
+    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases))
+  }
+  /** 反推 p，讓這一格輸出的高度等於 target（高度是整數，會在 ±1 內收斂） */
+  const solve = (cell, target, p0) => {
+    let pp = p0
+    let best = { pp, err: Infinity }
+    for (let k = 0; k < 8; k++) {
+      const spr = render(cell, pp)
+      if (!spr) break
+      const err = Math.abs(spr.h - target)
+      if (err < best.err) best = { pp, err }
+      if (err === 0) break
+      pp *= spr.h / target
+    }
+    return best.pp
+  }
+
+  let animalP = base
+  if (solveFrom) {
+    const cell = cells[names.indexOf(solveFrom)]
+    if (!cell?.length) throw new Error(file + ' 找不到 ' + solveFrom)
+    animalP = solve(cell, targets[solveFrom], base)
+  }
+  info(
+    file + ': ' + img.W + '×' + img.H + '，連通塊 ' + comps.length + '（原 ' + all.length + '），像素格估算 p=' + e.p.toFixed(2) + '（強度 ' + e.amp.toFixed(2) + '）' +
+      (solveFrom || Object.keys(targets).length ? '，依目標高度求出 p=' + (solveFrom ? animalP.toFixed(2) : '各幀不同') : pFixed ? '，採用 p=' + base.toFixed(2) : ''),
+  )
   const frames = []
   for (let i = 0; i < rows * cols; i++) {
     const name = names[i]
     if (!name) continue
     const cell = cells[i]
     if (!cell.length) {
-      warn(`${file} 第 ${i + 1} 格（${name}）找不到內容`)
+      warn(file + ' 第 ' + (i + 1) + ' 格（' + name + '）找不到內容')
       continue
     }
-    const box = [Math.min(...cell.map((c) => c.x0)), Math.min(...cell.map((c) => c.y0)), Math.max(...cell.map((c) => c.x1)), Math.max(...cell.map((c) => c.y1))]
-    const keep = new Set(cell.map((c) => c.id))
-    // 相位：每格各自估算（避開 AI 圖的整體漂移）
-    const pad = [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4]
-    const clip = [Math.max(0, pad[0]), Math.max(0, pad[1]), Math.min(img.W - 2, pad[2]), Math.min(img.H - 2, pad[3])]
-    const phases = [estimatePhase(img, mask, clip, p, 0), estimatePhase(img, mask, clip, p, 1)]
-    const raw = depixelate(img, mask, lab, keep, clip, p, phases)
-    const spr = cleanSprite(raw)
+    const pp = solveFrom || !targets[name] ? animalP : solve(cell, targets[name], base)
+    const spr = render(cell, pp)
     if (!spr) {
-      warn(`${file} ${name}：處理後是空的`)
+      warn(file + ' ' + name + '：處理後是空的')
       continue
     }
-    frames.push({ name, spr })
+    frames.push({ name, spr, p: pp })
   }
-  return { frames, p }
+  return { frames, p: animalP }
 }
 
+/** v3.0.0 第一版（統一 p=6.1）的尺寸，用來在處理報告裡列出「前後尺寸對照表」（寬×高，邏輯像素） */
+const BASELINE = {"dog_golden_stand":[51,47],"dog_husky_stand":[51,50],"dog_collie_stand":[49,46],"dog_shiba_stand":[52,51],"dog_poodle_stand":[45,47],"dog_corgi_stand":[48,42],"cat_ragdoll_stand":[58,49],"cat_bluecat_stand":[56,47],"cat_siamese_stand":[55,49],"cat_orange_stand":[56,46],"cat_calico_stand":[56,48],"cat_black_stand":[54,48],"house_closed":[121,117],"tree":[82,103],"lamp":[51,84],"clocktower":[89,115],"mushroom":[58,56],"stump":[78,51],"bush":[70,61],"tall_grass":[71,60],"rocks":[77,50],"flowers":[70,49],"fx_heart":[14,13],"fx_zzz":[18,17],"fx_note":[14,14],"fx_sweat":[10,15],"fx_exclaim":[8,18],"fx_sparkle":[15,17],"fx_bubble":[18,18],"fx_question":[12,17],"snowflake":[20,17]}
 /** 檢視總覽圖後記下的素材瑕疵與取捨（會附在處理報告最後） */
 const KNOWN_ISSUES = [
-  "像素格估算：狗、貓共用 p=6.1（原圖各自估算值 5.3～7.8，糊掉的圖雜訊大：貓 core/extra 的頻譜強度接近 0，柯基 0.17、黃金獵犬 0.20、黃金獵犬 extra 0.12、邊牧 extra 0.07），所以不採用個別估算值，確保所有動物像素大小一致。代價：少數邊緣的階梯會略不規則。",
-  "貓 extra（crouch／pounce／swat／tangled）原圖是縮小後再放大的，解析度低、細節偏糊；以 6.1×0.56 的像素格取樣，讓大小與 core 一致。",
-  "貓站姿寬 54～58，略大於狗（45～52）；原圖中貓的畫幅就比較大，沒有再縮放（縮放會破壞像素一致性）。",
-  "貓的 sit_b 是背面，已切出但標記 unused_back，不使用；小建築.png 的珊瑚礁（coral_unused）不使用；toys_cat.png 另外 6 個海洋道具（海灘球、泡泡、貝殼、蝦、海草、閃光）不使用。",
+  "每隻動物依「站姿目標高度」反推自己的像素格 p（柴犬 8.64、柯基 8.26、哈士奇 7.09、黃金獵犬 6.23、邊牧 6.84、貴賓 8.43；貓 8.96～10.10）。同一隻動物的 core 與 extra 共用同一個 p（貓 extra 為 core 的 ×0.56）。原圖本身的頻譜估算值在 5.3～7.8，貓的原圖是放大平滑過的（強度 0.06～0.09，估算不可靠），所以貓、狗的 p 都是由目標高度決定，而不是估算值。",
+  "貓縮得比較多（p 約 9～10，原圖一個「像素格」約 5.3）：取樣格比原圖的像素格粗，邊緣的階梯會略不規則、細節（花紋、鬍鬚）損失較多。柯基身體長，寬度（35）比高度（31）大。",
+  "貓 extra（crouch／pounce／swat／tangled）原圖是縮小後再放大的，解析度低、細節偏糊；沿用先前與 core 的相對取樣關係（p × 0.56），所以這四個姿勢比站姿高（例如 swat 41、crouch 40），是姿勢本身比較「長」，不是比例錯誤。",
+  "貓的 sit_b 是背面，已切出但標記 unused_back，不使用；小建築.png 的珊瑚礁（coral_unused）不使用；toys_cat.png 另外 6 個海洋道具（海灘球、泡泡、貝殼、蝦、海草、閃光）不使用；雨滴素材（raindrop）保留但不使用（雨改由程式畫細線）。",
   "草地方塊以 2×2 鏡像拼成無縫，肉眼可看出左右上下對稱的花紋；原圖草地底邊較粗糙，已裁掉最外圈與底邊約 20 像素。草地原圖像素格估算 9.4（雜訊大）。",
   "小路原圖含上下的草緣，處理時只保留泥土與石頭（以顏色判斷），草緣交給草地方塊，所以路的邊緣是不規則的泥土輪廓而不是原圖的草緣；遠景與小路左右鏡像拼接成可水平重複。",
-  "特效與天空物件的像素格較粗（fx 9.2、sky 7.7）：愛心 14×13、驚嘆號 8×18 偏小；雪花 20×17、雨滴 9×14 相對場景偏大（不能縮放）。",
-  "玩具（toys_dog 4.3）像素格較細，玩具相對於狗偏大；本版畫面上不使用，下一版放進場景時可能要調整。",
-  "鐘樓像素格估算 4.4 與其他場景素材（5.5～5.7）不同，改用 5.0 讓寬度約 89（參考值 90）；鐘面中心與半徑由處理腳本偵測後寫進 manifest。",
+  "特效圖示（愛心、ZZZ、音符、汗滴、驚嘆號、閃光、泡泡、問號）統一取樣到高度 15；它們的原圖像素格是 9.2，取樣格縮小後細節是由較大的色塊重新取樣而來，略有變形。雪花縮到 8×9。",
+  "玩具（toys_dog 4.3）像素格較細，玩具相對於狗偏大；本版畫面上不使用，下一版放進場景時可能要調整（可用同樣的「目標高度」方式）。",
+  "住家放大到 139×134（p=4.94，比原圖估算 5.66 細）、鐘樓放大到 123×160（p≈3.6，比原圖估算 4.38 細），都是「取樣格比原圖細」：細節由原圖像素內插而來，會比較柔，但大小與像素密度如要求。裝飾物縮小：p 各幀不同（蘑菇 37×37、樹樁 53×36、灌木 47×40、高草叢 44×38、石頭堆 52×34、小花叢 39×28）。",
+  "鐘樓原圖的鐘面是空白圓形，管線偵測它的中心與半徑寫進 manifest；遊戲裡的鐘面（金框、刻度、指針）完全由程式畫，蓋過原圖鐘面。",
 ]
 
 // ---------------------------------------------------------------------------
@@ -438,23 +481,27 @@ const KNOWN_ISSUES = [
 async function main() {
   info(`來源：${SRC}`)
 
-  // 1) 狗：core（4×2）+ extra（3×2）
+  // 1) 狗：core（4×2）+ extra（3×2）。每隻狗依站姿目標高度求自己的 p，core 與 extra 共用
+  const animalP = {}
   for (const [id, file] of Object.entries(DOGS)) {
-    const { frames } = await sheet({ file, group: 'dog_' + id, cols: 4, rows: 2, names: DOG_CORE, pFixed: DOG_P })
-    for (const f of frames) addFrame('dog_' + id, `dog_${id}_${f.name}`, f.spr)
-  }
-  for (const id of Object.keys(DOGS)) {
-    const { frames } = await sheet({ file: `dog_${id}_extra.png`, group: 'dog_' + id, cols: 3, rows: 2, names: DOG_EXTRA, pFixed: DOG_P })
-    for (const f of frames) addFrame('dog_' + id, `dog_${id}_${f.name}`, f.spr)
+    const key = 'dog_' + id
+    const core = await sheet({ file, cols: 4, rows: 2, names: DOG_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    animalP[key] = core.p
+    for (const f of core.frames) addFrame(key, key + '_' + f.name, f.spr)
+    const extra = await sheet({ file: 'dog_' + id + '_extra.png', cols: 3, rows: 2, names: DOG_EXTRA, pFixed: core.p })
+    for (const f of extra.frames) addFrame(key, key + '_' + f.name, f.spr)
   }
 
   // 2) 貓
   for (const id of CATS) {
-    const core = await sheet({ file: `cat_${id}_core.png`, cols: 4, rows: 2, names: CAT_CORE, pFixed: DOG_P })
-    for (const f of core.frames) addFrame('cat_' + id, `cat_${id}_${f.name}`, f.spr, f.name === 'unused_back' ? { unused: true } : {})
-    const extra = await sheet({ file: `cat_${id}_extra.png`, cols: 2, rows: 2, names: CAT_EXTRA, pFixed: DOG_P * 0.56 })
-    for (const f of extra.frames) addFrame('cat_' + id, `cat_${id}_${f.name}`, f.spr)
+    const key = 'cat_' + id
+    const core = await sheet({ file: key + '_core.png', cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    animalP[key] = core.p
+    for (const f of core.frames) addFrame(key, key + '_' + f.name, f.spr, f.name === 'unused_back' ? { unused: true } : {})
+    const extra = await sheet({ file: key + '_extra.png', cols: 2, rows: 2, names: CAT_EXTRA, pFixed: core.p * CAT_EXTRA_RATIO })
+    for (const f of extra.frames) addFrame(key, key + '_' + f.name, f.spr)
   }
+  info('每隻動物的像素格 p（core 與 extra 共用；貓 extra 為 ×' + CAT_EXTRA_RATIO + '）：' + Object.entries(animalP).map(([k, v]) => k + '=' + v.toFixed(2)).join('、'))
 
   // 3) 領養預覽正面圖
   {
@@ -465,7 +512,7 @@ async function main() {
 
   // 4) 場景物件
   {
-    const house = await sheet({ file: '住家.png', cols: 3, rows: 1, names: ['house_closed', 'house_open', 'house_night'] })
+    const house = await sheet({ file: '住家.png', cols: 3, rows: 1, names: ['house_closed', 'house_open', 'house_night'], targets: { house_closed: 134 }, solveFrom: 'house_closed' })
     // 三張要用同一個錨點：貼到相同大小的畫布，底邊與水平中心對齊
     const W = Math.max(...house.frames.map((f) => f.spr.w)), H = Math.max(...house.frames.map((f) => f.spr.h))
     for (const f of house.frames) {
@@ -475,22 +522,23 @@ async function main() {
       addFrame('scene', f.name, { w: W, h: H, rgba: out })
     }
     for (const [file, name] of [['scene_clocktower.png', 'clocktower'], ['scene_tree.png', 'tree']]) {
-      const r = await sheet({ file, cols: 1, rows: 1, names: [name], pFixed: name === 'clocktower' ? 5.0 : undefined })
+      const r = await sheet({ file, cols: 1, rows: 1, names: [name], targets: name === 'clocktower' ? { clocktower: 160 } : {} })
       for (const f of r.frames) addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
     }
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'] })
     for (const f of small.frames) addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
     const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
     for (const f of bn.frames) addFrame('scene', f.name, f.spr)
-    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'] })
+    // 裝飾物各縮小到目標高度：蘑菇 36、樹樁 36、灌木 40、高草叢 38、石頭堆 34、小花叢 28
+    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], targets: { bush: 40, rocks: 34, flowers: 28, tall_grass: 38, mushroom: 36, stump: 36 } })
     for (const f of dc.frames) addFrame('scene', f.name, f.spr)
   }
 
   // 5) 天空物件、特效、玩具
   {
-    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'] })
+    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'], targets: { snowflake: 9 } })
     for (const f of sky.frames) addFrame('fx', f.name, f.spr)
-    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150 })
+    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, targets: Object.fromEntries(['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => ['fx_' + n, 15])) })
     for (const f of fx.frames) addFrame('fx', f.name, f.spr)
     const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120 })
     for (const f of td.frames) addFrame('toys', f.name, f.spr)
@@ -615,6 +663,18 @@ async function writeOutputs() {
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
       if (f.w < 6 || f.h < 6) warn(`${f.key} 太小（${f.w}×${f.h}）`)
     }
+  // 前後尺寸對照表
+  info('')
+  info('===== 尺寸對照表（寬×高，邏輯像素；前 = 第一版統一 p=6.1，後 = 本版） =====')
+  const NAMES = { dog_golden: '黃金獵犬', dog_husky: '哈士奇', dog_collie: '邊牧', dog_shiba: '柴犬', dog_poodle: '貴賓', dog_corgi: '柯基', cat_ragdoll: '布偶貓', cat_bluecat: '英短藍貓', cat_siamese: '暹羅', cat_orange: '橘虎斑', cat_calico: '三花', cat_black: '黑貓' }
+  for (const [k, b0] of Object.entries(BASELINE)) {
+    const f = manifest.frames[k]
+    if (!f) continue
+    const key = k.replace('_stand', '')
+    const label = NAMES[key] ? NAMES[key] + ' 站姿' : k
+    const tgt = STAND_HEIGHT[key] ? '（目標高 ' + STAND_HEIGHT[key] + '）' : ''
+    info('  ' + label.padEnd(10, '　') + ' ' + (b0[0] + '×' + b0[1]).padEnd(8) + ' → ' + (f.w + '×' + f.h).padEnd(8) + tgt)
+  }
   // 動物尺寸摘要
   const sizeOf = (k) => manifest.frames[k]
   for (const id of Object.keys(DOGS)) { const s = sizeOf(`dog_${id}_stand`); if (s) info(`狗 ${id} stand ${s.w}×${s.h}`) }

@@ -55,9 +55,11 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 ### 像素素材規格與管線
 
 - 素材一律由 `node scripts/process-assets.mjs "<原圖資料夾>"` 從洋紅底原圖產生到 `public/assets/`（圖集＋`manifest.json`）；**原圖不進 repo**（資料夾在 `.gitignore`）。不要手動改圖集，改處理腳本後重跑。
-- 全部素材 1 格像素 = 1 邏輯像素，像素密度必須一致（不可混用大小像素）；狗與貓共用同一個像素格大小。場景邏輯解析度約 480×270，整數倍放大（`image-rendering: pixelated`、處理 devicePixelRatio）；畫圖座標一律取整數。
+- 全部素材 1 格像素 = 1 邏輯像素，畫面上像素大小一致（整數倍放大，不旋轉、不縮放）；各素材可各自取樣來調整大小（取樣比例 p 越小圖越大），但同一隻動物的所有姿勢共用同一個 p，貓的 extra 檔維持與 core 的相對取樣。目前尺寸：狗站姿高 46／43／41／36／34／31（黃金／哈士奇／邊牧／柴犬／貴賓／柯基）、貓 33／32／31／30／29／28（布偶／英短藍貓／暹羅／橘虎斑／三花／黑貓）；住家 139×134、鐘樓 123×160、樹 82×103、路燈 51×84；狀態與特效圖示約 15 高。改尺寸要改 `process-assets.mjs` 的目標值、重跑，並同步 `pixel/layout.ts` 的尺寸常數（測試會比對）。場景邏輯解析度約 480×270，整數倍放大（`image-rendering: pixelated`、處理 devicePixelRatio）；畫圖座標一律取整數。
 - 每張素材有錨點：`ax` 水平中心、`ay` 腳底基準線；同一隻動物所有姿勢腳底對齊。alpha 只有 0 或 255。
 - 動物素材鍵名：`dog_<品種>_<動作>`、`cat_<花色>_<動作>`、`front_dog_*`／`front_cat_*`（領養預覽）；品種 id 與素材鍵名的對應在 `config/species.ts`（`assetKey`）。貓的 `sit_b` 是背面，標記 `unused_back`，不可用在動畫上。
+- 鐘樓時鐘由程式畫（`pixel/clock.ts`），位置來自處理管線偵測到的鐘面中心（manifest 的 `meta.clock`）；時間必須來自遊戲的時間來源（含測試模式覆寫），不可直接用 `Date.now()`；指針角度公式有純函式測試，改動要保留。
+- 場景配置固定（住家左下、路燈右側、鐘樓最右後排且周圍留空、2 棵樹、固定裝飾），寵物活動範圍與障礙物都在 `pixel/layout.ts`（`petBounds`、`blockers`），不要讓寵物走進住家、停在燈柱後面或鐘樓底座；領養按鈕放在選單列，不要放浮動按鈕在畫面角落。
 - 新增素材或改尺寸後，要看 `screenshots/assets-overview.png` 與 `assets-report.txt` 確認沒有洋紅殘留、白框、大小不一。
 
 ## 其他約定

@@ -7,6 +7,7 @@ import { PHASE_HOURS, PHASE_NAMES, WEATHER_NAMES, type Phase, type Weather } fro
 import { useFarmStore } from '../farm/store/farmStore'
 import type { Pet, SaveData } from '../farm/save/types'
 import Bestiary from './Bestiary'
+import Proportions from './Proportions'
 
 /** DEV_PANEL_MARKER：測試模式面板。只在開發環境（import.meta.env.DEV）載入，正式 build 不包含 */
 
@@ -35,6 +36,7 @@ export default function DevPanel() {
   const [open, setOpen] = useState(false)
   // 生物圖鑑：按鈕開啟，或網址加上 ?bestiary 直接開啟（方便截圖）
   const [bestiary, setBestiary] = useState(() => new URLSearchParams(window.location.search).has('bestiary'))
+  const [proportions, setProportions] = useState(() => new URLSearchParams(window.location.search).has('proportions'))
   const [petId, setPetId] = useState('')
   const [, force] = useState(0)
   const save = useFarmStore((s) => s.save)
@@ -56,6 +58,7 @@ export default function DevPanel() {
   return (
     <>
     {bestiary && <Bestiary onClose={() => setBestiary(false)} />}
+    {proportions && <Proportions onClose={() => setProportions(false)} />}
     <div className="absolute bottom-24 right-3 z-[9600] text-white" onPointerDown={(e) => e.stopPropagation()}>
       {!open ? (
         <button type="button" onClick={() => setOpen(true)} className="rounded-full bg-fuchsia-600/90 px-3 py-1.5 text-xs font-bold shadow-lg">
@@ -168,8 +171,11 @@ export default function DevPanel() {
             </div>
           )}
 
-          <button className={`${btn} mb-2 w-full py-1.5`} onClick={() => setBestiary(true)}>
+          <button className={`${btn} mb-1 w-full py-1.5`} onClick={() => setBestiary(true)}>
             🐾 生物圖鑑
+          </button>
+          <button className={`${btn} mb-2 w-full py-1.5`} onClick={() => setProportions(true)}>
+            📏 比例對照圖
           </button>
 
           <button
