@@ -324,6 +324,29 @@ function detectClockFace(s) {
   return { cx: (face.x0 + face.x1 + 1) / 2, cy: (face.y0 + face.y1 + 1) / 2, r: Math.min(face.x1 - face.x0 + 1, face.y1 - face.y0 + 1) / 2 }
 }
 
+/**
+ * 偵測水池的水面橢圓（相對於素材左上角）：藍色像素（水）的外框，取中心與半徑。
+ * 睡蓮、荷葉在水面裡面，不影響外框；石頭與蘆葦不是藍色。
+ */
+function detectWater(s) {
+  const { w, h, rgba } = s
+  let x0 = w, y0 = h, x1 = -1, y1 = -1, n = 0
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2]
+      if (rgba[i + 3] && b > 180 && b > r + 70 && g > r + 20 && g < b) {
+        n++
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+      }
+    }
+  if (!n) return null
+  return { cx: Math.round((x0 + x1 + 1) / 2), cy: Math.round((y0 + y1 + 1) / 2), rx: Math.round((x1 - x0 + 1) / 2), ry: Math.round((y1 - y0 + 1) / 2) }
+}
+
 // ---------------------------------------------------------------------------
 // 圖集
 // ---------------------------------------------------------------------------
@@ -386,6 +409,9 @@ const P_GUESS = 6.1
 const CAT_EXTRA_RATIO = 0.56
 
 const pCache = {}
+let clockClosedSpr = null
+/** 水池的目標寬度（邏輯像素） */
+const POND_W = 110
 
 /**
  * 處理一張格狀原圖。
@@ -395,7 +421,7 @@ const pCache = {}
  *    沒有 solveFrom 時，targets 裡的每一幀各自求自己的 p（例如裝飾物、特效圖示）
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, solveFrom, pScale = 1 }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, solveFrom, pScale = 1, solveDim = 'h' }) {
   const img = await load(file)
   const mask = fgMask(img)
   const { lab, comps: all } = label(mask, img.W, img.H)
@@ -420,10 +446,11 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     for (let k = 0; k < 8; k++) {
       const spr = render(cell, pp)
       if (!spr) break
-      const err = Math.abs(spr.h - target)
+      const got = solveDim === 'w' ? spr.w : spr.h
+      const err = Math.abs(got - target)
       if (err < best.err) best = { pp, err }
       if (err === 0) break
-      pp *= spr.h / target
+      pp *= got / target
     }
     return best.pp
   }
@@ -443,6 +470,16 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     const name = names[i]
     if (!name) continue
     const cell = cells[i]
+    // names[i] 是陣列：這一格裡有好幾個獨立的小東西（水滴、泡泡），依面積取最大的 N 個、由左到右命名
+    if (Array.isArray(name)) {
+      const parts = [...cell].sort((a, b) => b.area - a.area).slice(0, name.length).sort((a, b) => a.x0 - b.x0)
+      if (parts.length < name.length) warn(file + ' 第 ' + (i + 1) + ' 格只找到 ' + parts.length + ' 個，需要 ' + name.length + ' 個')
+      parts.forEach((part, k) => {
+        const spr = render([part], animalP)
+        if (spr) frames.push({ name: name[k], spr, p: animalP })
+      })
+      continue
+    }
     if (!cell.length) {
       warn(file + ' 第 ' + (i + 1) + ' 格（' + name + '）找不到內容')
       continue
@@ -523,7 +560,52 @@ async function main() {
     }
     for (const [file, name] of [['scene_clocktower.png', 'clocktower'], ['scene_tree.png', 'tree']]) {
       const r = await sheet({ file, cols: 1, rows: 1, names: [name], targets: name === 'clocktower' ? { clocktower: 160 } : {} })
-      for (const f of r.frames) addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
+      for (const f of r.frames) {
+        if (f.name === 'clocktower') clockClosedSpr = f.spr
+        addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
+      }
+    }
+    // 水池：兩幀只有水面亮紋不同；用寬度 110 反推 p，兩幀共用同一個 p 與同一個畫布大小、同一個錨點
+    {
+      const pond = await sheet({ file: 'scene_pond.png', cols: 2, rows: 1, names: ['pond_a', 'pond_b'], targets: { pond_a: POND_W }, solveFrom: 'pond_a', solveDim: 'w' })
+      const W = Math.max(...pond.frames.map((f) => f.spr.w)), H = Math.max(...pond.frames.map((f) => f.spr.h))
+      const padded = pond.frames.map((f) => {
+        const out = Buffer.alloc(W * H * 4)
+        const ox = Math.round((W - f.spr.w) / 2), oy = H - f.spr.h
+        for (let y = 0; y < f.spr.h; y++) f.spr.rgba.copy(out, ((y + oy) * W + ox) * 4, y * f.spr.w * 4, (y + 1) * f.spr.w * 4)
+        return { name: f.name, spr: { w: W, h: H, rgba: out }, dw: f.spr.w, dh: f.spr.h }
+      })
+      const water = detectWater(padded[0].spr)
+      for (const f of padded) addFrame('scene', f.name, f.spr, { meta: { water } })
+      info('水池 兩幀 ' + padded.map((f) => f.dw + '×' + f.dh).join('、') + ' → 統一畫布 ' + W + '×' + H + '，水面橢圓 cx=' + water.cx + ' cy=' + water.cy + ' rx=' + water.rx + ' ry=' + water.ry + '（p=' + pond.p.toFixed(2) + '）')
+      let diff = 0
+      for (let i = 3; i < W * H * 4; i += 4) if (padded[0].spr.rgba[i] !== padded[1].spr.rgba[i]) diff++
+      info('水池兩幀的透明度差異像素數：' + diff + '（0 = 輪廓完全一致）')
+    }
+    {
+      // 開門鐘樓：和關門版用同一個高度 160，貼到 123×160 的畫布（底部中心對齊），並比對兩張的輪廓差異
+      const closed = clockClosedSpr
+      const r = await sheet({ file: 'scene_clocktower_open.png', cols: 1, rows: 1, names: ['clocktower_open'], targets: { clocktower_open: 160 }, solveFrom: 'clocktower_open' })
+      const f = r.frames[0]
+      const W = closed.w, H = closed.h
+      const out = Buffer.alloc(W * H * 4)
+      const ox = Math.round((W - f.spr.w) / 2), oy = H - f.spr.h
+      for (let y = 0; y < f.spr.h; y++)
+        for (let x = 0; x < f.spr.w; x++) {
+          const tx = x + ox, ty = y + oy
+          if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
+          f.spr.rgba.copy(out, (ty * W + tx) * 4, (y * f.spr.w + x) * 4, (y * f.spr.w + x + 1) * 4)
+        }
+      const spr = { w: W, h: H, rgba: out }
+      addFrame('scene', 'clocktower_open', spr, { meta: { clock: detectClockFace(spr) } })
+      let a = 0, b = 0, both = 0
+      for (let i = 0; i < W * H; i++) {
+        const ca = closed.rgba[i * 4 + 3] > 0, cb = out[i * 4 + 3] > 0
+        if (ca) a++
+        if (cb) b++
+        if (ca !== cb) both++
+      }
+      info('開門鐘樓：處理後 ' + f.spr.w + '×' + f.spr.h + '，貼到 ' + W + '×' + H + '（偏移 ' + ox + ',' + oy + '）；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
     }
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'] })
     for (const f of small.frames) addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
@@ -540,6 +622,13 @@ async function main() {
     for (const f of sky.frames) addFrame('fx', f.name, f.spr)
     const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, targets: Object.fromEntries(['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => ['fx_' + n, 15])) })
     for (const f of fx.frames) addFrame('fx', f.name, f.spr)
+    // 水花、漣漪、水滴、泡泡：所有格共用同一個 p（以最高的水花高 30 反推）
+    const wn = ['water_ripple_1', 'water_ripple_2', 'water_ripple_3', 'water_splash_1', 'water_splash_2', 'water_splash_3', ['water_drop_1', 'water_drop_2', 'water_drop_3'], ['water_bubble_s', 'water_bubble_l']]
+    const fw = await sheet({ file: 'fx_water.png', cols: 4, rows: 2, names: wn, minArea: 150, targets: { water_splash_2: 30 }, solveFrom: 'water_splash_2' })
+    for (const f of fw.frames) {
+      const center = !f.name.startsWith('water_splash')
+      addFrame('fx', f.name, f.spr, center ? { ay: Math.round(f.spr.h / 2) } : {})
+    }
     const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120 })
     for (const f of td.frames) addFrame('toys', f.name, f.spr)
     const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120 })

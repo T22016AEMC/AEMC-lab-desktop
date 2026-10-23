@@ -4,7 +4,7 @@ import { worldHour } from '../overrides'
 import { takeMigrationNotice } from '../save/migrate'
 import { LocalStorageAdapter } from '../save/storage'
 import type { SaveData, SaveStorage } from '../save/types'
-import { adopt, execute, type ActionId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
+import { adopt, execute, wakeForDrag, type ActionId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
 import { advanceSave } from '../sim/stats'
 import { useUIStore } from '../../store/uiStore'
@@ -30,6 +30,8 @@ interface FarmState {
   /** 領養（沒有存檔時建立新存檔，第一隻免費）。回傳錯誤訊息或 null */
   adoptPet: (req: Omit<AdoptRequest, 'free'>) => string | null
   runAction: (action: ActionId, petId: string) => string | null
+  /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
+  wakeForDrag: (petId: string) => void
   /** 週期性結算：數值下降、跨日的每日獎勵 */
   tick: () => void
   /** 週期性擲禮物 */
@@ -91,6 +93,13 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
     return null
+  },
+
+  wakeForDrag: (petId) => {
+    const save = get().save
+    if (!save) return
+    const r = wakeForDrag(save, ctxNow(), petId)
+    if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
   },
 
   tick: () => {

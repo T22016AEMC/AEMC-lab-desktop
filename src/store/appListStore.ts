@@ -7,8 +7,6 @@ import type { ExternalApp } from '../types'
 export interface AppListData {
   schemaVersion: 1
   apps: ExternalApp[]
-  /** 被使用者隱藏的內建程式 id（內建遊戲不能刪除，只能隱藏） */
-  hiddenBuiltins: string[]
 }
 
 export const APP_LIST_SCHEMA_VERSION = 1
@@ -37,12 +35,12 @@ export function parseAppList(raw: unknown): AppListData | null {
       apps.push(app)
     }
   }
-  const hidden = Array.isArray(r.hiddenBuiltins) ? r.hiddenBuiltins.filter((x): x is string => typeof x === 'string') : []
-  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps, hiddenBuiltins: hidden }
+  // 舊版存檔裡的 hiddenBuiltins（隱藏內建遊戲）已經不存在：直接忽略，下次存檔就會清掉
+  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps }
 }
 
 export function defaultAppList(): AppListData {
-  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps: DEFAULT_APPS.map((a) => ({ ...a })), hiddenBuiltins: [] }
+  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps: DEFAULT_APPS.map((a) => ({ ...a })) }
 }
 
 let storage: DocumentStorage<AppListData> = new LocalStorageDocument<AppListData>(KEY, parseAppList)
@@ -57,12 +55,11 @@ interface AppListState extends AppListData {
   addApp: (input: { name: string; url: string; icon: string }) => ExternalApp
   updateApp: (id: string, patch: { name: string; url: string; icon: string }) => void
   removeApp: (id: string) => void
-  hideBuiltin: (id: string) => void
   restoreDefaults: () => void
 }
 
 function snapshot(s: AppListData): AppListData {
-  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps: s.apps, hiddenBuiltins: s.hiddenBuiltins }
+  return { schemaVersion: APP_LIST_SCHEMA_VERSION, apps: s.apps }
 }
 
 function newId(): string {
@@ -94,13 +91,9 @@ export const useAppListStore = create<AppListState>((set, get) => {
 
     removeApp: (id) => commit({ apps: get().apps.filter((a) => a.id !== id) }),
 
-    hideBuiltin: (id) => {
-      if (!get().hiddenBuiltins.includes(id)) commit({ hiddenBuiltins: [...get().hiddenBuiltins, id] })
-    },
-
     restoreDefaults: () => {
       const d = defaultAppList()
-      commit({ apps: d.apps, hiddenBuiltins: d.hiddenBuiltins })
+      commit({ apps: d.apps })
     },
   }
 })

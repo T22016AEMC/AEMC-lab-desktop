@@ -17,7 +17,8 @@ export const BALANCE = {
   pet: { mood: 8 },
   /** 睡夢中被撫摸：不會醒來，心情小幅上升 */
   petSleeping: { mood: 5 },
-  bath: { cleanliness: 40, moodDog: 0, moodCat: -3 },
+  /** 水池洗澡（氣泡選單的洗澡與拖曳到水池都一樣）：狗開心、貓小幅不開心 */
+  bath: { cleanliness: 40, moodDog: 6, moodCat: -3 },
   walk: { weight: -5, mood: 12, satiety: -8, cleanliness: -10 },
   groom: { cleanliness: 20, mood: 10 },
   /** 叫醒：貓醒來不開心（心情下降），狗醒來很開心（心情不變） */

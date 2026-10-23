@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { getApp } from '../config/registry'
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
@@ -20,10 +21,15 @@ export function Farm() {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const doorRef = useRef<HTMLButtonElement | null>(null)
   const signRef = useRef<HTMLDivElement | null>(null)
+  const towerDoorRef = useRef<HTMLButtonElement | null>(null)
+  const towerSignRef = useRef<HTMLDivElement | null>(null)
+  /** 按住寵物的過程：按住約 150 ms 或移動超過 4 px 就開始拖曳；沒拖就是點擊（開氣泡選單） */
+  const gesture = useRef<{ id: string; startX: number; startY: number; curX: number; curY: number; dragging: boolean; timer: number } | null>(null)
   const engine = useMemo(() => new PixelEngine(), [])
   const [selected, setSelected] = useState<string | null>(null)
   const [assetsReady, setAssetsReady] = useState(assets.ready)
   const [doorHover, setDoorHover] = useState(false)
+  const [towerHover, setTowerHover] = useState(false)
   const [lit, setLit] = useState(false)
   const litRef = useRef(false)
   const [assetError, setAssetError] = useState<string | null>(null)
@@ -43,6 +49,15 @@ export function Farm() {
     void useFarmStore.getState().init()
     assets.load().then(() => setAssetsReady(true), (e: Error) => setAssetError(e.message))
   }, [])
+
+  // 引擎的對外連接：水池洗澡扣點、睡覺中被拖起來醒來、提示訊息
+  useEffect(() => {
+    engine.hooks = {
+      requestBath: (id) => useFarmStore.getState().runAction('bath', id),
+      wake: (id) => useFarmStore.getState().wakeForDrag(id),
+      notify: (m) => useUIStore.getState().showToast(m),
+    }
+  }, [engine])
 
   // 開發環境才暴露引擎，方便自動化測試取得寵物位置（正式 build 會被移除）
   useEffect(() => {
@@ -133,6 +148,22 @@ export function Farm() {
           menu.style.visibility = 'visible'
         }
       }
+      const tdoor = towerDoorRef.current
+      if (tdoor) {
+        const d = engine.towerDoorCss()
+        tdoor.style.left = `${Math.round(d.x0)}px`
+        tdoor.style.top = `${Math.round(d.y0)}px`
+        tdoor.style.width = `${Math.round(d.x1 - d.x0)}px`
+        tdoor.style.height = `${Math.round(d.y1 - d.y0)}px`
+        tdoor.style.visibility = 'visible'
+        const tsign = towerSignRef.current
+        if (tsign) {
+          const c = engine.towerSignCss()
+          tsign.style.left = `${Math.round(c.x)}px`
+          tsign.style.top = `${Math.round(c.y)}px`
+          tsign.style.fontSize = `${Math.max(10, Math.round(c.scale * 4.5))}px`
+        }
+      }
       const door = doorRef.current
       if (door) {
         const d = engine.doorCss()
@@ -176,18 +207,80 @@ export function Farm() {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
+  const startDrag = (): void => {
+    const g = gesture.current
+    if (!g || g.dragging) return
+    window.clearTimeout(g.timer)
+    if (engine.beginDrag(g.id, g.startX, g.startY)) {
+      g.dragging = true
+      engine.dragTo(g.curX, g.curY)
+      setSelected(null)
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing'
+    } else gesture.current = null
+  }
+
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = local(e)
+    const g = gesture.current
+    if (g) {
+      g.curX = p.x
+      g.curY = p.y
+      if (!g.dragging && Math.hypot(p.x - g.startX, p.y - g.startY) > 4) startDrag()
+      if (g.dragging) {
+        engine.dragTo(p.x, p.y)
+        return
+      }
+    }
     const id = engine.pointerMove(p.x, p.y)
     e.currentTarget.style.cursor = id || engine.hitTest(p.x, p.y)?.kind === 'gift' ? 'pointer' : 'default'
   }
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return
     const p = local(e)
     const hit = engine.hitTest(p.x, p.y)
     if (hit?.kind === 'gift') useFarmStore.getState().collectGift(hit.id)
-    else if (hit?.kind === 'pet') setSelected(hit.id)
-    else setSelected(null) // 點空白處關閉
+    else if (hit?.kind === 'pet') {
+      // 走去水池的途中被點到或拖曳：取消洗澡
+      engine.cancelBathWalk(hit.id)
+      window.clearTimeout(gesture.current?.timer)
+      gesture.current = { id: hit.id, startX: p.x, startY: p.y, curX: p.x, curY: p.y, dragging: false, timer: window.setTimeout(startDrag, 150) }
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* 部分環境不支援，忽略 */
+      }
+    } else setSelected(null) // 點空白處關閉
+  }
+
+  const endGesture = (e: React.PointerEvent<HTMLCanvasElement>, cancelled: boolean): void => {
+    const g = gesture.current
+    gesture.current = null
+    if (!g) return
+    window.clearTimeout(g.timer)
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* 忽略 */
+    }
+    if (g.dragging) {
+      engine.endDrag()
+      e.currentTarget.style.cursor = 'default'
+    } else if (!cancelled) setSelected(g.id) // 沒拖：單純點擊 → 氣泡選單
+  }
+
+  const onBath = (id: string): void => {
+    const err = engine.sendToBath(id)
+    if (err) useUIStore.getState().showToast(err)
+    else {
+      useUIStore.getState().hideToast()
+      setSelected(null)
+    }
+  }
+
+  const openHall = (): void => {
+    const hall = getApp('game-hall')
+    if (hall) useWindowStore.getState().openApp(hall)
   }
 
   const openLaunchpad = () => useUIStore.getState().setLaunchpadOpen(true)
@@ -200,6 +293,8 @@ export function Farm() {
         style={{ imageRendering: 'pixelated' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
+        onPointerUp={(e) => endGesture(e, false)}
+        onPointerCancel={(e) => endGesture(e, true)}
       />
 
       {/* 住家的門：滑鼠移上去開門、門牌發亮，點擊開啟啟動台（夜晚維持亮燈版，只有門牌發亮） */}
@@ -250,6 +345,50 @@ export function Farm() {
           >
             啟動台
           </div>
+          {/* 鐘塔的門：滑鼠移上去換成開門版、招牌出現「遊戲」，點擊開啟遊戲館 */}
+          <button
+            ref={towerDoorRef}
+            type="button"
+            aria-label="遊戲館"
+            title="遊戲館"
+            data-testid="tower-door"
+            className="absolute cursor-pointer bg-transparent outline-none"
+            style={{ visibility: 'hidden' }}
+            onMouseEnter={() => {
+              engine.towerHover = true
+              setTowerHover(true)
+            }}
+            onMouseLeave={() => {
+              engine.towerHover = false
+              setTowerHover(false)
+            }}
+            onFocus={() => {
+              engine.towerHover = true
+              setTowerHover(true)
+            }}
+            onBlur={() => {
+              engine.towerHover = false
+              setTowerHover(false)
+            }}
+            onClick={openHall}
+          />
+          <div
+            ref={towerSignRef}
+            aria-hidden
+            data-testid="tower-sign"
+            className="pointer-events-none absolute whitespace-nowrap border-2 border-[#3b2a1c] px-1.5 py-px font-bold leading-tight"
+            style={{
+              transform: 'translate(-50%, -50%)',
+              visibility: towerHover ? 'visible' : 'hidden',
+              background: '#ffe28a',
+              color: '#5a3410',
+              boxShadow: '0 0 12px 4px rgba(255,214,102,0.95), 2px 2px 0 rgba(0,0,0,0.4)',
+              fontFamily: "'Microsoft JhengHei','PingFang TC',monospace",
+              imageRendering: 'pixelated',
+            }}
+          >
+            遊戲
+          </div>
         </>
       )}
 
@@ -262,7 +401,7 @@ export function Farm() {
         </div>
       )}
 
-      {selected && <PetMenu ref={menuRef} petId={selected} />}
+      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} />}
 
       {status === 'ready' && assetsReady && !hasSave && <AdoptDialog first />}
       {hasSave && adoptOpen && <AdoptDialog />}

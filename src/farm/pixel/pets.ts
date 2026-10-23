@@ -2,7 +2,7 @@ import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Layout } from './layout'
-import { blockers, petBounds } from './layout'
+import { blockers, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -42,6 +42,19 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
   },
 }
 
+/** 水池洗澡的流程：走到水池前 → 跳進去 → 泡澡 → 爬出來 → 甩水 */
+export interface BathState {
+  phase: 'walk' | 'jump' | 'soak' | 'climb' | 'shake'
+  /** 這個階段已經過的時間 */
+  t: number
+  /** 跳進去、爬出來的起點 */
+  fromX: number
+  fromY: number
+}
+
+/** 泡澡各階段的時間（秒）；soak 約 4.5 秒 */
+export const BATH_TIMES = { jump: 0.5, soak: 4.5, climb: 0.55, shake: 1.5 } as const
+
 export interface Actor {
   id: string
   pet: Pet
@@ -70,6 +83,17 @@ export interface Actor {
   /** 動畫時間（秒），選幀用 */
   animT: number
   moving: boolean
+  /** 被滑鼠拖著：腳底位置跟著游標，畫面上抬高 lift 個邏輯像素 */
+  drag: boolean
+  lift: number
+  /** 放開後飛回可站位置（彈回）的過程 */
+  fly: { fx: number; fy: number; tx: number; ty: number; t: number; dur: number } | null
+  /** 落地彈跳剩餘時間（秒） */
+  bounceT: number
+  /** 水池洗澡的狀態；null = 沒在洗 */
+  bath: BathState | null
+  /** 甩水時的水平抖動（邏輯像素） */
+  shakeX: number
 }
 
 export interface BehaviorEnv {
@@ -82,7 +106,12 @@ export interface BehaviorEnv {
   /** 其他寵物的位置（挑目標時避開） */
   others: Actor[]
   /** 效果粒子（愛心、泡泡） */
-  emit: (kind: 'heart' | 'bubble' | 'note', x: number, y: number) => void
+  emit: (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop', x: number, y: number) => void
+  /** 水花、漣漪（引擎負責演出） */
+  fx: (kind: 'splash' | 'ripple', x: number, y: number) => void
+  /** 走到水池前之後申請洗澡（扣點）；回傳 null 表示成功，否則是失敗原因 */
+  requestBath: (a: Actor) => string | null
+  notify: (message: string) => void
 }
 
 const rr = (rand: () => number, a: number, b: number): number => a + rand() * (b - a)
@@ -95,6 +124,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     id: pet.id, pet, x, y, tx: x, ty: y,
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
+    drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -102,6 +132,12 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
   actor.lastX = actor.x
   actor.lastY = actor.y
   return actor
+}
+
+/** 放開滑鼠：該怎麼落地。在水面上 = 'water'；站得住 = 'land'；否則 'return'（彈回最近的可站位置） */
+export function dropKind(L: Layout, x: number, y: number): 'water' | 'land' | 'return' {
+  if (inWater(L, x, y, 1.12)) return 'water'
+  return isWalkable(L, x, y) ? 'land' : 'return'
 }
 
 /** 點是否落在障礙物裡 */
@@ -190,7 +226,40 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
   a.animT += dt
   a.t += dt
   if (a.hop > 0) a.hop = Math.max(0, a.hop - dt)
+  if (a.bounceT > 0) a.bounceT = Math.max(0, a.bounceT - dt)
   a.moving = false
+
+  // 被拖著、飛回去、洗澡：這些期間不走一般的行為
+  const liftTo = a.drag ? 9 : a.fly || a.bath ? a.lift : 0
+  a.lift += (liftTo - a.lift) * Math.min(1, dt * 22)
+  if (Math.abs(a.lift - liftTo) < 0.05) a.lift = liftTo
+  if (a.drag) {
+    if (a.action !== 'happy') setAction(a, 'happy', 1e9)
+    a.override = null
+    return
+  }
+  if (a.fly) {
+    const f = a.fly
+    f.t += dt
+    const k = Math.min(1, f.t / f.dur)
+    a.x = f.fx + (f.tx - f.fx) * k
+    a.y = f.fy + (f.ty - f.fy) * k
+    a.lift = Math.sin(k * Math.PI) * 16
+    if (Math.abs(f.tx - f.fx) > 1) a.facing = f.tx > f.fx ? 1 : -1
+    if (k >= 1) {
+      a.fly = null
+      a.lift = 0
+      a.bounceT = 0.5
+      a.tx = a.x
+      a.ty = a.y
+      setAction(a, 'idle', rr(env.rand, 0.8, 1.6))
+    }
+    return
+  }
+  if (a.bath) {
+    updateBath(a, dt, env)
+    return
+  }
 
   // 選取中（氣泡選單開著）：停在原地等你選，但指令的動作（吃、開心…）照樣演出
   const frozen = env.selectedId === a.id
@@ -285,6 +354,147 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
   clampActor(a, env.layout)
 }
 
+/** 水池洗澡中的寵物（跳進去、泡澡、爬出來、甩水）；走去水池前不算 */
+export function isBathing(a: Actor): boolean {
+  return a.bath !== null && a.bath.phase !== 'walk'
+}
+
+/** 正在占用水池（同一時間只允許一隻） */
+export function usesPond(a: Actor): boolean {
+  const ph = a.bath?.phase
+  return ph === 'jump' || ph === 'soak' || ph === 'climb'
+}
+
+/** 泡澡時，寵物腳底在水面上的位置（y 只用來排前後與氣泡選單錨點，實際畫在水面線以下一點） */
+export function soakSpot(L: Layout): { x: number; y: number } {
+  const w = waterEllipse(L)
+  return { x: w.cx, y: w.cy + 8 }
+}
+
+/** 從氣泡選單選了「洗澡」：自己走到水池前，再跳進去。回傳 false 表示現在不能 */
+export function beginBathWalk(a: Actor, L: Layout): boolean {
+  if (a.bath || a.drag || a.fly) return false
+  a.override = null
+  a.bath = { phase: 'walk', t: 0, fromX: a.x, fromY: a.y }
+  const st = pondStand(L)
+  a.tx = st.x
+  a.ty = st.y
+  setAction(a, 'walk', 1e9)
+  return true
+}
+
+/** 走去水池的途中被點到或拖曳：取消 */
+export function cancelBath(a: Actor): void {
+  if (a.bath?.phase !== 'walk') return
+  a.bath = null
+  a.tx = a.x
+  a.ty = a.y
+  setAction(a, 'idle', 1)
+}
+
+/** 直接跳進水池（拖曳放開在水面上，或走到水池前）。已經通過扣點與占用檢查 */
+export function enterPond(a: Actor): void {
+  a.bath = { phase: 'jump', t: 0, fromX: a.x, fromY: a.y }
+  a.override = null
+  setAction(a, 'sit', 1e9)
+}
+
+function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
+  const b = a.bath!
+  const L = env.layout
+  const spot = soakSpot(L)
+  const sp = SPECIES[a.pet.species]
+  b.t += dt
+  switch (b.phase) {
+    case 'walk': {
+      const st = pondStand(L)
+      a.tx = st.x
+      a.ty = st.y
+      if (Math.hypot(a.tx - a.x, a.ty - a.y) < 3) {
+        const err = env.requestBath(a)
+        if (err) {
+          env.notify(err)
+          a.bath = null
+          setAction(a, 'idle', 1.2)
+          return
+        }
+        enterPond(a)
+        return
+      }
+      moveToward(a, dt, sp.speed * 1.6, env)
+      // 走太久（例如被擠開卡住）：放棄
+      if (b.t > 20) {
+        a.bath = null
+        setAction(a, 'idle', 1)
+      }
+      break
+    }
+    case 'jump': {
+      const k = Math.min(1, b.t / BATH_TIMES.jump)
+      a.x = b.fromX + (spot.x - b.fromX) * k
+      a.y = b.fromY + (spot.y - b.fromY) * k
+      a.lift = Math.sin(k * Math.PI) * 14
+      if (Math.abs(spot.x - b.fromX) > 1) a.facing = spot.x > b.fromX ? 1 : -1
+      if (k >= 1) {
+        a.lift = 0
+        b.phase = 'soak'
+        b.t = 0
+        a.x = spot.x
+        a.y = spot.y
+        env.fx('splash', spot.x, spot.y - 2)
+        setAction(a, 'sit', 1e9)
+      }
+      break
+    }
+    case 'soak': {
+      a.x = spot.x
+      a.y = spot.y
+      if (env.rand() < dt * 5) env.emit('wbubble', spot.x + rr(env.rand, -14, 14), spot.y - 8)
+      if (b.t >= BATH_TIMES.soak) {
+        b.phase = 'climb'
+        b.t = 0
+        b.fromX = a.x
+        b.fromY = a.y
+        env.fx('splash', spot.x, spot.y - 2)
+      }
+      break
+    }
+    case 'climb': {
+      const st = pondStand(L)
+      const k = Math.min(1, b.t / BATH_TIMES.climb)
+      a.x = b.fromX + (st.x - b.fromX) * k
+      a.y = b.fromY + (st.y - b.fromY) * k
+      a.lift = Math.sin(k * Math.PI) * 12
+      a.facing = st.x >= b.fromX ? 1 : -1
+      if (k >= 1) {
+        a.lift = 0
+        b.phase = 'shake'
+        b.t = 0
+        a.bounceT = 0.4
+        setAction(a, a.pet.species === 'cat' ? 'idle' : 'happy', 1e9)
+      }
+      break
+    }
+    case 'shake': {
+      // 甩水：水平快速抖動並噴水滴。貓甩完會坐下來瞪人
+      const cat = a.pet.species === 'cat'
+      a.shakeX = Math.floor(b.t / 0.07) % 2 === 0 ? -1 : 1
+      if (cat && b.t > BATH_TIMES.shake - 0.6) {
+        a.shakeX = 0
+        if (a.action !== 'sit') setAction(a, 'sit', 1e9)
+      } else if (env.rand() < dt * 14) env.emit('drop', a.x + rr(env.rand, -12, 12), a.y - rr(env.rand, 14, 30))
+      if (b.t >= BATH_TIMES.shake) {
+        a.shakeX = 0
+        a.bath = null
+        a.tx = a.x
+        a.ty = a.y
+        setAction(a, 'idle', rr(env.rand, 1, 2))
+      }
+      break
+    }
+  }
+}
+
 function moveToward(a: Actor, dt: number, speed: number, env: BehaviorEnv): void {
   const dx = a.tx - a.x
   const dy = a.ty - a.y
@@ -320,12 +530,12 @@ export function computeSeparation(actors: Actor[]): void {
       let dx = A.x - B.x
       let dy = A.y - B.y
       const d = Math.hypot(dx / rx, dy / ry)
-      if (d >= 1.5) continue
+      if (d >= 1.75) continue
       if (d < 1e-3) {
         dx = (i % 2 ? 1 : -1) * 0.5
         dy = 0.2
       }
-      const s = (1.5 - Math.min(d, 1.5)) / 1.5
+      const s = (1.75 - Math.min(d, 1.75)) / 1.75
       const gl = Math.hypot(dx / (rx * rx), dy / (ry * ry)) || 1
       const ux = dx / (rx * rx) / gl
       const uy = dy / (ry * ry) / gl

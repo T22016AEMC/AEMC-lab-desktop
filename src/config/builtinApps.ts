@@ -3,11 +3,20 @@ import type { BuiltinApp } from '../types'
 
 /**
  * 內建程式（小遊戲，直接在桌面視窗中渲染 React 元件）。
- * category 設為 'games' 的程式會歸入啟動台的「遊戲」資料夾，
- * 不顯示在桌面圖示與 Dock，只有開啟時才出現在 Dock。
+ * category 設為 'games' 的程式是內建小遊戲，只放在「遊戲館」（鐘塔的門），不在啟動台；
+ * 開啟時才出現在 Dock。
  * 遊戲用 lazy 載入，打開才會下載對應的程式碼（彈珠台的 matter-js 比較大）。
  */
 export const builtinApps: BuiltinApp[] = [
+  {
+    id: 'game-hall',
+    kind: 'builtin',
+    name: '遊戲館',
+    icon: '🏰',
+    component: lazy(() => import('../components/GameHall')),
+    defaultSize: { width: 460, height: 340 },
+    minSize: { width: 320, height: 260 },
+  },
   {
     id: 'game-minesweeper',
     kind: 'builtin',

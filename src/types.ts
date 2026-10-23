@@ -40,6 +40,6 @@ export interface BuiltinApp {
   defaultSize?: Size
   minSize?: Size
   component: ComponentType<BuiltinAppProps> | LazyExoticComponent<ComponentType<BuiltinAppProps>>
-  /** 放進啟動台的哪個資料夾；沒有就直接列在啟動台 */
+  /** 'games' = 內建小遊戲，放在遊戲館（鐘塔的門）裡；沒有 = 一般視窗程式（例如遊戲館本身） */
   category?: 'games'
 }

@@ -27,7 +27,7 @@ function Bar({ label, value, color }: { label: string; value: number; color: str
  * 點寵物彈出的氣泡選單：名字、三條像素風小條（飽食、心情、清潔）、所有寵物操作。
  * 位置由 Farm 每個影格直接改 style（跟著寵物走），這裡只負責內容。
  */
-export const PetMenu = forwardRef<HTMLDivElement, { petId: string }>(function PetMenu({ petId }, ref) {
+export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (petId: string) => void }>(function PetMenu({ petId, onBath }, ref) {
   const save = useFarmStore((s) => s.save)
   const runAction = useFarmStore((s) => s.runAction)
   const [tick, setTick] = useState(0)
@@ -47,6 +47,11 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string }>(function Pe
   const stage = stageOf(pet, nowMs) === 'young' ? '幼年' : '成年'
 
   const run = (id: (typeof actions)[number]['id']) => {
+    // 洗澡：寵物自己走到水池前再跳進去（扣點在跳進水池時才扣）
+    if (id === 'bath' && onBath) {
+      onBath(pet.id)
+      return
+    }
     const err = runAction(id, pet.id)
     if (err) useUIStore.getState().showToast(err)
     else useUIStore.getState().hideToast()

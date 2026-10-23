@@ -151,6 +151,18 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
   return { save: next, effects: [{ kind: 'anim', petId: pet.id, anim }, ...r.floats] }
 }
 
+/**
+ * 睡覺中的寵物被拖起來：醒來（不用點數）。規則和「叫醒」一樣：貓不開心（心情下降）、狗沒差，
+ * 之後保持清醒到 idleMinutes。沒在睡覺就什麼都不做。
+ */
+export function wakeForDrag(save: SaveData, ctx: Ctx, petId: string): ExecResult {
+  const pet = save.pets.find((p) => p.id === petId)
+  if (!pet || !isSleeping(pet, ctx.hour, ctx.nowMs)) return { save, effects: [] }
+  const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
+  const r = applyDelta({ ...pet, awakeUntil }, { mood: pet.species === 'cat' ? BALANCE.wake.moodCat : BALANCE.wake.moodDog })
+  return { save: replacePet(save, r.pet), effects: r.floats }
+}
+
 export interface AdoptRequest {
   species: SpeciesId
   variant?: string

@@ -3,8 +3,9 @@ import { formatMenuBarTime } from '../lib/format'
 import { getMetrics } from '../lib/layout'
 import { PET_CAPACITY } from '../farm/config/balance'
 import { useFarmStore } from '../farm/store/farmStore'
+import { getApp } from '../config/registry'
 import { useUIStore } from '../store/uiStore'
-import { useActiveApp } from '../store/windowStore'
+import { useActiveApp, useWindowStore } from '../store/windowStore'
 import { Logo } from './Logo'
 
 export function MenuBar() {
@@ -42,6 +43,21 @@ export function MenuBar() {
         >
           <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
             {[0, 4.5, 9].flatMap((y) => [0, 4.5, 9].map((x) => <rect key={x + '-' + y} x={x} y={y} width="3" height="3" rx="0.6" />))}
+          </svg>
+        </button>
+        {/* 遊戲館的備用入口（主要入口是鐘塔的門） */}
+        <button
+          type="button"
+          aria-label="遊戲館"
+          title="遊戲館"
+          onClick={() => {
+            const hall = getApp('game-hall')
+            if (hall) useWindowStore.getState().openApp(hall)
+          }}
+          className="flex h-5 w-6 items-center justify-center rounded hover:bg-white/20"
+        >
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+            <path d="M1 11V4.5L3 3V1.5h1V3l2-1.2L8 3V1.5h1V3l2 1.5V11H7.2V8a1.2 1.2 0 0 0-2.4 0v3z" />
           </svg>
         </button>
       </div>
