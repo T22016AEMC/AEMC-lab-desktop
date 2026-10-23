@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
-import { worldHour, worldWeather } from './overrides'
+import { overrides, worldHour, worldWeather } from './overrides'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import { useFarmStore } from './store/farmStore'
@@ -24,6 +24,8 @@ export function Farm() {
   const [selected, setSelected] = useState<string | null>(null)
   const [assetsReady, setAssetsReady] = useState(assets.ready)
   const [doorHover, setDoorHover] = useState(false)
+  const [lit, setLit] = useState(false)
+  const litRef = useRef(false)
   const [assetError, setAssetError] = useState<string | null>(null)
 
   const status = useFarmStore((s) => s.status)
@@ -44,7 +46,12 @@ export function Farm() {
 
   // 開發環境才暴露引擎，方便自動化測試取得寵物位置（正式 build 會被移除）
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __farm?: PixelEngine }).__farm = engine
+    if (import.meta.env.DEV) {
+      const w = window as unknown as Record<string, unknown>
+      w.__farm = engine
+      w.__farmStore = useFarmStore
+      w.__overrides = overrides
+    }
   }, [engine])
 
   // 數值結算（每 10 秒）與禮物擲骰（每分鐘）。不受動畫暫停影響，用真實時間
@@ -85,12 +92,16 @@ export function Farm() {
     let raf = 0
     let last = performance.now()
     let lastPets: unknown = null
+    let lastDraw = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
       if (document.hidden || coveredRef.current) {
         last = now
         return
       }
+      // 高更新率螢幕也只畫到約 60 幀，省電
+      if (now - lastDraw < 15) return
+      lastDraw = now
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       const canvas = canvasRef.current
@@ -135,6 +146,12 @@ export function Farm() {
           sign.style.left = `${Math.round((d.x0 + d.x1) / 2)}px`
           sign.style.top = `${Math.round(d.y0 - 4)}px`
           sign.style.fontSize = `${Math.max(10, Math.round((d.x1 - d.x0) * 0.2))}px`
+          // 夜晚住家亮燈，門牌也跟著微微發亮（滑鼠移上去更亮）
+          const l = engine.isHouseLit(worldHour(Date.now()))
+          if (l !== litRef.current) {
+            litRef.current = l
+            setLit(l)
+          }
         }
       }
     }
@@ -220,9 +237,13 @@ export function Farm() {
             className="pointer-events-none absolute whitespace-nowrap border-2 border-[#3b2a1c] px-1.5 py-px font-bold leading-tight"
             style={{
               transform: 'translate(-50%, -100%)',
-              background: doorHover ? '#ffe28a' : '#c9893f',
-              color: doorHover ? '#5a3410' : '#fff3d0',
-              boxShadow: doorHover ? '0 0 10px 3px rgba(255,214,102,0.85), 2px 2px 0 rgba(0,0,0,0.4)' : '2px 2px 0 rgba(0,0,0,0.4)',
+              background: doorHover ? '#ffe28a' : lit ? '#f0c060' : '#c9893f',
+              color: doorHover || lit ? '#5a3410' : '#fff3d0',
+              boxShadow: doorHover
+                ? '0 0 12px 4px rgba(255,214,102,0.95), 2px 2px 0 rgba(0,0,0,0.4)'
+                : lit
+                  ? '0 0 7px 2px rgba(255,214,102,0.55), 2px 2px 0 rgba(0,0,0,0.4)'
+                  : '2px 2px 0 rgba(0,0,0,0.4)',
               fontFamily: "'Microsoft JhengHei','PingFang TC',monospace",
               imageRendering: 'pixelated',
             }}

@@ -15,7 +15,7 @@
  *  5. 打包成圖集並產生 manifest 與總覽圖、處理報告。
  */
 import sharp from 'sharp'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -310,6 +310,20 @@ function cleanSprite(s) {
   return { w: nw, h: nh, rgba: out }
 }
 
+/** 偵測鐘樓的空白鐘面：最大的奶油色連通塊（不碰到素材邊緣）的中心與半徑，供程式畫時針分針 */
+function detectClockFace(s) {
+  const { w, h, rgba } = s
+  const cream = new Uint8Array(w * h)
+  for (let i = 0; i < w * h; i++) {
+    const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2]
+    cream[i] = rgba[i * 4 + 3] && r > 232 && g > 220 && b > 185 ? 1 : 0
+  }
+  const { comps } = label(cream, w, h)
+  const face = comps.filter((c) => c.x0 > 2 && c.y0 > 2 && c.x1 < w - 3).sort((a, b) => b.area - a.area)[0]
+  if (!face) return null
+  return { cx: (face.x0 + face.x1 + 1) / 2, cy: (face.y0 + face.y1 + 1) / 2, r: Math.min(face.x1 - face.x0 + 1, face.y1 - face.y0 + 1) / 2 }
+}
+
 // ---------------------------------------------------------------------------
 // 圖集
 // ---------------------------------------------------------------------------
@@ -362,7 +376,8 @@ const P_OVERRIDE = {}
 for (const c of CATS) { P_OVERRIDE[`cat_${c}_core.png`] = 'dogs'; P_OVERRIDE[`cat_${c}_extra.png`] = 'dogs' }
 
 const pCache = {}
-let dogP = 6.2
+/** 狗與貓共用的像素格大小（原圖估算值的中位數附近）；貓的 extra 原圖是縮小後再放大的，像素格 = 此值 × 0.56 */
+const DOG_P = 6.1
 
 async function sheet({ file, group, prefix, cols, rows, names, minArea = 300, pRange, pFixed, anchorGroupKey }) {
   const img = await load(file)
@@ -370,15 +385,13 @@ async function sheet({ file, group, prefix, cols, rows, names, minArea = 300, pR
   const { lab, comps: all } = label(mask, img.W, img.H)
   const comps = keepComps(all, minArea)
   const cells = groupCells(comps, cols, rows)
-  let p, amp = 0
-  if (pFixed) p = pFixed
-  else {
-    const e = estimateP(img, mask, pRange)
-    p = e.p
-    amp = e.amp
-  }
+  // 估算像素格大小 p；同一批生成的素材（所有狗、所有貓）估算值會有 ±15% 的雜訊（尤其是糊掉的圖），
+  // 所以這些素材改用共同的 pFixed，確保「一個像素的視覺大小」在全部動物之間一致
+  const e = estimateP(img, mask, pRange)
+  const p = pFixed ?? e.p
+  const amp = e.amp
   pCache[file] = { p, amp }
-  info(`${file}: ${img.W}×${img.H}，連通塊 ${comps.length}（原 ${all.length}），像素格 p=${p.toFixed(2)}（強度 ${amp.toFixed(2)}）`)
+  info(`${file}: ${img.W}×${img.H}，連通塊 ${comps.length}（原 ${all.length}），像素格估算 p=${e.p.toFixed(2)}（強度 ${amp.toFixed(2)}）${pFixed ? `，採用共同值 p=${pFixed.toFixed(2)}` : ''}`)
   const frames = []
   for (let i = 0; i < rows * cols; i++) {
     const name = names[i]
@@ -412,25 +425,21 @@ async function sheet({ file, group, prefix, cols, rows, names, minArea = 300, pR
 async function main() {
   info(`來源：${SRC}`)
 
-  // 1) 狗：core（4×2）+ extra（3×2）。先估狗的像素格，貓沿用狗的粗細
-  const dogPs = []
+  // 1) 狗：core（4×2）+ extra（3×2）
   for (const [id, file] of Object.entries(DOGS)) {
-    const { frames, p } = await sheet({ file, group: 'dog_' + id, cols: 4, rows: 2, names: DOG_CORE })
-    dogPs.push(p)
+    const { frames } = await sheet({ file, group: 'dog_' + id, cols: 4, rows: 2, names: DOG_CORE, pFixed: DOG_P })
     for (const f of frames) addFrame('dog_' + id, `dog_${id}_${f.name}`, f.spr)
   }
-  dogP = dogPs.reduce((a, b) => a + b, 0) / dogPs.length
-  info(`狗的平均像素格 p=${dogP.toFixed(2)}`)
   for (const id of Object.keys(DOGS)) {
-    const { frames } = await sheet({ file: `dog_${id}_extra.png`, group: 'dog_' + id, cols: 3, rows: 2, names: DOG_EXTRA })
+    const { frames } = await sheet({ file: `dog_${id}_extra.png`, group: 'dog_' + id, cols: 3, rows: 2, names: DOG_EXTRA, pFixed: DOG_P })
     for (const f of frames) addFrame('dog_' + id, `dog_${id}_${f.name}`, f.spr)
   }
 
   // 2) 貓
   for (const id of CATS) {
-    const core = await sheet({ file: `cat_${id}_core.png`, cols: 4, rows: 2, names: CAT_CORE, pFixed: dogP })
+    const core = await sheet({ file: `cat_${id}_core.png`, cols: 4, rows: 2, names: CAT_CORE, pFixed: DOG_P })
     for (const f of core.frames) addFrame('cat_' + id, `cat_${id}_${f.name}`, f.spr, f.name === 'unused_back' ? { unused: true } : {})
-    const extra = await sheet({ file: `cat_${id}_extra.png`, cols: 2, rows: 2, names: CAT_EXTRA, pFixed: dogP * 0.56 })
+    const extra = await sheet({ file: `cat_${id}_extra.png`, cols: 2, rows: 2, names: CAT_EXTRA, pFixed: DOG_P * 0.56 })
     for (const f of extra.frames) addFrame('cat_' + id, `cat_${id}_${f.name}`, f.spr)
   }
 
@@ -453,8 +462,8 @@ async function main() {
       addFrame('scene', f.name, { w: W, h: H, rgba: out })
     }
     for (const [file, name] of [['scene_clocktower.png', 'clocktower'], ['scene_tree.png', 'tree']]) {
-      const r = await sheet({ file, cols: 1, rows: 1, names: [name] })
-      for (const f of r.frames) addFrame('scene', f.name, f.spr)
+      const r = await sheet({ file, cols: 1, rows: 1, names: [name], pFixed: name === 'clocktower' ? 5.0 : undefined })
+      for (const f of r.frames) addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
     }
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'] })
     for (const f of small.frames) addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
@@ -553,7 +562,7 @@ async function writeOutputs() {
     const atlas = Buffer.alloc(w * h * 4)
     for (const { f, x, y } of placed) {
       for (let row = 0; row < f.h; row++) f.rgba.copy(atlas, ((y + row) * w + x) * 4, row * f.w * 4, (row + 1) * f.w * 4)
-      manifest.frames[f.key] = { atlas: group, x, y, w: f.w, h: f.h, ax: f.ax, ay: f.ay, ...(f.unused ? { unused: true } : {}) }
+      manifest.frames[f.key] = { atlas: group, x, y, w: f.w, h: f.h, ax: f.ax, ay: f.ay, ...(f.unused ? { unused: true } : {}), ...(f.meta ? { meta: f.meta } : {}) }
     }
     // alpha 只有 0 或 255
     for (let i = 3; i < atlas.length; i += 4) if (atlas[i] !== 0 && atlas[i] !== 255) atlas[i] = atlas[i] >= 128 ? 255 : 0
@@ -601,6 +610,7 @@ async function writeOutputs() {
 
   await overview('dark', { r: 34, g: 36, b: 48 })
   await overview('light', { r: 236, g: 236, b: 230 })
+  copyFileSync(join(SHOTS, 'assets-overview-light.png'), join(SHOTS, 'assets-overview.png'))
   writeFileSync(join(SHOTS, 'assets-report.txt'), report.join('\n') + '\n')
 }
 

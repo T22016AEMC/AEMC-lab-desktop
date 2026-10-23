@@ -166,16 +166,8 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
   if (a.hop > 0) a.hop = Math.max(0, a.hop - dt)
   a.moving = false
 
-  // 選取中（氣泡選單開著）：停在原地等你選
-  if (env.selectedId === a.id) {
-    if (a.action === 'walk') setAction(a, 'idle', 1)
-    a.override = a.override && a.override.speedMul === 0 ? a.override : null
-    if (a.override) {
-      a.override.left -= dt
-      if (a.override.left <= 0) a.override = null
-    }
-    return
-  }
+  // 選取中（氣泡選單開著）：停在原地等你選，但指令的動作（吃、開心…）照樣演出
+  const frozen = env.selectedId === a.id
 
   // 睡覺：夜間規則沿用（23:00～6:00，被叫醒或互動後閒置一段時間才回去睡）
   const sleeping = isSleeping(a.pet, env.hour, env.nowMs)
@@ -194,11 +186,12 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
   if (a.override) {
     const o = a.override
     o.left -= dt
-    if (a.action !== o.action) setAction(a, o.action, o.left)
+    const shown: Action = frozen && o.speedMul > 0 ? 'happy' : o.action // 選單開著時散步改成原地開心
+    if (a.action !== shown) setAction(a, shown, o.left)
     if (o.tag === 'pet' && env.rand() < dt * 2.2) env.emit('heart', a.x + rr(env.rand, -8, 8), a.y - 28)
     if (o.tag === 'bath' && env.rand() < dt * 9) env.emit('bubble', a.x + rr(env.rand, -14, 14), a.y - rr(env.rand, 6, 30))
     if (o.tag === 'groom' && env.rand() < dt * 1.2) env.emit('heart', a.x, a.y - 30)
-    if (o.speedMul > 0) {
+    if (o.speedMul > 0 && !frozen) {
       // 散步：快步繞著走
       const d = Math.hypot(a.tx - a.x, a.ty - a.y)
       if (d < 6) pickTarget(a, env, true)
@@ -209,6 +202,11 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
       a.override = null
       setAction(a, 'idle', rr(env.rand, 0.8, 2))
     }
+    return
+  }
+
+  if (frozen) {
+    if (a.action === 'walk') setAction(a, 'idle', 1)
     return
   }
 
@@ -291,8 +289,8 @@ export function computeSeparation(actors: Actor[]): void {
     for (let j = i + 1; j < actors.length; j++) {
       const A = actors[i]
       const B = actors[j]
-      const rx = 34
-      const ry = 11
+      const rx = 40
+      const ry = 12
       let dx = A.x - B.x
       let dy = A.y - B.y
       const d = Math.hypot(dx / rx, dy / ry)

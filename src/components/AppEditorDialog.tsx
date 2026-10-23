@@ -131,7 +131,7 @@ export function AppEditorDialog({ app, onSave, onCancel }: Props) {
           />
         </div>
         <div className="mt-1 text-[11px] text-white/45">
-          {usingImage ? '圖片會裁成正方形並縮成 256×256' : '文字圖示：取名稱前 1～2 個字，顏色依名稱決定'}
+          {usingImage ? '圖片會裁成正方形並縮成 128×128' : '文字圖示：取名稱前 1～2 個字，顏色依名稱決定'}
         </div>
 
         {error && (

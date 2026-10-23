@@ -11,7 +11,7 @@ import {
   clampActor, computeSeparation, createActor, frameKeyOf, triggerAnim, updateActor, type Actor, type BehaviorEnv,
 } from './pets'
 import {
-  drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
+  drawClockHands, drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
   makeDrops, updateDrops, type Drop,
 } from './scene'
 
@@ -151,7 +151,16 @@ export class PixelEngine {
     })
     for (const o of sceneObjects(L)) {
       const s = assets.get(o.key)
-      if (s) items.push({ y: o.y, draw: () => drawSprite(ctx, s, o.x, o.y) })
+      if (!s) continue
+      items.push({
+        y: o.y,
+        draw: () => {
+          drawSprite(ctx, s, o.x, o.y)
+          // 鐘樓：鐘面是空白的，時針分針依實際時間畫上去（鐘面中心由素材處理時偵測，記在 manifest）
+          const clock = s.meta?.clock
+          if (o.key === 'clocktower' && clock) drawClockHands(ctx, Math.round(o.x - s.ax + clock.cx), Math.round(o.y - s.ay + clock.cy), f.hour, clock.r)
+        },
+      })
     }
     for (const a of this.actors.values()) items.push({ y: a.y, draw: () => this.drawActor(ctx, a, f) })
     items.sort((p, q) => p.y - q.y)

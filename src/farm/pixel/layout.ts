@@ -37,7 +37,8 @@ export function computeLayout(backW: number, backH: number, dpr: number): Layout
   for (let S = 1; S <= 12; S++) {
     const W = Math.ceil(backW / S)
     const H = Math.ceil(backH / S)
-    const score = Math.abs(H - TARGET_H) + (W < MIN_W ? 1000 : 0) + (H < 190 ? 300 : 0)
+    // 寵物活動的地面帶至少要有一定深度（六隻同場不會擠成一團），所以 H 偏小時額外扣分
+    const score = Math.abs(H - TARGET_H) + (W < MIN_W ? 1000 : 0) + (H < 190 ? 300 : 0) + Math.max(0, 258 - H) * 3
     if (score < best.score) best = { S, score }
   }
   const S = best.S
@@ -104,8 +105,8 @@ export function sceneObjects(L: Layout): SceneObject[] {
   const at = (f: number): number => Math.round(lo + span * f)
   return [
     { key: 'lamp', x: HOUSE_X0 + HOUSE_W + 26, y: H - 12 },
-    // 鐘樓：高 131，腳底至少要在 137 以下，頂端才不會被畫面上緣切掉
-    { key: 'clocktower', x: Math.round(W * 0.56), y: Math.max(fb + 34, 137) },
+    // 鐘樓：高 115，腳底至少要在 121 以下，頂端才不會被畫面上緣切掉
+    { key: 'clocktower', x: Math.round(W * 0.56), y: Math.max(fb + 34, 121) },
     { key: 'tree', x: at(0.0), y: fb + 46 },
     { key: 'tree', x: at(0.64), y: fb + 42 },
     { key: 'tree', x: at(0.97), y: fb + 52 },
@@ -114,7 +115,7 @@ export function sceneObjects(L: Layout): SceneObject[] {
     { key: 'flowers', x: at(0.02), y: fb + 38 },
     { key: 'stump', x: at(0.52), y: fb + 54 },
     { key: 'mushroom', x: at(0.28), y: fb + 56 },
-    { key: 'tall_grass', x: W - 26, y: H - 4 },
+    { key: 'tall_grass', x: at(0.9), y: fb + 62 },
   ]
 }
 

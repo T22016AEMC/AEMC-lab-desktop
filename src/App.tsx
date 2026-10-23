@@ -10,6 +10,7 @@ import { Toast } from './components/Toast'
 import { useViewportSync } from './hooks/useViewportSync'
 import { useLaunchpadHotkey } from './hooks/useLaunchpadHotkey'
 import { MIN_DESKTOP_WIDTH } from './lib/layout'
+import { setStorageErrorHandler } from './lib/documentStorage'
 import { useAppListStore } from './store/appListStore'
 import { useUIStore } from './store/uiStore'
 
@@ -17,6 +18,9 @@ function DesktopApp() {
   useLaunchpadHotkey()
   useEffect(() => {
     void useAppListStore.getState().init()
+    // 寫入 localStorage 失敗（空間已滿等）時提示使用者
+    setStorageErrorHandler((msg) => useUIStore.getState().showToast(msg))
+    return () => setStorageErrorHandler(null)
   }, [])
   return (
     <>

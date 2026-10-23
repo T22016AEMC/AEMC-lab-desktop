@@ -9,6 +9,23 @@ export interface DocumentStorage<T> {
   clear(): Promise<void>
 }
 
+type ErrorHandler = (message: string) => void
+let errorHandler: ErrorHandler | null = null
+let lastReport = 0
+
+/** 註冊「儲存失敗」的處理函式（畫面層用來顯示提示）；寫入失敗時，所有儲存層共用 */
+export function setStorageErrorHandler(handler: ErrorHandler | null): void {
+  errorHandler = handler
+}
+
+/** 同一段時間內只通知一次，避免寫入失敗時每次存檔都跳提示 */
+function reportFailure(): void {
+  const now = Date.now()
+  if (now - lastReport < 15_000) return
+  lastReport = now
+  errorHandler?.('儲存失敗，瀏覽器空間可能已滿')
+}
+
 /** 存在 localStorage 的 JSON 文件；所有讀寫都包在 try/catch，失敗就當作沒有資料 */
 export class LocalStorageDocument<T> implements DocumentStorage<T> {
   /** parse 負責驗證與版本轉換；回傳 null 代表資料不可用 */
@@ -31,7 +48,8 @@ export class LocalStorageDocument<T> implements DocumentStorage<T> {
     try {
       localStorage.setItem(this.key, JSON.stringify(data))
     } catch {
-      // 無痕模式或空間已滿，忽略
+      // 無痕模式、被封鎖或空間已滿：不會讓程式當掉，但要讓使用者知道沒有存到
+      reportFailure()
     }
   }
 

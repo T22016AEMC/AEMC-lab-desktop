@@ -135,18 +135,39 @@ export function drawDarkness(ctx: CanvasRenderingContext2D, L: Layout, hour: num
   return dark
 }
 
-/** 路燈的光暈（疊在暗色疊層之上，用同心的方塊做像素風光暈） */
+/** 路燈的光暈（疊在暗色疊層之上）：用橫條組成的同心橢圓，邊緣是像素階梯，不是平滑漸層 */
 export function drawGlow(ctx: CanvasRenderingContext2D, x: number, y: number, strength: number): void {
   if (strength <= 0.02) return
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
-  for (let r = 4; r >= 1; r--) {
-    ctx.fillStyle = `rgba(255,205,110,${(0.06 * strength).toFixed(3)})`
-    const w = r * 14
-    const h = r * 11
-    ctx.fillRect(Math.round(x - w / 2), Math.round(y - h / 2), w, h)
+  const cx = Math.round(x)
+  const cy = Math.round(y)
+  for (let ring = 4; ring >= 1; ring--) {
+    const rx = ring * 9
+    const ry = ring * 7
+    ctx.fillStyle = `rgba(255,200,100,${(0.055 * strength).toFixed(3)})`
+    for (let dy = -ry; dy <= ry; dy++) {
+      const hw = Math.floor(rx * Math.sqrt(1 - (dy * dy) / (ry * ry + 0.01)))
+      ctx.fillRect(cx - hw, cy + dy, hw * 2 + 1, 1)
+    }
   }
   ctx.restore()
+}
+
+/** 鐘樓的時針與分針（像素線）：依實際時間畫在空白的鐘面上；(cx, cy) 是鐘面中心 */
+export function drawClockHands(ctx: CanvasRenderingContext2D, cx: number, cy: number, hour: number, radius = 14): void {
+  const h = ((hour % 12) + 12) % 12
+  const min = (hour % 1) * 60
+  const line = (angle: number, len: number, w: number, color: string): void => {
+    ctx.fillStyle = color
+    const dx = Math.sin(angle)
+    const dy = -Math.cos(angle)
+    for (let t = 0; t <= len; t += 0.5) ctx.fillRect(Math.round(cx + dx * t) - (w > 1 ? 0 : 0), Math.round(cy + dy * t), w, w)
+  }
+  line((min / 60) * Math.PI * 2, Math.max(5, radius * 0.78), 1, '#3b2a1c')
+  line(((h + min / 60) / 12) * Math.PI * 2, Math.max(3, radius * 0.5), 2, '#3b2a1c')
+  ctx.fillStyle = '#b8472c'
+  ctx.fillRect(cx - 1, cy - 1, 2, 2)
 }
 
 export interface Drop {

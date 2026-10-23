@@ -1,7 +1,8 @@
-export const ICON_SIZE = 256
+/** 自訂圖示存進瀏覽器，為了省空間縮成最大 128px */
+export const ICON_SIZE = 128
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
-/** 把使用者選的圖片置中裁成正方形，縮成 256×256，輸出成 PNG data URL；失敗時丟出帶中文訊息的 Error */
+/** 把使用者選的圖片置中裁成正方形，縮成 128×128，輸出成 PNG data URL；失敗時丟出帶中文訊息的 Error */
 export async function imageFileToIcon(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('請選擇圖片檔案')
   if (file.size > MAX_FILE_BYTES) throw new Error('圖片太大（上限 10 MB）')
