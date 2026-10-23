@@ -8,11 +8,13 @@ import { Launchpad } from './components/Launchpad'
 import { MenuBar } from './components/MenuBar'
 import { Toast } from './components/Toast'
 import { useViewportSync } from './hooks/useViewportSync'
+import { useLaunchpadHotkey } from './hooks/useLaunchpadHotkey'
 import { MIN_DESKTOP_WIDTH } from './lib/layout'
 import { useAppListStore } from './store/appListStore'
 import { useUIStore } from './store/uiStore'
 
 function DesktopApp() {
+  useLaunchpadHotkey()
   useEffect(() => {
     void useAppListStore.getState().init()
   }, [])

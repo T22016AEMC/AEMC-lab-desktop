@@ -1,18 +1,18 @@
 import type { SpeciesId } from '../config/species'
 
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 export interface Pet {
   id: string
   species: SpeciesId
-  /** 狗的品種／貓的花色與品種 id（只有貓狗有；v1 存檔的欄位叫 coat，轉換時改名） */
-  variant?: string
+  /** 狗的品種／貓的花色與品種 id */
+  variant: string
   name: string
-  /** 領養時間（毫秒時間戳），用來判斷幼年／成年 */
+  /** 領養時間（毫秒時間戳），滿 3 天算成年（只是數值，不影響外觀） */
   adoptedAt: number
-  /** 身高係數，約 0.85～1.15 */
+  /** 身高係數，約 0.85～1.15（資訊卡顯示身高用，不影響外觀） */
   heightFactor: number
-  /** 體重 0～100，影響外觀胖瘦 */
+  /** 體重 0～100（只是數值，不影響外觀） */
   weight: number
   satiety: number
   mood: number

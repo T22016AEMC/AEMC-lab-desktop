@@ -2,7 +2,6 @@ import { motion, useMotionValue, useSpring, useTransform, type MotionValue } fro
 import { useRef, type ReactNode } from 'react'
 import { allApps } from '../config/registry'
 import { getMetrics } from '../lib/layout'
-import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { AppIcon } from './AppIcon'
 
@@ -57,51 +56,28 @@ function DockItem({ label, dockId, mouseX, base, magnify, running, dotOffset, on
   )
 }
 
-/** 啟動台按鈕的圖示：3x3 圓點方塊 */
-function LaunchpadGlyph() {
-  return (
-    <div className="flex h-full w-full items-center justify-center rounded-[22%] bg-gradient-to-b from-neutral-200 to-neutral-400 shadow-md shadow-black/30">
-      <div className="grid w-[58%] grid-cols-3 gap-[9%]">
-        {Array.from({ length: 9 }, (_, i) => (
-          <span key={i} className="aspect-square rounded-[30%] bg-neutral-700/80" />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export function Dock() {
   const mouseX = useMotionValue(Infinity)
-  const launchpadOpen = useUIStore((s) => s.launchpadOpen)
-  const setLaunchpadOpen = useUIStore((s) => s.setLaunchpadOpen)
   const windows = useWindowStore((s) => s.windows)
   const openApp = useWindowStore((s) => s.openApp)
   const base = getMetrics().dockIcon
   const dotOffset = -7
 
-  // 平時只有「啟動台」；內建視窗（小遊戲）開啟後才出現圖示，關閉後移除。外部程式在新分頁開啟，不會出現在 Dock
+  // Dock 平時隱藏；有內建視窗（小遊戲）開啟時才從底部滑出，視窗全關閉後收起。外部程式在新分頁開啟，不會出現在 Dock
   const items = allApps.filter((a) => windows[a.id])
 
   return (
     <nav
-      className="glass fixed bottom-2 left-1/2 z-[9000] flex max-w-[98vw] -translate-x-1/2 items-end gap-1.5 rounded-[22px] px-2 pb-2 pt-2"
-      style={{ height: base + 18 }}
+      aria-hidden={items.length === 0}
+      className="glass fixed bottom-2 left-1/2 z-[9000] flex max-w-[98vw] items-end gap-1.5 rounded-[22px] px-2 pb-2 pt-2 transition-transform duration-300 ease-out"
+      style={{
+        height: base + 18,
+        transform: `translate(-50%, ${items.length > 0 ? '0' : 'calc(100% + 16px)'})`,
+        pointerEvents: items.length > 0 ? 'auto' : 'none',
+      }}
       onPointerMove={(e) => e.pointerType === 'mouse' && mouseX.set(e.clientX)}
       onPointerLeave={() => mouseX.set(Infinity)}
     >
-      <DockItem
-        label="啟動台"
-        dockId="__launchpad"
-        mouseX={mouseX}
-        base={base}
-        magnify
-        running={false}
-        dotOffset={dotOffset}
-        onClick={() => setLaunchpadOpen(!launchpadOpen)}
-      >
-        <LaunchpadGlyph />
-      </DockItem>
-      {items.length > 0 && <div className="mx-0.5 h-[70%] w-px self-center bg-white/30" />}
       {items.map((app) => (
         <DockItem
           key={app.id}

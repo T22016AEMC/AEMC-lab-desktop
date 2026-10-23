@@ -50,17 +50,6 @@ export function stageOf(pet: Pet, nowMs: number): Stage {
   return ageDays(pet, nowMs) >= BALANCE.adultDays ? 'adult' : 'young'
 }
 
-/** 外觀整體大小：幼年較小 */
-export function stageScale(stage: Stage): number {
-  return stage === 'young' ? 0.68 : 1
-}
-
-/** 體重 0～100 對應的胖瘦倍率（身體厚度）：0 → 0.82、50 → 1、100 → 1.28 */
-export function fatness(weight: number): number {
-  const w = clamp100(weight)
-  return w <= 50 ? 0.82 + (w / 50) * 0.18 : 1 + ((w - 50) / 50) * 0.28
-}
-
 export function weightLabel(weight: number): string {
   if (weight < 30) return '偏瘦'
   if (weight < 65) return '標準'
@@ -68,16 +57,19 @@ export function weightLabel(weight: number): string {
   return '偏胖'
 }
 
-/** 資訊卡顯示的身高（公分）：種類基準 × 身高係數 ×（幼年縮小） */
+/** 資訊卡顯示的身高（公分）：品種基準 × 身高係數 ×（幼年 0.6） */
 export function heightCm(pet: Pet, baseCm: number, nowMs: number): number {
   return Math.round(baseCm * pet.heightFactor * (stageOf(pet, nowMs) === 'young' ? 0.6 : 1))
 }
 
 /** 數值低於門檻時要冒出的提示（優先順序：餓、髒、心情差） */
-export function lowStatNotices(pet: Pet): { emoji: string; text: string }[] {
-  const out: { emoji: string; text: string }[] = []
-  if (pet.satiety < BALANCE.lowThreshold) out.push({ emoji: '🍖', text: '餓了' })
-  if (pet.cleanliness < BALANCE.lowThreshold) out.push({ emoji: '💧', text: '髒了' })
-  if (pet.mood < BALANCE.lowThreshold) out.push({ emoji: '💔', text: '心情差' })
+export type StatusIcon = 'exclaim' | 'sweat' | 'bubble'
+
+/** 數值低於門檻時要顯示的狀態（優先順序：餓、心情差、髒）：餓＝驚嘆號、心情低＝汗滴、髒＝泡泡 */
+export function lowStatNotices(pet: Pet): { icon: StatusIcon; text: string }[] {
+  const out: { icon: StatusIcon; text: string }[] = []
+  if (pet.satiety < BALANCE.lowThreshold) out.push({ icon: 'exclaim', text: '餓了' })
+  if (pet.mood < BALANCE.lowThreshold) out.push({ icon: 'sweat', text: '心情差' })
+  if (pet.cleanliness < BALANCE.lowThreshold) out.push({ icon: 'bubble', text: '髒了' })
   return out
 }

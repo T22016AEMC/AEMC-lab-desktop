@@ -60,3 +60,44 @@ body {
 }
 .tile-appear { animation: tile-appear 160ms ease-out 100ms backwards; }
 .tile-pop { animation: tile-pop 160ms ease-out 100ms; }
+
+/* 像素風的對話框與按鈕（養殖場介面用）：硬邊框、硬陰影、沒有圓角與模糊 */
+@layer components {
+  .px-panel {
+    background: #fff6df;
+    color: #3b2a1c;
+    border: 3px solid #3b2a1c;
+    box-shadow: inset 0 0 0 2px #f2dca8, 4px 4px 0 rgba(0, 0, 0, 0.35);
+    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', monospace;
+  }
+  .px-btn {
+    background: #f4c95d;
+    color: #3b2a1c;
+    border: 2px solid #3b2a1c;
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 2px 2px 0 rgba(0, 0, 0, 0.3);
+    font-weight: 700;
+  }
+  .px-btn:hover:not(:disabled) {
+    background: #ffd978;
+  }
+  .px-btn:active:not(:disabled) {
+    transform: translate(1px, 1px);
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18), 1px 1px 0 rgba(0, 0, 0, 0.3);
+  }
+  .px-btn:disabled {
+    background: #cfc3a8;
+    color: #8a7d66;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  .px-input {
+    background: #fffdf4;
+    border: 2px solid #3b2a1c;
+    color: #3b2a1c;
+    outline: none;
+  }
+  .px-input:focus {
+    background: #fff;
+    box-shadow: 0 0 0 2px #f4c95d;
+  }
+}

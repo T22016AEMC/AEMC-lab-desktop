@@ -25,11 +25,9 @@ export const BALANCE = {
   /**
    * 陸地寵物的睡覺時間（本機時間，跨午夜）：startHour 點到隔天 endHour 點。
    * idleMinutes：被叫醒或互動後，若仍在睡覺時間內，沒有任何互動超過這麼久就會自己回去睡。
-   * 天空的日夜變化與池塘生物夜晚變慢不受影響，仍依實際時間。
+   * 天空的日夜變化不受影響，仍依實際時間。
    */
   sleep: { startHour: 23, endHour: 6, idleMinutes: 10 },
-  feedPond: { satiety: 20, mood: 2, fatAbove: 85, fatGain: 4 },
-  cleanPond: { cleanliness: 30, mood: 2 },
 
   gift: {
     moodThreshold: 70,
@@ -49,5 +47,5 @@ export const BALANCE = {
   statTickSeconds: 10,
 } as const
 
-export const LAND_CAPACITY = 3
-export const POND_CAPACITY = 12
+/** 貓狗合計最多幾隻 */
+export const PET_CAPACITY = 6

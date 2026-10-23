@@ -1,6 +1,7 @@
 import { useClock } from '../hooks/useClock'
 import { formatMenuBarTime } from '../lib/format'
 import { getMetrics } from '../lib/layout'
+import { PET_CAPACITY } from '../farm/config/balance'
 import { useFarmStore } from '../farm/store/farmStore'
 import { useUIStore } from '../store/uiStore'
 import { useActiveApp } from '../store/windowStore'
@@ -12,6 +13,9 @@ export function MenuBar() {
   const setAboutOpen = useUIStore((s) => s.setAboutOpen)
   const activeApp = useActiveApp()
   const points = useFarmStore((st) => st.save?.points ?? null)
+  const petCount = useFarmStore((st) => st.save?.pets.length ?? null)
+  const launchpadOpen = useUIStore((s) => s.launchpadOpen)
+  const setLaunchpadOpen = useUIStore((s) => s.setLaunchpadOpen)
   const { menuBar } = getMetrics()
 
   return (
@@ -28,8 +32,25 @@ export function MenuBar() {
           <Logo size={15} />
         </button>
         <span className="truncate px-1 font-semibold">{activeApp ? activeApp.name : '桌面'}</span>
+        {/* 啟動台的備用入口（主要入口是住家的門；快捷鍵 F4） */}
+        <button
+          type="button"
+          aria-label="啟動台（F4）"
+          title="啟動台（F4）"
+          onClick={() => setLaunchpadOpen(!launchpadOpen)}
+          className="flex h-5 w-6 items-center justify-center rounded hover:bg-white/20"
+        >
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+            {[0, 4.5, 9].flatMap((y) => [0, 4.5, 9].map((x) => <rect key={x + '-' + y} x={x} y={y} width="3" height="3" rx="0.6" />))}
+          </svg>
+        </button>
       </div>
       <div className="flex shrink-0 items-center gap-3 px-2">
+        {petCount !== null && (
+          <span className="tabular-nums" title="寵物數量" aria-label={`寵物 ${petCount}/${PET_CAPACITY}`}>
+            🐾 {petCount}/{PET_CAPACITY}
+          </span>
+        )}
         {points !== null && (
           <span className="tabular-nums" title="點數" aria-label={`點數 ${points}`}>
             🪙 {points}

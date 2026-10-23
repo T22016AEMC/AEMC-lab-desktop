@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { BALANCE } from '../config/balance'
 import { worldHour } from '../overrides'
+import { takeMigrationNotice } from '../save/migrate'
 import { LocalStorageAdapter } from '../save/storage'
 import type { SaveData, SaveStorage } from '../save/types'
 import { adopt, execute, type ActionId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
@@ -28,7 +29,7 @@ interface FarmState {
   init: () => Promise<void>
   /** 領養（沒有存檔時建立新存檔，第一隻免費）。回傳錯誤訊息或 null */
   adoptPet: (req: Omit<AdoptRequest, 'free'>) => string | null
-  runAction: (action: ActionId, targetId: string) => string | null
+  runAction: (action: ActionId, petId: string) => string | null
   /** 週期性結算：數值下降、跨日的每日獎勵 */
   tick: () => void
   /** 週期性擲禮物 */
@@ -54,6 +55,12 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   init: async () => {
     const loaded = await storage.load()
     const now = Date.now()
+    const notice = takeMigrationNotice()
+    if (notice) {
+      useUIStore.getState().showToast('海洋已經取消，' + notice.removed + ' 隻海洋生物已移除，退還 ' + notice.refunded + ' 點')
+      // 升級後的存檔立刻寫回，避免下次讀到舊格式又退一次
+      if (loaded) void storage.save(loaded)
+    }
     if (!loaded) {
       set({ status: 'ready', save: null })
       return
@@ -77,10 +84,10 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     return null
   },
 
-  runAction: (action, targetId) => {
+  runAction: (action, petId) => {
     const save = get().save
     if (!save) return '尚未開始'
-    const r = execute(save, ctxNow(), action, targetId)
+    const r = execute(save, ctxNow(), action, petId)
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
     return null

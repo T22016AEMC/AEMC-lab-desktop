@@ -7,12 +7,15 @@ interface UIState {
   toast: { id: number; message: string } | null
   launchpadOpen: boolean
   aboutOpen: boolean
+  /** 領養視窗 */
+  adoptOpen: boolean
   viewport: Size
   setBooted: (v: boolean) => void
   showToast: (message: string) => void
   hideToast: () => void
   setLaunchpadOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
+  setAdoptOpen: (v: boolean) => void
   setViewport: (width: number, height: number) => void
 }
 
@@ -21,12 +24,14 @@ export const useUIStore = create<UIState>((set) => ({
   toast: null,
   launchpadOpen: false,
   aboutOpen: false,
+  adoptOpen: false,
   viewport: { width: window.innerWidth, height: window.innerHeight },
   setBooted: (booted) => set({ booted }),
   showToast: (message) => set((s) => ({ toast: { id: (s.toast?.id ?? 0) + 1, message } })),
   hideToast: () => set({ toast: null }),
   setLaunchpadOpen: (launchpadOpen) => set({ launchpadOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
   setViewport: (width, height) =>
     set((s) =>
       s.viewport.width === width && s.viewport.height === height
