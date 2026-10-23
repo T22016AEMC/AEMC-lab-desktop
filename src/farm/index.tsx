@@ -6,6 +6,7 @@ import { BALANCE } from './config/balance'
 import { overrides, worldHour, worldWeather } from './overrides'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
+import * as layoutMod from './pixel/layout'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
 import { PetMenu } from './ui/PetMenu'
@@ -66,6 +67,7 @@ export function Farm() {
       w.__farm = engine
       w.__farmStore = useFarmStore
       w.__overrides = overrides
+      w.__layout = layoutMod
     }
   }, [engine])
 

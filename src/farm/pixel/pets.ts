@@ -2,7 +2,7 @@ import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Layout } from './layout'
-import { blockers, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
+import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -148,8 +148,9 @@ function blocked(L: Layout, x: number, y: number): boolean {
 /** 把位置限制在活動範圍內（也就是不會走進住家、不會停在燈柱後面），並把站進障礙物的寵物推到最近的出口 */
 export function clampActor(a: Actor, L: Layout): void {
   const b = petBounds(L)
-  a.x = Math.min(b.x1, Math.max(b.x0, a.x))
-  a.y = Math.min(b.y1, Math.max(b.y0, a.y))
+  const c = clampToWalk(L, a.x, a.y)
+  a.x = c.x
+  a.y = c.y
   for (const r of blockers(L)) {
     if (!(a.x > r.x0 && a.x < r.x1 && a.y > r.y0 && a.y < r.y1)) continue
     const toDown = r.y1 - a.y

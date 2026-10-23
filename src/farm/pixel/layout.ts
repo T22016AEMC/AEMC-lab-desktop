@@ -47,8 +47,8 @@ export const POND_W = 110
 export const POND_H = 79
 export const POND_AX = 55
 export const WATER = { cx: 55, cy: 41, rx: 43, ry: 26 }
-/** 水池素材左緣（邏輯座標）：在住家煙囪的右邊（煙囪最右約 x=128），不和煙囪輪廓疊在一起 */
-export const POND_LEFT = 130
+/** 水池素材左緣（邏輯座標）：住家正上方、靠左，整個水池（含石頭）不超出畫面左緣；右緣 x=112 離煙囪（約 x=105～128、住家素材最上面 26 列）保持細縫 */
+export const POND_LEFT = 2
 /** 樹幹（腳底往上）的佔地：寵物不會站進去 */
 export const TRUNK_HALF_W = 9
 export const TRUNK_H = 12
@@ -153,9 +153,9 @@ export function towerSignCenter(L: Layout): { x: number; y: number } {
 }
 
 /**
- * 水池：放在住家右上方的後排（左邊那棵樹的左側）。x = 水平中心、y = 腳底（素材底邊）。
+ * 水池：放在住家正上方的空地、靠左。x = 水平中心、y = 腳底（素材底邊）。
  * y 由草地上緣算出來：整個素材（含最高的蘆葦尖端）都在草地上緣以下、不伸進遠景樹林，所以 y 的下限 = 草地上緣 + 素材高 + 2。
- * 視窗太矮、放不下時，以草地上緣為優先（水池會更貼近路燈上方，但仍在路燈之上）。
+ * 底部石頭會被住家屋頂尖端蓋住一小部分（y 排序自然發生，約 3～5% 面積），水面中心完全可見。
  */
 export function pondPos(L: Layout): { x: number; y: number } {
   return { x: POND_LEFT + POND_AX, y: L.farBottom + POND_H + 2 }
@@ -173,11 +173,42 @@ export function inWater(L: Layout, x: number, y: number, pad = 1): boolean {
   return ((x - w.cx) / (w.rx * pad)) ** 2 + ((y - w.cy) / (w.ry * pad)) ** 2 <= 1
 }
 
-/** 水池前緣上岸、走向水池時的站位（腳底座標，在水池正前方、可站的地方） */
-export function pondStand(L: Layout): { x: number; y: number } {
+/**
+ * 水池右前方的一條可走帶（腳底座標）：水池在住家正上方，離寵物主要的活動範圍有一段距離，
+ * 所以在水池右邊、路燈上方開一條窄的可走區，讓寵物走到水池旁邊再跳進去。
+ * x 從水池右緣再過去一點開始（避開煙囪與屋頂的遮擋），y 在水池底邊以下、路燈頂端以上。太矮的視窗沒有這一條（回傳 null）。
+ */
+export function pondStrip(L: Layout): Rect | null {
   const p = pondPos(L)
   const b = petBounds(L)
-  return { x: Math.max(p.x + 22, b.x0 + 6), y: Math.min(b.y1, p.y + 12) }
+  const r = { x0: p.x - POND_AX + POND_W + 30, x1: b.x0 + 4, y0: p.y + 4, y1: L.H - LAMP_H - 12 - 4 }
+  return r.y1 - r.y0 >= 6 && r.x1 - r.x0 >= 10 ? r : null
+}
+
+/** 水池旁邊走去洗澡、洗完爬出來的站位（腳底座標）：在上面那條可走帶裡，沒被住家與路燈遮住 */
+export function pondStand(L: Layout): { x: number; y: number } {
+  const st = pondStrip(L)
+  const b = petBounds(L)
+  if (!st) return { x: b.x0 + 6, y: Math.min(b.y1, pondPos(L).y + 12) }
+  return { x: st.x0 + 26, y: Math.min(st.y1, st.y0 + 6) }
+}
+
+/** 所有可走的區域：主要活動範圍＋水池旁那條可走帶 */
+export function walkZones(L: Layout): Rect[] {
+  const st = pondStrip(L)
+  return st ? [petBounds(L), st] : [petBounds(L)]
+}
+
+/** 把位置夾進可走區域（離最近的那個區域） */
+export function clampToWalk(L: Layout, x: number, y: number): { x: number; y: number } {
+  let best = { x, y, d: Infinity }
+  for (const z of walkZones(L)) {
+    const cx = Math.min(z.x1, Math.max(z.x0, x))
+    const cy = Math.min(z.y1, Math.max(z.y0, y))
+    const d = Math.hypot(cx - x, cy - y)
+    if (d < best.d) best = { x: cx, y: cy, d }
+  }
+  return { x: best.x, y: best.y }
 }
 
 /** 寵物活動範圍（腳底座標）：地面帶（含草地與小路），不含天空與遠景，也不含住家與路燈那一塊 */
@@ -208,25 +239,23 @@ export function blockers(L: Layout): Rect[] {
 
 /** 這個腳底位置站得住嗎（在活動範圍內、不在任何障礙物裡） */
 export function isWalkable(L: Layout, x: number, y: number): boolean {
-  const b = petBounds(L)
-  if (x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1) return false
+  if (!walkZones(L).some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)) return false
   return !blockers(L).some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1)
 }
 
 /** 離 (x, y) 最近的可站位置：由近到遠一圈一圈找（垂直方向距離算比較重，因為場景是斜視角） */
 export function nearestWalkable(L: Layout, x: number, y: number): { x: number; y: number } {
-  const b = petBounds(L)
-  const cx = Math.min(b.x1, Math.max(b.x0, x))
-  const cy = Math.min(b.y1, Math.max(b.y0, y))
-  if (isWalkable(L, cx, cy)) return { x: cx, y: cy }
+  const c = clampToWalk(L, x, y)
+  if (isWalkable(L, c.x, c.y)) return c
   let best: { x: number; y: number; d: number } | null = null
-  for (let gx = b.x0; gx <= b.x1; gx += 2)
-    for (let gy = b.y0; gy <= b.y1; gy += 2) {
-      if (!isWalkable(L, gx, gy)) continue
-      const d = Math.hypot(gx - x, (gy - y) * 1.6)
-      if (!best || d < best.d) best = { x: gx, y: gy, d }
-    }
-  return best ? { x: best.x, y: best.y } : { x: cx, y: cy }
+  for (const b of walkZones(L))
+    for (let gx = b.x0; gx <= b.x1; gx += 2)
+      for (let gy = b.y0; gy <= b.y1; gy += 2) {
+        if (!isWalkable(L, gx, gy)) continue
+        const d = Math.hypot(gx - x, (gy - y) * 1.6)
+        if (!best || d < best.d) best = { x: gx, y: gy, d }
+      }
+  return best ? { x: best.x, y: best.y } : c
 }
 
 /**
@@ -243,8 +272,8 @@ export function sceneObjects(L: Layout): SceneObject[] {
     { key: 'clocktower', x: towerX(L), y: towerBase(L) },
     { key: 'pond', x: pd.x, y: pd.y },
   ]
-  // 路燈右邊，也要在水池右邊（樹與裝飾都不和水池重疊）
-  const left = Math.max(lampX() + LAMP_W / 2 + 10, pd.x - POND_AX + POND_W + 8)
+  // 路燈右邊（水池在住家正上方，不占中間的空地，兩棵樹回到對稱的位置）
+  const left = lampX() + LAMP_W / 2 + 10
   const right = towerX(L) - TOWER_CLEAR // 鐘樓淨空範圍的左緣
   // 樹：中間偏左、中間偏右，不擋住住家與鐘樓
   const tLo = left + TREE_W / 2
@@ -253,7 +282,7 @@ export function sceneObjects(L: Layout): SceneObject[] {
   if (range >= 70) {
     out.push({ key: 'tree', x: Math.round(tLo + range * 0.22), y: fb + 46 })
     if (range >= 100) out.push({ key: 'tree', x: Math.round(tLo + range * 0.78), y: fb + 42 })
-  } else if (range >= -40) out.push({ key: 'tree', x: Math.round(tLo + range / 2), y: fb + 44 })
+  } else if (range >= 0) out.push({ key: 'tree', x: Math.round(tLo + range / 2), y: fb + 44 })
   // 裝飾物：最多 4 件，固定位置，散布在路兩側的草地
   const dLo = left + 14
   const dHi = right - 22
@@ -272,10 +301,11 @@ export function footprints(L: Layout): Rect[] {
     lamp: [LAMP_W * 0.5, 10],
     clocktower: [TOWER_W, 16],
     tree: [TREE_W * 0.6, 14],
-    bush: [47, 12],
-    mushroom: [37, 10],
-    rocks: [52, 12],
-    flowers: [39, 10],
+    // 裝飾物用整個素材外框（建築空位不可和它們重疊）
+    bush: [47, 40],
+    mushroom: [37, 37],
+    rocks: [52, 34],
+    flowers: [39, 28],
     pond: [POND_W - 20, 22],
   }
   const out: Rect[] = [{ x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - 30, y1: L.house.baseY }]
@@ -286,25 +316,86 @@ export function footprints(L: Layout): Rect[] {
   return out
 }
 
+export type SlotKind = 'kennel' | 'catTree' | 'small' | 'large'
+
 /**
- * 保留給之後建築（澡盆、蹺蹺板、沙坑、篝火、野餐墊、食盆水盆、花圃、狗窩、貓跳台）的空位；本版不顯示。
- * 依序在草地上找不和固定物件、小路重疊且彼此分開的位置（結果是固定的，不是隨機）。
+ * 建築空位：x、y = 腳底中心（邏輯座標）；w、h = 之後放的素材外框大小（佔位範圍）；
+ * fw、fd = 腳下的佔地（寬、深），空位彼此、與固定物件的佔地都不重疊。
  */
-export function buildingSlots(L: Layout): { id: string; x: number; y: number; w: number; h: number }[] {
+export interface BuildingSlot {
+  id: string
+  kind: SlotKind
+  x: number
+  y: number
+  w: number
+  h: number
+  fw: number
+  fd: number
+}
+
+interface SlotSpec {
+  id: string
+  kind: SlotKind
+  /** 素材大小與佔地 */
+  w: number
+  h: number
+  fw: number
+  fd: number
+  /** 偏好位置：在可用範圍的水平比例，以及貼近小路（path）或在草地中間（mid） */
+  fx: number
+  row: 'path' | 'mid'
+}
+
+/**
+ * 要預留的空位，依優先順序（先排先找位置）：
+ * 狗窩、貓跳台（專用）→ 大型×2（遊樂設施蹺蹺板、篝火）→ 小型×4（食盆水盆、花圃、沙坑、野餐墊）。
+ * 狗窩與貓跳台放在草地上離小路不遠、寵物容易走到的地方，彼此與邊緣都留距離。
+ */
+export const SLOT_SPECS: SlotSpec[] = [
+  { id: 'kennel', kind: 'kennel', w: 87, h: 72, fw: 70, fd: 22, fx: 0.3, row: 'path' },
+  { id: 'catTree', kind: 'catTree', w: 63, h: 79, fw: 48, fd: 22, fx: 0.72, row: 'path' },
+  { id: 'large1', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.12, row: 'mid' },
+  { id: 'large2', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.9, row: 'mid' },
+  { id: 'small1', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, row: 'path' },
+  { id: 'small2', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.12, row: 'path' },
+  { id: 'small3', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.9, row: 'path' },
+  { id: 'small4', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, row: 'mid' },
+]
+
+/** 空位的佔地矩形 */
+export const slotFootprint = (s: BuildingSlot): Rect => ({ x0: s.x - s.fw / 2, x1: s.x + s.fw / 2, y0: s.y - s.fd, y1: s.y })
+
+/**
+ * 保留給之後建築（狗窩、貓跳台、食盆水盆、花圃、沙坑、遊樂設施、篝火、野餐墊）的空位；本版不顯示。
+ * 範圍：寵物活動區的草地（小路以上、鐘樓淨空範圍以左）。每個空位依偏好位置找離它最近、
+ * 不和固定物件（住家、水池、樹、路燈、鐘樓、裝飾）與先放好的空位重疊的地方（結果固定，不是隨機）。
+ * 放不下的不會硬放（回傳的陣列裡就沒有那一個），由呼叫端統計。
+ */
+export function buildingSlots(L: Layout): BuildingSlot[] {
   const { H, farBottom: fb } = L
-  const fixed = footprints(L).map((r) => ({ x0: r.x0 - 6, x1: r.x1 + 6, y0: r.y0 - 12, y1: r.y1 + 4 }))
-  const slots: { id: string; x: number; y: number; w: number; h: number }[] = []
-  const w = 56
-  const h = 40
-  const towerL = towerX(L) - TOWER_CLEAR
-  for (let yy = fb + 60; yy <= H - 12 && slots.length < 3; yy += 4) {
-    for (let xx = lampX() + 70; xx <= towerL - w / 2; xx += 8) {
-      const r = { x0: xx - w / 2, x1: xx + w / 2, y0: yy - h, y1: yy }
-      if (fixed.some((f) => r.x0 < f.x1 && r.x1 > f.x0 && r.y0 < f.y1 && r.y1 > f.y0)) continue
-      if (slots.some((s) => Math.abs(s.x - xx) < w + 18 && Math.abs(s.y - yy) < h + 10)) continue
-      slots.push({ id: 'slot' + (slots.length + 1), x: xx, y: yy, w, h })
-      if (slots.length >= 3) break
-    }
+  const b = petBounds(L)
+  const fixed = footprints(L).map((r) => ({ x0: r.x0 - 4, x1: r.x1 + 4, y0: r.y0 - 6, y1: r.y1 + 4 }))
+  const xl = b.x0 + 6
+  const xr = towerX(L) - TOWER_CLEAR
+  const pathTop = H - 6 - PATH_H
+  const yMax = pathTop - 4
+  const yMin = fb + 44
+  const placed: BuildingSlot[] = []
+  const hit = (r: Rect, o: Rect, gx: number, gy: number): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
+  for (const sp of SLOT_SPECS) {
+    const ax = xl + sp.fx * (xr - xl)
+    const ay = sp.row === 'path' ? yMax : (yMin + yMax) / 2
+    let best: { x: number; y: number; cost: number } | null = null
+    for (let y = yMin; y <= yMax; y += 3)
+      for (let x = Math.ceil(xl + sp.fw / 2); x <= xr - sp.fw / 2; x += 3) {
+        if (y - sp.h < fb - 8) continue // 素材頂端不能伸進遠景
+        const r = { x0: x - sp.fw / 2, x1: x + sp.fw / 2, y0: y - sp.fd, y1: y }
+        if (fixed.some((f) => hit(r, f, 0, 0))) continue
+        if (placed.some((p) => hit(r, slotFootprint(p), sp.kind === 'catTree' && p.kind === 'kennel' ? 26 : 6, sp.kind === 'catTree' && p.kind === 'kennel' ? 10 : 4))) continue
+        const cost = Math.abs(x - ax) + 1.6 * Math.abs(y - ay)
+        if (!best || cost < best.cost) best = { x, y, cost }
+      }
+    if (best) placed.push({ id: sp.id, kind: sp.kind, x: best.x, y: best.y, w: sp.w, h: sp.h, fw: sp.fw, fd: sp.fd })
   }
-  return slots
+  return placed
 }
