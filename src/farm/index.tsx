@@ -7,8 +7,10 @@ import { gameNow, overrides, worldHour, worldWeather } from './overrides'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
+import { bowlLeft } from './sim/buildings'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
 
 // 測試模式面板：只在開發環境載入。正式 build 時 import.meta.env.DEV 會被替換成 false，
@@ -41,6 +43,9 @@ export function Farm() {
   const petCount = useFarmStore((s) => s.save?.pets.length ?? 0)
   const adoptOpen = useUIStore((s) => s.adoptOpen)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
+  const buildMode = useUIStore((s) => s.buildMode)
+  /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
+  const [layoutVersion, setLayoutVersion] = useState(0)
 
   // 有視窗最大化時，場景被蓋住，暫停動畫
   const covered = useWindowStore((s) => Object.values(s.windows).some((w) => !w.minimized && w.maximized))
@@ -65,6 +70,7 @@ export function Farm() {
       requestBath: (id) => useFarmStore.getState().runAction('bath', id),
       wake: (id) => useFarmStore.getState().wakeForDrag(id),
       notify: (m) => useUIStore.getState().showToast(m),
+      eatAtBowl: (id) => useFarmStore.getState().eatAtBowl(id),
     }
   }, [engine])
 
@@ -81,13 +87,13 @@ export function Farm() {
 
   // 數值結算（每 10 秒）與禮物擲骰（每分鐘）。不受動畫暫停影響，用真實時間
   useEffect(() => {
-    const stat = window.setInterval(() => useFarmStore.getState().tick(), BALANCE.statTickSeconds * 1000)
+    const stat = window.setInterval(() => useFarmStore.getState().tick(engine.sleepersAtBuilding()), BALANCE.statTickSeconds * 1000)
     const gift = window.setInterval(() => useFarmStore.getState().rollGift(), 60_000)
     return () => {
       window.clearInterval(stat)
       window.clearInterval(gift)
     }
-  }, [])
+  }, [engine])
 
   // 畫布大小：貼合容器（選單列以下的整個可視區域），以裝置像素計，所以放大倍率是整數、不會模糊
   useEffect(() => {
@@ -101,6 +107,7 @@ export function Farm() {
       canvas.width = w
       canvas.height = h
       engine.setSize(w, h, dpr)
+      setLayoutVersion((n) => n + 1)
     }
     resize()
     const ro = new ResizeObserver(resize)
@@ -117,6 +124,7 @@ export function Farm() {
     let raf = 0
     let last = performance.now()
     let lastPets: unknown = null
+    let lastOwned: unknown = null
     let lastDraw = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
@@ -136,6 +144,11 @@ export function Farm() {
       const st = useFarmStore.getState()
       const nowMs = gameNow()
       const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs), gifts: st.gifts }
+      if (st.save?.ownedBuildings !== lastOwned) {
+        lastOwned = st.save?.ownedBuildings
+        engine.setOwned(st.save?.ownedBuildings ?? [])
+      }
+      engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
       if (st.save?.pets !== lastPets) {
         lastPets = st.save?.pets
         engine.sync(st.save?.pets ?? [])
@@ -209,8 +222,18 @@ export function Farm() {
   }, [petCount, selected])
   // 領養視窗或啟動台開著時，關掉氣泡選單
   useEffect(() => {
-    if (adoptOpen || launchpadOpen) setSelected(null)
+    if (adoptOpen || launchpadOpen) {
+      setSelected(null)
+      useUIStore.getState().setBuildMode(false)
+    }
   }, [adoptOpen, launchpadOpen])
+  // 建築模式：關掉氣泡選單；沒有存檔（還沒領養）時不能進入
+  useEffect(() => {
+    if (buildMode) setSelected(null)
+  }, [buildMode])
+  useEffect(() => {
+    if (!hasSave && buildMode) useUIStore.getState().setBuildMode(false)
+  }, [hasSave, buildMode])
 
   const local = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -428,6 +451,8 @@ export function Farm() {
           </button>
         </div>
       )}
+
+      {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} />}
 

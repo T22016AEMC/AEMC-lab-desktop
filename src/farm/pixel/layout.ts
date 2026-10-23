@@ -29,7 +29,14 @@ export interface Layout {
   farBottom: number
   /** 住家的位置與尺寸 */
   house: { x0: number; x1: number; baseY: number }
+  /**
+   * 已購買的建築 id（引擎在存檔變動時換一個新的 Set）。購買後的建築腳下佔地才加入障礙（blockers），
+   * 太窄的視窗放不下的建築不在 buildingSlots 裡，所以紀錄還在、但沒有畫面也沒有障礙。
+   */
+  owned: ReadonlySet<string>
 }
+
+const NO_OWNED: ReadonlySet<string> = new Set()
 
 export const HOUSE_X0 = 6
 export const HOUSE_W = 139
@@ -93,6 +100,7 @@ export function computeLayout(backW: number, backH: number, dpr: number): Layout
     offsetY: backH - H * S,
     farBottom,
     house: { x0: HOUSE_X0, x1: HOUSE_X0 + HOUSE_W, baseY: H - 6 },
+    owned: NO_OWNED,
   }
 }
 
@@ -225,15 +233,16 @@ export function petBounds(L: Layout): Rect {
   return { x0: lampX() + 42, x1: L.W - 10, y0: L.farBottom + BACK_MARGIN, y1: L.H - 4 }
 }
 
-const blockerCache = new WeakMap<Layout, Rect[]>()
+const blockerCache = new WeakMap<Layout, { owned: ReadonlySet<string>; rects: Rect[] }>()
 
 /**
  * 寵物不能站進去的矩形（腳底座標）：鐘樓的後面與底座、水池整個（含石頭圍邊）、樹幹。
- * 鐘樓與水池的前方保持可走。同一個 Layout 的結果會快取。
+ * 鐘樓與水池的前方保持可走。已購買（而且這個視窗放得下）的建築腳下佔地也是障礙。
+ * 同一個 Layout、同一份 owned 的結果會快取。
  */
 export function blockers(L: Layout): Rect[] {
   const hit = blockerCache.get(L)
-  if (hit) return hit
+  if (hit && hit.owned === L.owned) return hit.rects
   const tx = towerX(L)
   const pd = pondPos(L)
   const out: Rect[] = [
@@ -245,7 +254,8 @@ export function blockers(L: Layout): Rect[] {
     // 裝飾物：腳下一小塊（寵物不會走進去、也不會站在被它遮住的位置）
     else if (DECOR_SIZE[o.key]) out.push({ x0: o.x - DECOR_SIZE[o.key][0] * 0.4, x1: o.x + DECOR_SIZE[o.key][0] * 0.4, y0: o.y - DECOR_BLOCK_D, y1: o.y + 1 })
   }
-  blockerCache.set(L, out)
+  out.push(...slotBlockers(buildingSlots(L), L.owned))
+  blockerCache.set(L, { owned: L.owned, rects: out })
   return out
 }
 
@@ -451,14 +461,22 @@ export const PATH_FREE_MIN = 36
 /** 走道上空位的腳底線 y */
 export const pathFootY = (L: Layout): number => pathTopOf(L) + PATH_FOOT
 
+/** 空位的素材外框（建築模式的虛線框、購買後建築的畫面範圍）：腳底中心在 (x, y)，往上 h */
+export const slotBox = (s: BuildingSlot): Rect => ({ x0: s.x - s.w / 2, x1: s.x + s.w / 2, y0: s.y - s.h, y1: s.y })
+
+/** 已購買、而且這個視窗放得下的建築空位（畫面上畫出來、寵物會使用的建築） */
+export function ownedSlots(L: Layout): BuildingSlot[] {
+  return buildingSlots(L).filter((s) => L.owned.has(s.id))
+}
+
 /** 空位的佔地矩形 */
 export const slotFootprint = (s: BuildingSlot): Rect => ({ x0: s.x - s.fw / 2, x1: s.x + s.fw / 2, y0: s.y - s.fd, y1: s.y })
 
 /**
- * 建築空位（本版不顯示、也不擋寵物）。建築購買之後才加入障礙：
+ * 建築空位（建築模式才顯示虛線；沒買的空位不擋寵物）。建築購買之後才加入障礙：
  * 把已擁有的空位交給 slotBlockers，結果併進 blockers() 的陣列（腳下佔地稍微放大一點，寵物才不會貼著牆擠進去）。
  * 購買後走道上（狗窩、食盆水盆、貓跳台）會變窄，寵物要繞行，所以走道下半部必須保留 PATH_FREE_MIN 以上的寬度。
- * 目前沒有任何建築，所以 blockers() 不含空位。
+ * blockers() 會把 L.owned 裡的（而且排得進這個視窗的）空位併進來。
  */
 export function slotBlockers(slots: BuildingSlot[], owned: ReadonlySet<string>): Rect[] {
   return slots.filter((s) => owned.has(s.id)).map((s) => {
@@ -591,7 +609,7 @@ export interface BuildingAvailability {
 
 /**
  * 依目前視窗大小，哪些建築有空位可放（每種建築有自己的專用標記空位）。
- * 本版還沒有購買介面，只提供這個判斷；介面做好之後：available 為 false 的建築先隱藏，點購買時顯示 message。
+ * available 為 false 的建築（這個視窗放不下）：建築模式不顯示它的空位、只顯示 message；已購買的建築紀錄保留、畫面上隱藏，放大視窗後自動恢復。
  */
 export function buildingAvailability(L: Layout): BuildingAvailability[] {
   const slots = buildingSlots(L)

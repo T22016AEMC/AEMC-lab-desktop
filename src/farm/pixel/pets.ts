@@ -1,8 +1,11 @@
 import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
-import type { Layout } from './layout'
+import type { Weather } from '../sim/worldTime'
+import { releaseUse, updateBuildingUse, type BuildingUse } from './buildingUse'
+import type { BuildingSlot, Layout } from './layout'
 import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
+import { findPath, lineClear, type Pt } from './nav'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -94,6 +97,20 @@ export interface Actor {
   bath: BathState | null
   /** 甩水時的水平抖動（邏輯像素） */
   shakeX: number
+  /** 正在使用的建築（食盆、狗窩、貓跳台）；null = 沒在使用 */
+  bld: BuildingUse | null
+  /** 去食盆吃之後，至少隔這麼久（秒）才會再去 */
+  bowlCool: number
+  /** 去建築失敗（走太久、份量被吃完）之後暫時不再嘗試（秒） */
+  bldCool: number
+  /** 下雨後多久出發去躲雨（秒）；null = 沒在下雨 */
+  rainIn: number | null
+  /** 繞過障礙的路徑點（不含目前位置）；pathKey = 這條路徑對應的目標，目標變了就重新規劃 */
+  path: Pt[]
+  pathKey: string
+  pathAge: number
+  /** 睡覺時間到了、但周圍太擠，正在找個不擠的地方睡（已經找了幾秒）；null = 沒在找 */
+  seek: number | null
 }
 
 export interface BehaviorEnv {
@@ -109,9 +126,16 @@ export interface BehaviorEnv {
   emit: (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop', x: number, y: number) => void
   /** 水花、漣漪（引擎負責演出） */
   fx: (kind: 'splash' | 'ripple', x: number, y: number) => void
-  /** 走到水池前之後申請洗澡（扣點）；回傳 null 表示成功，否則是失敗原因 */
+  /** 走到水池前之後申請洗澡（扣金幣）；回傳 null 表示成功，否則是失敗原因 */
   requestBath: (a: Actor) => string | null
   notify: (message: string) => void
+  weather: Weather
+  /** 已購買、而且這個視窗放得下的建築空位（id → 空位）；寵物只會使用這裡有的建築 */
+  buildings: ReadonlyMap<string, BuildingSlot>
+  /** 食盆今天還剩幾份 */
+  bowlLeft: number
+  /** 在食盆吃一份（用掉份量、回復飽食度）；回傳 null 表示成功，否則是失敗原因 */
+  eatAtBowl: (a: Actor) => string | null
 }
 
 const rr = (rand: () => number, a: number, b: number): number => a + rand() * (b - a)
@@ -125,6 +149,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
+    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -153,11 +178,14 @@ export function clampActor(a: Actor, L: Layout): void {
   a.y = c.y
   for (const r of blockers(L)) {
     if (!(a.x > r.x0 && a.x < r.x1 && a.y > r.y0 && a.y < r.y1)) continue
+    // 往最近的出口推出去：下、左、右；障礙上緣在活動範圍之內（購買後的建築）時，從上方撞進去的也能退回上方
     const toDown = r.y1 - a.y
     const toLeft = a.x - r.x0
     const toRight = r.x1 - a.x
-    const m = Math.min(toDown, toLeft, toRight)
-    if (m === toDown) a.y = Math.min(b.y1, r.y1 + 0.5)
+    const toUp = r.y0 - 0.5 >= b.y0 ? a.y - r.y0 : Infinity
+    const m = Math.min(toDown, toLeft, toRight, toUp)
+    if (m === toUp) a.y = r.y0 - 0.5
+    else if (m === toDown) a.y = Math.min(b.y1, r.y1 + 0.5)
     else if (m === toLeft && r.x0 - 0.5 >= b.x0) a.x = r.x0 - 0.5
     else if (m === toRight && r.x1 + 0.5 <= b.x1) a.x = r.x1 + 0.5
     else a.y = Math.min(b.y1, r.y1 + 0.5)
@@ -175,7 +203,9 @@ function pickTarget(a: Actor, env: BehaviorEnv, far = false): void {
     let near = Infinity
     for (const o of env.others) {
       if (o === a) continue
-      near = Math.min(near, Math.hypot((o.x - x) / 46, (o.y - y) / 15), Math.hypot((o.tx - x) / 46, (o.ty - y) / 15))
+      // 睡著的、坐在建築座位上的不會動：離牠們要更遠一點（避免擠在建築前面）
+      const k = o.action === 'sleep' || o.bld?.phase === 'at' ? 1.5 : 1
+      near = Math.min(near, Math.hypot((o.x - x) / (46 * k), (o.y - y) / (15 * k)), Math.hypot((o.tx - x) / (46 * k), (o.ty - y) / (15 * k)))
     }
     // 想要的是：離別的寵物遠、移動距離適中（散步時要遠）
     const dist = Math.hypot(x - a.x, y - a.y)
@@ -184,6 +214,49 @@ function pickTarget(a: Actor, env: BehaviorEnv, far = false): void {
   }
   a.tx = best.x
   a.ty = best.y
+}
+
+/** 周圍有別的寵物擠到這隻嗎（橢圓 42×13 內）。sleepersOnly：只算睡著或坐在座位上的（醒著的會被避讓機制推開）；兩隻都在睡時 id 較大的那隻讓開 */
+function crowdedAt(a: Actor, env: BehaviorEnv, sleepersOnly: boolean): boolean {
+  for (const o of env.others) {
+    if (o === a || o.drag || o.fly || o.bath) continue
+    const seated = o.bld?.phase === 'at'
+    const asleep = o.action === 'sleep'
+    if (sleepersOnly && !seated && !asleep) continue
+    if (sleepersOnly && !seated && o.id > a.id) continue
+    if (Math.hypot((o.x - a.x) / 42, (o.y - a.y) / 13) < 1) return true
+  }
+  return false
+}
+
+/**
+ * 睡覺時間到了而周圍太擠：在附近（左右 110、上下 40 內）挑最近的、離別的寵物夠遠（座位上睡著的要更遠）、
+ * 直線走得到（不用繞過建築）的空位睡；挑不到就往遠處走。
+ */
+function pickSleepSpot(a: Actor, env: BehaviorEnv): void {
+  const b = petBounds(env.layout)
+  let best: { x: number; y: number; d: number } | null = null
+  for (let i = 0; i < 40; i++) {
+    const x = Math.min(b.x1, Math.max(b.x0, a.x + rr(env.rand, -110, 110)))
+    const y = Math.min(b.y1, Math.max(b.y0, a.y + rr(env.rand, -40, 40)))
+    if (!isWalkable(env.layout, x, y) || !lineClear(env.layout, a.x, a.y, x, y)) continue
+    let ok = true
+    for (const o of env.others) {
+      if (o === a) continue
+      const k = o.action === 'sleep' || o.bld?.phase === 'at' ? 1.5 : 1
+      if (Math.hypot((o.x - x) / (46 * k), (o.y - y) / (15 * k)) < 1.2 || Math.hypot((o.tx - x) / (46 * k), (o.ty - y) / (15 * k)) < 1.2) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    const d = Math.hypot(x - a.x, (y - a.y) * 1.6)
+    if (!best || d < best.d) best = { x, y, d }
+  }
+  if (best) {
+    a.tx = best.x
+    a.ty = best.y
+  } else pickTarget(a, env, true)
 }
 
 function setAction(a: Actor, action: Action, dur: number): void {
@@ -267,15 +340,58 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
 
   // 睡覺：夜間規則沿用（23:00～6:00，被叫醒或互動後閒置一段時間才回去睡）
   const sleeping = isSleeping(a.pet, env.hour, env.nowMs)
+
+  // 建築：餓了去食盆、睡覺時間去狗窩／貓跳台、下雨去躲雨；使用中就由建築行為處理這個影格
+  if (updateBuildingUse(a, dt, env, { sleeping, frozen }, BUILDING_OPS, sp.speed)) return
+
   if (sleeping) {
     a.override = a.override?.tag === 'pet' ? a.override : null
-    if (a.action !== 'sleep') setAction(a, 'sleep', 1e9)
     if (a.override) {
       a.override.left -= dt
       if (a.override.left <= 0) a.override = null
     }
+    // 睡覺位置：周圍太擠（別的寵物睡在旁邊、坐在建築座位上）就先走到附近不擠的地方再睡；
+    // 狗窩、貓跳台坐滿時多出來的寵物就是這樣原地附近睡，不會疊在一起
+    if (a.seek !== null) {
+      a.seek += dt
+      if (a.action !== 'walk') setAction(a, 'walk', 1e9)
+      if (Math.hypot(a.tx - a.x, a.ty - a.y) < 3 || a.seek > 25) {
+        if (a.seek <= 25 && crowdedAt(a, env, true)) pickSleepSpot(a, env)
+        else {
+          a.seek = null
+          setAction(a, 'sleep', 1e9)
+        }
+      } else {
+        moveToward(a, dt, sp.speed, env)
+        // 被兩邊的睡覺寵物夾住（避讓互相抵銷）：兩秒沒走動就換個地方，找太久（6 秒）就直接睡
+        a.stuckT += dt
+        if (a.stuckT > 2) {
+          if (Math.hypot(a.x - a.lastX, a.y - a.lastY) < 4) {
+            if (a.seek > 6) {
+              a.seek = null
+              setAction(a, 'sleep', 1e9)
+            } else pickSleepSpot(a, env)
+          }
+          a.stuckT = 0
+          a.lastX = a.x
+          a.lastY = a.y
+        }
+      }
+      return
+    }
+    if (a.action !== 'sleep' ? crowdedAt(a, env, true) : a.t > 1 && crowdedAt(a, env, true)) {
+      a.seek = 0
+      a.stuckT = 0
+      a.lastX = a.x
+      a.lastY = a.y
+      pickSleepSpot(a, env)
+      setAction(a, 'walk', 1e9)
+      return
+    }
+    if (a.action !== 'sleep') setAction(a, 'sleep', 1e9)
     return
   }
+  a.seek = null
   if (a.action === 'sleep') setAction(a, 'idle', rr(env.rand, 0.6, 1.4))
 
   // 指令觸發的動作
@@ -375,6 +491,7 @@ export function soakSpot(L: Layout): { x: number; y: number } {
 /** 從氣泡選單選了「洗澡」：自己走到水池前，再跳進去。回傳 false 表示現在不能 */
 export function beginBathWalk(a: Actor, L: Layout): boolean {
   if (a.bath || a.drag || a.fly) return false
+  releaseUse(a)
   a.override = null
   a.bath = { phase: 'walk', t: 0, fromX: a.x, fromY: a.y }
   const st = pondStand(L)
@@ -395,6 +512,7 @@ export function cancelBath(a: Actor): void {
 
 /** 直接跳進水池（拖曳放開在水面上，或走到水池前）。已經通過扣點與占用檢查 */
 export function enterPond(a: Actor): void {
+  releaseUse(a)
   a.bath = { phase: 'jump', t: 0, fromX: a.x, fromY: a.y }
   a.override = null
   setAction(a, 'sit', 1e9)
@@ -496,9 +614,21 @@ function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
   }
 }
 
+const BUILDING_OPS = { setAction, moveToward: (a: Actor, dt: number, speed: number, env: BehaviorEnv) => moveToward(a, dt, speed, env) }
+
+/** 朝目標走。目標前面有障礙（購買後的建築形成的牆）就先規劃繞行路線，一個路徑點一個路徑點走 */
 function moveToward(a: Actor, dt: number, speed: number, env: BehaviorEnv): void {
-  const dx = a.tx - a.x
-  const dy = a.ty - a.y
+  a.pathAge += dt
+  const key = Math.round(a.tx) + ',' + Math.round(a.ty)
+  if (a.pathKey !== key || a.pathAge > 3) {
+    a.pathKey = key
+    a.pathAge = 0
+    a.path = findPath(env.layout, a.x, a.y, a.tx, a.ty) ?? []
+  }
+  while (a.path.length > 1 && Math.hypot(a.path[0].x - a.x, a.path[0].y - a.y) < 2.5) a.path.shift()
+  const wp = a.path.length ? a.path[0] : { x: a.tx, y: a.ty }
+  const dx = wp.x - a.x
+  const dy = wp.y - a.y
   const d = Math.hypot(dx, dy) || 1
   // 垂直方向走得慢一點（斜視角）
   let vx = (dx / d) * speed + a.sepX
@@ -526,8 +656,10 @@ export function computeSeparation(actors: Actor[]): void {
     for (let j = i + 1; j < actors.length; j++) {
       const A = actors[i]
       const B = actors[j]
-      const rx = 50
-      const ry = 16
+      // 坐在建築座位上、睡著的不會動：別的寵物要離牠們更遠一點（範圍放大 1.4 倍）
+      const k = A.bld?.phase === 'at' || B.bld?.phase === 'at' || A.action === 'sleep' || B.action === 'sleep' ? 1.4 : 1
+      const rx = 50 * k
+      const ry = 16 * k
       let dx = A.x - B.x
       let dy = A.y - B.y
       const d = Math.hypot(dx / rx, dy / ry)
@@ -541,8 +673,13 @@ export function computeSeparation(actors: Actor[]): void {
       const ux = dx / (rx * rx) / gl
       const uy = dy / (ry * ry) / gl
       const push = s * 60
-      // 睡著的不動，由醒著的那隻讓開
-      const wa = A.action === 'sleep' ? 0 : B.action === 'sleep' ? 1 : 0.5
+      // 睡著的、在建築座位上的不動，由別的寵物讓開
+      const fa = A.action === 'sleep' || A.bld?.phase === 'at'
+      const fb = B.action === 'sleep' || B.bld?.phase === 'at'
+      // 正在走去座位的寵物不被座位上的寵物推開（否則走不到座位）
+      let wa = 0.5
+      if (fa && !fb) wa = B.bld?.phase === 'walk' ? 1 : 0
+      else if (fb && !fa) wa = A.bld?.phase === 'walk' ? 0 : 1
       A.sepX += ux * push * wa * 2
       A.sepY += uy * push * wa * 2
       B.sepX -= ux * push * (1 - wa) * 2

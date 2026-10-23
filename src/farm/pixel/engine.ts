@@ -1,14 +1,17 @@
 import type { Pet } from '../save/types'
 import type { FarmEffect } from '../sim/commands'
+import { buildingDef } from '../config/buildings'
 import { isSleeping } from '../sim/rules'
 import { lowStatNotices } from '../sim/stats'
 import type { Weather } from '../sim/worldTime'
 import { assets, drawSprite, type Sprite } from './assets'
 import { drawClock } from './clock'
+import { drawEmptyIcon } from './icons'
 import {
-  DOOR, HOUSE_H, HOUSE_W, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, pondPos, sceneObjects,
-  toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type Layout,
+  DOOR, HOUSE_H, HOUSE_W, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
+  toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
 } from './layout'
+import { releaseUse } from './buildingUse'
 import {
   beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
@@ -35,6 +38,8 @@ export interface EngineHooks {
   /** 睡覺中的寵物被拖起來 */
   wake: (petId: string) => void
   notify: (message: string) => void
+  /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）；回傳 null 成功，否則失敗原因 */
+  eatAtBowl: (petId: string) => string | null
 }
 
 /** 放開拖曳的結果 */
@@ -78,7 +83,11 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
-  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {} }
+  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null }
+  /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
+  private ownedIds: ReadonlySet<string> = new Set()
+  bowlLeft = 0
+  private bmap: { L: Layout; owned: ReadonlySet<string>; map: Map<string, BuildingSlot> } | null = null
   private anims: Anim[] = []
   private dragOff = { dx: 0, dy: 0 }
   private draggingId: string | null = null
@@ -93,6 +102,7 @@ export class PixelEngine {
   /** 設定畫布大小（裝置像素）；既有寵物依新範圍夾回 */
   setSize(backW: number, backH: number, dpr: number): void {
     this.layout = computeLayout(Math.max(1, backW), Math.max(1, backH), dpr)
+    this.layout.owned = this.ownedIds
     for (const a of this.actors.values()) clampActor(a, this.layout)
   }
 
@@ -106,6 +116,36 @@ export class PixelEngine {
       else this.actors.set(pet.id, createActor(pet, this.layout, this.rand))
     }
     if (this.selectedId && !this.actors.has(this.selectedId)) this.selectedId = null
+  }
+
+  /**
+   * 設定已購買的建築（存檔變動時呼叫）。購買後建築的腳下佔地加入障礙，寵物繞行；
+   * 站在新建築障礙裡的寵物（例如剛買下去、寵物剛好站在那裡）會被推出來。
+   */
+  setOwned(ids: readonly string[]): void {
+    this.ownedIds = new Set(ids)
+    this.layout.owned = this.ownedIds
+    for (const a of this.actors.values()) {
+      clampActor(a, this.layout)
+      a.path = []
+      a.pathKey = ''
+    }
+  }
+
+  /** 已購買、而且目前視窗放得下的建築空位（id → 空位）；放不下的建築紀錄還在，只是畫面上隱藏、寵物也不會去 */
+  buildings(): ReadonlyMap<string, BuildingSlot> {
+    const c = this.bmap
+    if (c && c.L === this.layout && c.owned === this.ownedIds) return c.map
+    const map = new Map(ownedSlots(this.layout).map((s) => [s.id, s]))
+    this.bmap = { L: this.layout, owned: this.ownedIds, map }
+    return map
+  }
+
+  /** 睡在狗窩／貓跳台旁邊的寵物 id（睡覺的心情回復倍率用） */
+  sleepersAtBuilding(): Set<string> {
+    const out = new Set<string>()
+    for (const a of this.actors.values()) if (a.bld?.purpose === 'sleep' && a.bld.phase === 'at') out.add(a.id)
+    return out
   }
 
   applyEffects(effects: FarmEffect[]): void {
@@ -164,6 +204,7 @@ export class PixelEngine {
     const env: BehaviorEnv = {
       layout: this.layout, nowMs: f.nowMs, hour: f.hour, rand: this.rand, selectedId: this.selectedId, others: list, emit: this.emit,
       fx: this.fx, requestBath: this.requestBath, notify: (m) => this.hooks.notify(m),
+      weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id),
     }
     for (const a of list) updateActor(a, dt, env)
     for (const an of this.anims) an.t += dt
@@ -233,6 +274,13 @@ export class PixelEngine {
           drawSprite(ctx, s, o.x, o.y)
         },
       })
+    }
+    // 已購買的建築（這個視窗放得下的才畫）：依腳底 y 排前後；食盆空了在上方顯示「空」
+    for (const slot of this.buildings().values()) {
+      const def = buildingDef(slot.id)
+      const spr = def ? assets.get(def.sprite) : null
+      if (spr) items.push({ y: slot.y, draw: () => drawSprite(ctx, spr, slot.x, slot.y) })
+      if (slot.id === 'bowls' && this.bowlLeft <= 0) items.push({ y: slot.y + 60, draw: () => drawEmptyIcon(ctx, slot.x, slot.y - slot.h - 3 + Math.round(Math.sin(this.time * 3) * 1)) })
     }
     for (const a of this.actors.values()) {
       if (a.bath?.phase === 'soak') continue // 由水池一起畫
@@ -415,8 +463,8 @@ export class PixelEngine {
   }
 
   statusIcon(a: Actor, f: FrameInfo): string | null {
-    if (isSleeping(a.pet, f.hour, f.nowMs)) return 'fx_zzz'
-    if (a.override?.tag === 'eat') return null
+    if (isSleeping(a.pet, f.hour, f.nowMs)) return a.action === 'sleep' ? 'fx_zzz' : null // 走去狗窩／貓跳台的路上還沒睡
+    if (a.override?.tag === 'eat' || (a.bld?.purpose === 'eat' && a.bld.phase === 'at')) return null
     const n = lowStatNotices(a.pet)
     if (n.length) return n[Math.floor(this.time / 2.5) % n.length].icon === 'exclaim' ? 'fx_exclaim' : n[Math.floor(this.time / 2.5) % n.length].icon === 'sweat' ? 'fx_sweat' : 'fx_bubble'
     if (a.action === 'happy' || a.override?.tag === 'pet' || (a.pet.mood >= 92 && Math.floor(this.time / 3) % 3 === 0)) return 'fx_heart'
@@ -516,6 +564,7 @@ export class PixelEngine {
     const a = this.actors.get(id)
     if (!a || isBathing(a)) return false
     cancelBath(a)
+    releaseUse(a)
     if (isSleeping(a.pet, this.lastFrame.hour, this.lastFrame.nowMs)) this.hooks.wake(id)
     const p = fromCss(this.layout, cssX, cssY)
     this.dragOff = { dx: a.x - p.x, dy: a.y - p.y }
