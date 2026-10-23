@@ -29,7 +29,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt'：新版 service worker 安裝後不會自動重新整理頁面（以免打斷洗澡、遊戲）；
+      // 但仍用 skipWaiting + clientsClaim 讓它立刻接手，並由 main.tsx 顯示「有新版本，重新整理即可」
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         id: base,
@@ -49,7 +51,21 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,json}'],
+        // 頁面（index.html）不放進預快取，改成「網路優先」：只要連得上網，打開頁面拿到的一定是最新的 index.html，
+        // 它指向帶雜湊的新 JS 與新素材；離線時才用上次的頁面。
+        // （vite-plugin-pwa 會把 assets/ 底下所有檔案當成「檔名已帶雜湊」而不比對內容，所以素材檔名必須帶雜湊，見 scripts/process-assets.mjs）
+        globPatterns: ['**/*.{js,css,svg,png,ico,webmanifest,json}'],
+        navigateFallback: null,
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: { cacheName: 'pages', networkTimeoutSeconds: 4 },
+          },
+        ],
       },
     }),
   ],

@@ -11,7 +11,7 @@ export function Toast() {
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(hideToast, TOAST_MS)
+    const t = window.setTimeout(hideToast, toast.ms ?? TOAST_MS)
     return () => window.clearTimeout(t)
   }, [toast, hideToast])
 

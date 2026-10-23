@@ -34,6 +34,7 @@ export function Farm() {
   const [lit, setLit] = useState(false)
   const litRef = useRef(false)
   const [assetError, setAssetError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(assets.progress)
 
   const status = useFarmStore((s) => s.status)
   const hasSave = useFarmStore((s) => s.save !== null)
@@ -46,9 +47,16 @@ export function Farm() {
   const coveredRef = useRef(covered)
   coveredRef.current = covered
 
+  const loadAssets = (): void => {
+    setAssetError(null)
+    assets.load().then(() => setAssetsReady(true), (e: Error) => setAssetError(e.message))
+  }
   useEffect(() => {
     void useFarmStore.getState().init()
-    assets.load().then(() => setAssetsReady(true), (e: Error) => setAssetError(e.message))
+    const off = assets.onProgress(setProgress)
+    loadAssets()
+    return off
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 引擎的對外連接：水池洗澡扣點、睡覺中被拖起來醒來、提示訊息
@@ -395,11 +403,29 @@ export function Farm() {
       )}
 
       {!assetsReady && !assetError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#bfe3a0] text-sm font-bold text-[#3b2a1c]">載入中…</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#bfe3a0] text-sm font-bold text-[#3b2a1c]">
+          <div>載入中…</div>
+          <div
+            role="progressbar"
+            aria-label="素材載入進度"
+            aria-valuemin={0}
+            aria-valuemax={progress.total || 1}
+            aria-valuenow={progress.loaded}
+            className="h-3 w-48 border-2 border-[#3b2a1c] bg-[#e8dcc0] p-px"
+          >
+            <div className="h-full bg-[#e8892b]" style={{ width: `${progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0}%` }} />
+          </div>
+          <div className="text-xs font-normal tabular-nums">
+            {progress.loaded} / {progress.total || '…'}
+          </div>
+        </div>
       )}
       {assetError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#bfe3a0] px-6 text-center text-sm font-bold text-[#c0392b]">
-          {assetError}，請重新整理網頁
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#bfe3a0] px-6 text-center text-sm font-bold text-[#c0392b]">
+          <div role="alert">{assetError}</div>
+          <button type="button" className="px-btn px-3 py-1 text-xs text-[#3b2a1c]" onClick={loadAssets}>
+            重試
+          </button>
         </div>
       )}
 

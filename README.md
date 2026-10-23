@@ -77,6 +77,10 @@ node scripts/process-assets.mjs "<原圖資料夾>"      # 或設定環境變數
 
 **預留給後續階段**：建築購買與建築功能（澡盆、蹺蹺板、沙坑、篝火、野餐墊、食盆水盆、花圃、狗窩、貓跳台；素材已處理好，位置保留在 `buildingSlots`）、「玩耍」互動、使用程式賺點數、拍照。
 
+## 素材快取（為什麼檔名要帶雜湊）
+
+`public/assets/` 裡的圖集與 manifest 檔名一律帶內容雜湊（`scene.10a965c2.png`、`manifest.18e08371.json`），由 `scripts/process-assets.mjs` 產生，並把目前 manifest 的檔名寫進 `src/farm/pixel/assetIndex.ts`。原因：vite-plugin-pwa 會把 `assets/` 底下所有檔案當成「檔名已帶雜湊」，不會檢查內容有沒有變；沒有雜湊的 `scene.png` 會永遠留在使用者的 service worker 快取裡，新程式就會配到舊圖集。換素材的流程：改素材 → 重跑 `node scripts/process-assets.mjs` → 提交 `public/assets/` 與 `assetIndex.ts`（舊雜湊檔會被自動清掉）。頁面採網路優先、service worker 立刻接手但不自動重新整理，接手時顯示「有新版本，重新整理即可」。
+
 ## 拖曳與水池洗澡
 
 - **拖曳寵物**：按住約 150 ms，或移動超過 4 px，開始拖曳；沒拖就是點擊（開氣泡選單）。拖曳中寵物離地約 9 個邏輯像素、開心姿勢、地上留影子。放開：站得住的地方落地彈跳；不可站的地方（住家、鐘樓底座、水池石頭、樹幹、路燈、天空）彈回最近的可走位置；水面上洗澡。睡覺中的寵物也能拖，拖起時醒來（貓心情 −15、狗沒差，不用點數）。座標轉換全部走 `layout.ts` 的 `fromCss`（處理 devicePixelRatio 與整數縮放）。

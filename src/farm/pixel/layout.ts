@@ -468,19 +468,24 @@ function computeSlots(L: Layout, specs: SlotSpec[], before: BuildingSlot[], obst
   const pathTop = pathTopOf(L)
   const yMax = pathTop + 2
   // 空位的佔地要完整落在可走區域裡（水池旁那條可走帶也算，不過那裡沒有走道上緣）
-  const inside = (r: Rect): boolean => zones.some((z) => r.x0 >= z.x0 + 2 && r.x1 <= Math.min(z.x1, xr) && r.y0 >= z.y0 && r.y1 <= z.y1 + 4)
+  const inside = (r: Rect, xMax: number): boolean => zones.some((z) => r.x0 >= z.x0 + 2 && r.x1 <= Math.min(z.x1, xMax) && r.y0 >= z.y0 && r.y1 <= z.y1 + 4)
   const placed: BuildingSlot[] = []
   for (const sp of specs) {
-    const ax = xl + sp.fx * (xr - xl)
+    // 狗窩：住家右邊、路燈右側的走道上緣，離路燈 44 像素以上；貓跳台：鐘樓正下方的走道上緣（鐘樓門前），離畫面右緣留 > 40 像素
+    const xMax = sp.kind === 'catTree' ? L.W - 24 : xr
+    const xMin = sp.kind === 'kennel' ? lampX() + LAMP_W / 2 + 44 + sp.fw / 2 : sp.kind === 'catTree' ? towerX(L) - 8 : zones[zones.length - 1].x0 + sp.fw / 2
+    const ax = sp.kind === 'kennel' ? xMin : sp.kind === 'catTree' ? towerX(L) : xl + sp.fx * (xr - xl)
     const yLo = sp.row === 'edge' ? pathTop - 2 : Math.max(fb + BACK_MARGIN + sp.fd + 2, fb - 8 + sp.h)
     const yHi = sp.row === 'edge' ? yMax : pathTop - 6
     const ay = sp.row === 'edge' ? pathTop : yLo + sp.fy * (yHi - yLo)
     let best: { x: number; y: number; cost: number } | null = null
     for (let y = yLo; y <= yHi; y += 3)
-      for (let x = Math.ceil(zones[zones.length - 1].x0 + sp.fw / 2); x <= xr - sp.fw / 2; x += 3) {
+      for (let x = Math.ceil(xMin); x <= (sp.kind === 'catTree' ? towerX(L) + 8 : xMax - sp.fw / 2); x += 2) {
         if (y - sp.h < fb - 8) continue // 素材頂端不能伸進遠景
+        // 貓跳台的素材頂端要在鐘樓腳底之下（不蓋到塔門，也不擋塔門的 hover 與點擊範圍）
+        if (sp.kind === 'catTree' && y - sp.h < towerBase(L) + 6) continue
         const r = { x0: x - sp.fw / 2, x1: x + sp.fw / 2, y0: y - sp.fd, y1: y }
-        if (!inside(r)) continue
+        if (!inside(r, xMax)) continue
         if (fixed.some((f) => hit(r, f))) continue
         const pair = (q: BuildingSlot): boolean =>
           (sp.kind === 'catTree' && q.kind === 'kennel') || (sp.kind === 'kennel' && q.kind === 'catTree')
@@ -497,4 +502,42 @@ function computeSlots(L: Layout, specs: SlotSpec[], before: BuildingSlot[], obst
 /** 建築空位（排好的結果會快取） */
 export function buildingSlots(L: Layout): BuildingSlot[] {
   return scene(L).slots
+}
+
+/** 窄視窗放不下某個建築時，購買時顯示的提示 */
+export const SLOT_UNAVAILABLE_MESSAGE = '此視窗大小空間不足，請放大視窗'
+
+/** 之後會放的 8 種建築，各自要用哪一種空位（遊樂設施、篝火是大型；食盆水盆、花圃、沙坑、野餐墊是小型） */
+export const BUILDING_NEEDS: { id: string; name: string; kind: SlotKind }[] = [
+  { id: 'kennel', name: '狗窩', kind: 'kennel' },
+  { id: 'catTree', name: '貓跳台', kind: 'catTree' },
+  { id: 'playground', name: '遊樂設施', kind: 'large' },
+  { id: 'campfire', name: '篝火', kind: 'large' },
+  { id: 'bowls', name: '食盆水盆', kind: 'small' },
+  { id: 'flowerbed', name: '花圃', kind: 'small' },
+  { id: 'sandbox', name: '沙坑', kind: 'small' },
+  { id: 'picnic', name: '野餐墊', kind: 'small' },
+]
+
+export interface BuildingAvailability {
+  id: string
+  name: string
+  /** 這個視窗大小放得下嗎；放不下的建築先隱藏，購買時顯示 message（建築種類不會被刪掉，視窗放大後就會出現） */
+  available: boolean
+  slotId: string | null
+  message: string | null
+}
+
+/**
+ * 依目前視窗大小，哪些建築有空位可放（同種空位依序分配給同種建築）。
+ * 本版還沒有購買介面，只提供這個判斷；介面做好之後：available 為 false 的建築先隱藏，點購買時顯示 message。
+ */
+export function buildingAvailability(L: Layout): BuildingAvailability[] {
+  const free = buildingSlots(L).map((s) => ({ ...s }))
+  return BUILDING_NEEDS.map((b) => {
+    const i = free.findIndex((s) => s.kind === b.kind)
+    if (i < 0) return { id: b.id, name: b.name, available: false, slotId: null, message: SLOT_UNAVAILABLE_MESSAGE }
+    const [slot] = free.splice(i, 1)
+    return { id: b.id, name: b.name, available: true, slotId: slot.id, message: null }
+  })
 }

@@ -3,7 +3,10 @@
  *
  * 用法：  node scripts/process-assets.mjs [原圖資料夾]
  *   原圖資料夾預設是 repo 的上一層「像素風圖片」，也可以用環境變數 ASSET_SRC 指定。
- * 輸出：  public/assets/<組名>.png（圖集）、public/assets/manifest.json（每張的位置、尺寸、錨點、動畫幀順序）
+ * 輸出：  public/assets/<組名>.<內容雜湊>.png（圖集）、public/assets/manifest.<內容雜湊>.json（每張的位置、尺寸、錨點、動畫幀順序）、
+ *         src/farm/pixel/assetIndex.ts（目前 manifest 的檔名，程式靠它找到素材）。
+ *         檔名一律帶內容雜湊：素材內容變了檔名就變，瀏覽器快取與 service worker 都不會把新程式配到舊圖集
+ *         （vite-plugin-pwa 會把 assets/ 底下的檔案當成「檔名已帶雜湊」而不檢查內容有沒有變，所以這一點是必要的）。
  *         screenshots/assets-overview-dark.png / assets-overview-light.png（總覽）、screenshots/assets-report.txt（處理報告）
  *
  * 處理步驟（每張原圖）：
@@ -15,7 +18,8 @@
  *  5. 打包成圖集並產生 manifest 與總覽圖、處理報告。
  */
 import sharp from 'sharp'
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -699,6 +703,8 @@ function shelfPack(frames, maxW = 1024) {
 
 async function writeOutputs() {
   let totalBytes = 0
+  // 先清掉舊的輸出（舊雜湊的檔案不留，避免 dist 裡堆積沒人用的舊圖集）
+  for (const f of readdirSync(OUT)) if (/\.(png|json)$/.test(f)) unlinkSync(join(OUT, f))
   for (const [group, frames] of Object.entries(atlases)) {
     const { placed, w, h } = shelfPack(frames)
     const atlas = Buffer.alloc(w * h * 4)
@@ -709,8 +715,9 @@ async function writeOutputs() {
     // alpha 只有 0 或 255
     for (let i = 3; i < atlas.length; i += 4) if (atlas[i] !== 0 && atlas[i] !== 255) atlas[i] = atlas[i] >= 128 ? 255 : 0
     const buf = await sharp(atlas, { raw: { width: w, height: h, channels: 4 } }).png({ compressionLevel: 9, palette: false }).toBuffer()
-    writeFileSync(join(OUT, group + '.png'), buf)
-    manifest.atlases[group] = { file: group + '.png', width: w, height: h }
+    const hash = createHash('sha1').update(buf).digest('hex').slice(0, 8)
+    writeFileSync(join(OUT, group + '.' + hash + '.png'), buf)
+    manifest.atlases[group] = { file: group + '.' + hash + '.png', width: w, height: h }
     totalBytes += buf.length
     info(`圖集 ${group}.png：${w}×${h}，${frames.length} 張，${(buf.length / 1024).toFixed(1)} KB`)
   }
@@ -733,8 +740,14 @@ async function writeOutputs() {
     unused_back: '貓的 sit_b 是背面，標記為 unused_back，不用在動畫上。',
     keyMap: { dog: { collie: 'bordercollie' }, cat: { orange: 'tabby', bluecat: 'britishblue' } },
   }
-  writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest))
-  info(`manifest.json：${Object.keys(manifest.frames).length} 張素材；圖集總大小 ${(totalBytes / 1024).toFixed(1)} KB`)
+  const manifestText = JSON.stringify(manifest)
+  const manifestName = 'manifest.' + createHash('sha1').update(manifestText).digest('hex').slice(0, 8) + '.json'
+  writeFileSync(join(OUT, manifestName), manifestText)
+  writeFileSync(
+    join(ROOT, 'src', 'farm', 'pixel', 'assetIndex.ts'),
+    "/** 由 scripts/process-assets.mjs 產生，請勿手改：目前 manifest 的檔名（帶內容雜湊）。素材內容變了這個檔名就會變。 */\nexport const ASSET_MANIFEST = '" + manifestName + "'\n",
+  )
+  info(`${manifestName}：${Object.keys(manifest.frames).length} 張素材；圖集總大小 ${(totalBytes / 1024).toFixed(1)} KB`)
 
   // 檢查：每張的洋紅殘留、alpha 值
   for (const frames of Object.values(atlases))
