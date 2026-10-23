@@ -47,13 +47,18 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 ## 寵物養殖場（src/farm/）
 
-- 桌面是養殖場，沒有桌面圖示；Dock 平時只有「啟動台」，程式開啟後才出現圖示。
-- 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件，改資料格式要同步更新 `migrate.ts`。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。
-- 測試模式（`src/dev/`）只能在 `import.meta.env.DEV` 下條件式動態載入，正式 build 不可包含；改完要檢查 `dist/` 搜尋不到「測試模式」等字串。測試用的修改入口不要放進 `farmStore`。
-- 場景邏輯座標高度固定 900，背景必須畫滿任何比例；生物活動範圍都要限制在各自區域內。純邏輯（`sim/`）不碰 DOM，可在 Node 測試。
-- 生物外觀都在 `src/farm/art/`（部件式 SVG 路徑，`drawCreature(ctx, look)`）；場景（`render/creatures/art.ts` 由實體狀態產生 Look）、領養預覽（`ui/CreaturePreview.tsx`）、圖鑑共用同一套，不可各畫各的。改外觀後碰撞（`bodyHalf`）與點擊範圍都由實際繪製大小推算，要重跑邊界壓力模擬與避讓測試。
-- 存檔 schema 目前是 v2（`Pet.variant`），舊的 `coat` 由 `migrate.ts` 轉換。
-- 第二、三段尚未實作：玩耍指令、7 個建築（座標已在 `config/buildings.ts`）、小程式與遊戲的點數獎勵。
+- 桌面是像素風草地養殖場，沒有桌面圖示；**住家是啟動台的入口**（點門；備用入口：選單列小圖示、F4）。Dock 平時隱藏，有內建視窗（小遊戲）開啟時才滑出，沒有啟動台按鈕。
+- 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件（目前 v3），改資料格式要同步更新 `migrate.ts` 並補測試（v2 含海洋生物與乾淨 v2 都要驗證）。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。寫入失敗要提示使用者（`setStorageErrorHandler`），不可靜默忽略。
+- 測試模式與圖鑑（`src/dev/`）只能在 `import.meta.env.DEV` 下條件式動態載入，正式 build 不可包含；改完要檢查 `dist/` 搜尋不到「測試模式」「生物圖鑑」`__farm`、`shiftTime` 等字串。測試用的修改入口不要放進 `farmStore`。
+- 純邏輯（`sim/`、`pixel/pets.ts`）不碰 DOM，可在 Node 測試。寵物行為只決定「動作名稱」，畫哪一幀由 `ANIMS` 表對應（邏輯與畫圖分離）；不做旋轉、傾斜、縮放，往左走用水平翻轉。
+
+### 像素素材規格與管線
+
+- 素材一律由 `node scripts/process-assets.mjs "<原圖資料夾>"` 從洋紅底原圖產生到 `public/assets/`（圖集＋`manifest.json`）；**原圖不進 repo**（資料夾在 `.gitignore`）。不要手動改圖集，改處理腳本後重跑。
+- 全部素材 1 格像素 = 1 邏輯像素，像素密度必須一致（不可混用大小像素）；狗與貓共用同一個像素格大小。場景邏輯解析度約 480×270，整數倍放大（`image-rendering: pixelated`、處理 devicePixelRatio）；畫圖座標一律取整數。
+- 每張素材有錨點：`ax` 水平中心、`ay` 腳底基準線；同一隻動物所有姿勢腳底對齊。alpha 只有 0 或 255。
+- 動物素材鍵名：`dog_<品種>_<動作>`、`cat_<花色>_<動作>`、`front_dog_*`／`front_cat_*`（領養預覽）；品種 id 與素材鍵名的對應在 `config/species.ts`（`assetKey`）。貓的 `sit_b` 是背面，標記 `unused_back`，不可用在動畫上。
+- 新增素材或改尺寸後，要看 `screenshots/assets-overview.png` 與 `assets-report.txt` 確認沒有洋紅殘留、白框、大小不一。
 
 ## 其他約定
 

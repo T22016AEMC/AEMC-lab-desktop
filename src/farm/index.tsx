@@ -99,8 +99,8 @@ export function Farm() {
         last = now
         return
       }
-      // 高更新率螢幕也只畫到約 60 幀，省電
-      if (now - lastDraw < 15) return
+      // 高更新率螢幕最多畫到約 80 幀，省電
+      if (now - lastDraw < 12) return
       lastDraw = now
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
