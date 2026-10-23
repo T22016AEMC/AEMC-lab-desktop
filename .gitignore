@@ -6,3 +6,7 @@ dev-dist
 *.log
 .DS_Store
 screenshots/
+
+# 像素素材原圖（不進 repo）
+像素風圖片/
+/assets-src/
