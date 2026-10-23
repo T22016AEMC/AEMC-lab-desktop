@@ -565,22 +565,14 @@ async function main() {
         addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
       }
     }
-    // 水池：兩幀只有水面亮紋不同；用寬度 110 反推 p，兩幀共用同一個 p 與同一個畫布大小、同一個錨點
+    // 水池：原圖有兩幀（只有水面亮紋不同），但切換時輪廓差 1px 會抖，所以只取第一幀、不輸出第二幀（水面靜止）。
+    // 用寬度 110 反推 p；水面橢圓由這一幀偵測
     {
-      const pond = await sheet({ file: 'scene_pond.png', cols: 2, rows: 1, names: ['pond_a', 'pond_b'], targets: { pond_a: POND_W }, solveFrom: 'pond_a', solveDim: 'w' })
-      const W = Math.max(...pond.frames.map((f) => f.spr.w)), H = Math.max(...pond.frames.map((f) => f.spr.h))
-      const padded = pond.frames.map((f) => {
-        const out = Buffer.alloc(W * H * 4)
-        const ox = Math.round((W - f.spr.w) / 2), oy = H - f.spr.h
-        for (let y = 0; y < f.spr.h; y++) f.spr.rgba.copy(out, ((y + oy) * W + ox) * 4, y * f.spr.w * 4, (y + 1) * f.spr.w * 4)
-        return { name: f.name, spr: { w: W, h: H, rgba: out }, dw: f.spr.w, dh: f.spr.h }
-      })
-      const water = detectWater(padded[0].spr)
-      for (const f of padded) addFrame('scene', f.name, f.spr, { meta: { water } })
-      info('水池 兩幀 ' + padded.map((f) => f.dw + '×' + f.dh).join('、') + ' → 統一畫布 ' + W + '×' + H + '，水面橢圓 cx=' + water.cx + ' cy=' + water.cy + ' rx=' + water.rx + ' ry=' + water.ry + '（p=' + pond.p.toFixed(2) + '）')
-      let diff = 0
-      for (let i = 3; i < W * H * 4; i += 4) if (padded[0].spr.rgba[i] !== padded[1].spr.rgba[i]) diff++
-      info('水池兩幀的透明度差異像素數：' + diff + '（0 = 輪廓完全一致）')
+      const pond = await sheet({ file: 'scene_pond.png', cols: 2, rows: 1, names: ['pond', null], targets: { pond: POND_W }, solveFrom: 'pond', solveDim: 'w' })
+      const f = pond.frames[0]
+      const water = detectWater(f.spr)
+      addFrame('scene', 'pond', f.spr, { meta: { water } })
+      info('水池（只用第一幀）' + f.spr.w + '×' + f.spr.h + '，水面橢圓 cx=' + water.cx + ' cy=' + water.cy + ' rx=' + water.rx + ' ry=' + water.ry + '（p=' + pond.p.toFixed(2) + '）')
     }
     {
       // 開門鐘樓：和關門版用同一個高度 160，貼到 123×160 的畫布（底部中心對齊），並比對兩張的輪廓差異

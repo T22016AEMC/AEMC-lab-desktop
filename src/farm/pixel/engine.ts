@@ -220,7 +220,7 @@ export class PixelEngine {
     const pond = pondPos(L)
     for (const o of sceneObjects(L)) {
       if (o.key === 'pond') {
-        // 水池：2 幀水面閃動（約每 0.5 秒換一幀）；泡澡中的寵物畫在水池上面（下半身被水面遮住）
+        // 水池（靜止，只有一幀）；泡澡中的寵物畫在水池上面（下半身被水面遮住）
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
@@ -326,7 +326,7 @@ export class PixelEngine {
 
   /** 水池本體＋泡澡中的寵物（用水面橢圓裁切，只露出水面以上）＋漣漪 */
   private drawPond(ctx: CanvasRenderingContext2D, x: number, y: number, f: FrameInfo): void {
-    const s = assets.get(Math.floor(this.time / 0.5) % 2 === 0 ? 'pond_a' : 'pond_b')
+    const s = assets.get('pond')
     if (!s) return
     drawSprite(ctx, s, x, y)
     const w = waterEllipse(this.layout)

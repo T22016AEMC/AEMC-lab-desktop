@@ -24,7 +24,7 @@ function buildItems(): Item[] {
     { key: 'house_closed', label: '住家', group: 'obj' },
     { key: 'clocktower', label: '鐘樓', group: 'obj' },
     { key: 'clocktower_open', label: '開門鐘樓', group: 'obj' },
-    { key: 'pond_a', label: '水池', group: 'obj' },
+    { key: 'pond', label: '水池', group: 'obj' },
   ]
   return [...dogs, ...cats, ...objs]
 }

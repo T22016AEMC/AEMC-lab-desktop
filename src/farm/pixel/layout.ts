@@ -42,11 +42,13 @@ export const TREE_W = 82
 export const TREE_H = 103
 export const FAR_H = 37
 export const PATH_H = 67
-/** 水池素材（兩幀同一個畫布大小與錨點）與它的水面橢圓（相對素材左上角），要和 manifest 一致（測試會檢查） */
-export const POND_W = 111
-export const POND_H = 80
-export const POND_AX = 56
-export const WATER = { cx: 56, cy: 42, rx: 43, ry: 26 }
+/** 水池素材（只有一幀，水面靜止）與它的水面橢圓（相對素材左上角），要和 manifest 一致（測試會檢查） */
+export const POND_W = 110
+export const POND_H = 79
+export const POND_AX = 55
+export const WATER = { cx: 55, cy: 41, rx: 43, ry: 26 }
+/** 水池素材左緣（邏輯座標）：在住家煙囪的右邊（煙囪最右約 x=128），不和煙囪輪廓疊在一起 */
+export const POND_LEFT = 130
 /** 樹幹（腳底往上）的佔地：寵物不會站進去 */
 export const TRUNK_HALF_W = 9
 export const TRUNK_H = 12
@@ -150,9 +152,13 @@ export function towerSignCenter(L: Layout): { x: number; y: number } {
   return { x: t.x + TOWER_SIGN.x * TOWER_W, y: t.y + TOWER_SIGN.y * TOWER_H }
 }
 
-/** 水池：放在住家右上方的後排（左邊那棵樹的左側）。x = 水平中心、y = 腳底（素材底邊） */
+/**
+ * 水池：放在住家右上方的後排（左邊那棵樹的左側）。x = 水平中心、y = 腳底（素材底邊）。
+ * y 由草地上緣算出來：整個素材（含最高的蘆葦尖端）都在草地上緣以下、不伸進遠景樹林，所以 y 的下限 = 草地上緣 + 素材高 + 2。
+ * 視窗太矮、放不下時，以草地上緣為優先（水池會更貼近路燈上方，但仍在路燈之上）。
+ */
 export function pondPos(L: Layout): { x: number; y: number } {
-  return { x: HOUSE_X0 + HOUSE_W + 8 + POND_AX, y: Math.min(L.farBottom + 60, L.H - LAMP_H - 16) }
+  return { x: POND_LEFT + POND_AX, y: L.farBottom + POND_H + 2 }
 }
 
 /** 水面橢圓（邏輯座標） */
