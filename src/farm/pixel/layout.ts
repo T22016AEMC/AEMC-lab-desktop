@@ -135,8 +135,14 @@ export interface SceneObject {
 
 export const lampX = (): number => HOUSE_X0 + HOUSE_W + 26
 export const towerX = (L: Layout): number => L.W - TOWER_MARGIN - Math.round(TOWER_W / 2)
-/** 鐘樓腳底：和後排對齊，並確保頂端不會被畫面上緣切掉 */
-export const towerBase = (L: Layout): number => Math.max(L.farBottom + 40, TOWER_H + 6)
+/**
+ * 後排景物（鐘樓、樹）的腳底貼近草地上緣：樹 = 草地上緣 + 10、+8；鐘樓同樣是草地上緣 + 10，
+ * 但鐘樓很高（160），腳底不能高到讓頂端被畫面上緣切掉（>= 166），所以矮一點的視窗會比樹低幾個像素。
+ */
+export const towerBase = (L: Layout): number => Math.max(L.farBottom + BACK_BASE, TOWER_H + 6)
+/** 後排景物腳底離草地上緣的距離，以及寵物活動範圍離草地上緣的邊距 */
+export const BACK_BASE = 10
+export const BACK_MARGIN = 14
 
 /** 鐘樓素材左上角（邏輯座標） */
 export const towerTopLeft = (L: Layout): { x: number; y: number } => ({ x: towerX(L) - Math.round(TOWER_W / 2), y: towerBase(L) - TOWER_H })
@@ -181,8 +187,9 @@ export function inWater(L: Layout, x: number, y: number, pad = 1): boolean {
 export function pondStrip(L: Layout): Rect | null {
   const p = pondPos(L)
   const b = petBounds(L)
-  const r = { x0: p.x - POND_AX + POND_W + 30, x1: b.x0 + 4, y0: p.y + 4, y1: L.H - LAMP_H - 12 - 4 }
-  return r.y1 - r.y0 >= 6 && r.x1 - r.x0 >= 10 ? r : null
+  // x0 = 160：離住家屋頂右緣（約 x=144）夠遠，站在這裡的寵物不會被屋頂遮住；y 從草地上緣下方一路到路燈頂端以上
+  const r = { x0: 160, x1: b.x0 + 4, y0: L.farBottom + BACK_MARGIN, y1: L.H - LAMP_H - 12 - 4 }
+  return r.y1 - r.y0 >= 6 && r.x1 - r.x0 >= 10 && p.y + 10 <= r.y1 ? r : null
 }
 
 /** 水池旁邊走去洗澡、洗完爬出來的站位（腳底座標）：在上面那條可走帶裡，沒被住家與路燈遮住 */
@@ -190,7 +197,7 @@ export function pondStand(L: Layout): { x: number; y: number } {
   const st = pondStrip(L)
   const b = petBounds(L)
   if (!st) return { x: b.x0 + 6, y: Math.min(b.y1, pondPos(L).y + 12) }
-  return { x: st.x0 + 26, y: Math.min(st.y1, st.y0 + 6) }
+  return { x: st.x0 + 26, y: Math.min(st.y1, pondPos(L).y + 10) }
 }
 
 /** 所有可走的區域：主要活動範圍＋水池旁那條可走帶 */
@@ -214,7 +221,8 @@ export function clampToWalk(L: Layout, x: number, y: number): { x: number; y: nu
 /** 寵物活動範圍（腳底座標）：地面帶（含草地與小路），不含天空與遠景，也不含住家與路燈那一塊 */
 export function petBounds(L: Layout): Rect {
   // x0：路燈右側再留一隻寵物的半寬，寵物不會停在燈柱後面被擋住
-  return { x0: lampX() + 42, x1: L.W - 10, y0: L.farBottom + 36, y1: L.H - 4 }
+  // y0：草地上緣下方留一點邊距，草地中段也是活動範圍（不是只有一條窄帶）
+  return { x0: lampX() + 42, x1: L.W - 10, y0: L.farBottom + BACK_MARGIN, y1: L.H - 4 }
 }
 
 const blockerCache = new WeakMap<Layout, Rect[]>()
@@ -232,7 +240,11 @@ export function blockers(L: Layout): Rect[] {
     { x0: tx - TOWER_W / 2 - 8, x1: tx + TOWER_W / 2 + 8, y0: 0, y1: towerBase(L) + 3 },
     { x0: pd.x - POND_AX - 6, x1: pd.x - POND_AX + POND_W + 6, y0: 0, y1: pd.y + 4 },
   ]
-  for (const o of sceneObjects(L)) if (o.key === 'tree') out.push({ x0: o.x - TRUNK_HALF_W, x1: o.x + TRUNK_HALF_W, y0: o.y - TRUNK_H, y1: o.y + 2 })
+  for (const o of sceneObjects(L)) {
+    if (o.key === 'tree') out.push({ x0: o.x - TRUNK_HALF_W, x1: o.x + TRUNK_HALF_W, y0: o.y - TRUNK_H, y1: o.y + 2 })
+    // 裝飾物：腳下一小塊（寵物不會走進去、也不會站在被它遮住的位置）
+    else if (DECOR_SIZE[o.key]) out.push({ x0: o.x - DECOR_SIZE[o.key][0] * 0.4, x1: o.x + DECOR_SIZE[o.key][0] * 0.4, y0: o.y - DECOR_BLOCK_D, y1: o.y + 1 })
+  }
   blockerCache.set(L, out)
   return out
 }
@@ -258,59 +270,129 @@ export function nearestWalkable(L: Layout, x: number, y: number): { x: number; y
   return best ? { x: best.x, y: best.y } : c
 }
 
+/** 裝飾物的素材外框大小 */
+export const DECOR_SIZE: Record<string, [number, number]> = {
+  bush: [47, 40],
+  mushroom: [37, 37],
+  rocks: [52, 34],
+  flowers: [39, 28],
+  stump: [53, 36],
+  tall_grass: [44, 38],
+}
+/** 裝飾物腳下不可站的深度 */
+const DECOR_BLOCK_D = 10
+
+const hit = (r: Rect, o: Rect, gx = 0, gy = gx): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
+const sceneCache = new WeakMap<Layout, { back: SceneObject[]; slots: BuildingSlot[]; decor: SceneObject[] }>()
+
+/** 草地上的小路上緣（路與草地的交界）；建築空位貼在這條線上 */
+export const pathTopOf = (L: Layout): number => L.H - 6 - PATH_H
+
 /**
- * 固定位置的場景物件（不是隨機）：路燈、鐘樓、2 棵樹與少量裝飾。
- * 大型物件在「後排帶」，裝飾物散布在小路兩側的草地；鐘樓周圍約 1.5 倍寬度不放任何裝飾物。
- * 太窄的視窗會自動少放樹與裝飾。
+ * 後排景物（固定位置、不是隨機）：路燈、鐘樓、水池、2 棵樹。鐘樓、樹的腳底貼近草地上緣（草地上緣 + 10 附近），
+ * 水池因為整個素材（含蘆葦尖端）不可超出草地上緣，底邊只能在草地上緣 + 81。
+ * 兩棵樹在路燈右邊到鐘樓淨空範圍之間的 22%、78%（對稱），不縮放；窄視窗只放 1 棵。
  */
-export function sceneObjects(L: Layout): SceneObject[] {
-  const { H, farBottom: fb } = L
-  const G = H - fb
+function backRow(L: Layout): SceneObject[] {
+  const { farBottom: fb } = L
   const pd = pondPos(L)
   const out: SceneObject[] = [
-    { key: 'lamp', x: lampX(), y: H - 12 },
+    { key: 'lamp', x: lampX(), y: L.H - 12 },
     { key: 'clocktower', x: towerX(L), y: towerBase(L) },
     { key: 'pond', x: pd.x, y: pd.y },
   ]
-  // 路燈右邊（水池在住家正上方，不占中間的空地，兩棵樹回到對稱的位置）
   const left = lampX() + LAMP_W / 2 + 10
   const right = towerX(L) - TOWER_CLEAR // 鐘樓淨空範圍的左緣
-  // 樹：中間偏左、中間偏右，不擋住住家與鐘樓
   const tLo = left + TREE_W / 2
   const tHi = right - TREE_W / 2
   const range = tHi - tLo
   if (range >= 70) {
-    out.push({ key: 'tree', x: Math.round(tLo + range * 0.22), y: fb + 46 })
-    if (range >= 100) out.push({ key: 'tree', x: Math.round(tLo + range * 0.78), y: fb + 42 })
-  } else if (range >= 0) out.push({ key: 'tree', x: Math.round(tLo + range / 2), y: fb + 44 })
-  // 裝飾物：最多 4 件，固定位置，散布在路兩側的草地
-  const dLo = left + 14
-  const dHi = right - 22
-  const span = Math.max(0, dHi - dLo)
-  const at = (f: number): number => Math.round(dLo + span * f)
-  out.push({ key: 'bush', x: at(0.06), y: fb + Math.round(G * 0.62) })
-  out.push({ key: 'mushroom', x: at(0.36), y: fb + Math.round(G * 0.38) })
-  if (span >= 120) out.push({ key: 'rocks', x: at(0.64), y: fb + Math.round(G * 0.66) })
-  if (span >= 160) out.push({ key: 'flowers', x: at(0.9), y: fb + Math.round(G * 0.42) })
+    out.push({ key: 'tree', x: Math.round(tLo + range * 0.22), y: fb + BACK_BASE })
+    if (range >= 100) out.push({ key: 'tree', x: Math.round(tLo + range * 0.78), y: fb + BACK_BASE - 2 })
+  } else if (range >= 0) out.push({ key: 'tree', x: Math.round(tLo + range / 2), y: fb + BACK_BASE })
   return out
 }
 
-/** 固定物件在地面上的佔地（用來確認建築空位不和它們重疊） */
-export function footprints(L: Layout): Rect[] {
-  const sizes: Record<string, [number, number]> = {
-    lamp: [LAMP_W * 0.5, 10],
-    clocktower: [TOWER_W, 16],
-    tree: [TREE_W * 0.6, 14],
-    // 裝飾物用整個素材外框（建築空位不可和它們重疊）
-    bush: [47, 40],
-    mushroom: [37, 37],
-    rocks: [52, 34],
-    flowers: [39, 28],
-    pond: [POND_W - 20, 22],
-  }
+const FOOT_SIZES: Record<string, [number, number]> = {
+  lamp: [LAMP_W * 0.5, 10],
+  clocktower: [TOWER_W, 16],
+  tree: [TREE_W * 0.6, 14],
+  pond: [POND_W - 20, 22],
+}
+
+function backFootprints(L: Layout): Rect[] {
   const out: Rect[] = [{ x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - 30, y1: L.house.baseY }]
-  for (const o of sceneObjects(L)) {
-    const [w, d] = sizes[o.key] ?? [40, 10]
+  for (const o of backRow(L)) {
+    const [w, d] = FOOT_SIZES[o.key] ?? [40, 10]
+    out.push({ x0: o.x - w / 2, x1: o.x + w / 2, y0: o.y - d, y1: o.y })
+  }
+  return out
+}
+
+/** 裝飾物（蘑菇、樹樁、灌木、高草叢、石頭、小花叢）的偏好位置：在草地範圍內的比例，故意不排整齊 */
+const DECOR_ANCHORS: { key: string; fx: number; fy: number }[] = [
+  { key: 'mushroom', fx: 0.1, fy: 0.3 },
+  { key: 'stump', fx: 0.47, fy: 0.42 },
+  { key: 'tall_grass', fx: 0.86, fy: 0.22 },
+  { key: 'flowers', fx: 0.95, fy: 0.7 },
+  { key: 'bush', fx: 0.04, fy: 0.84 },
+  { key: 'rocks', fx: 0.66, fy: 0.9 },
+]
+
+/** 裝飾物：避開後排景物、住家、建築空位（含預留範圍）與彼此，離偏好位置最近的可放位置（固定，不是隨機） */
+function decorRow(L: Layout, slots: BuildingSlot[], back: Rect[]): SceneObject[] {
+  const b = petBounds(L)
+  const xl = b.x0 + 6
+  const xr = towerX(L) - TOWER_CLEAR - 16
+  const yTop = L.farBottom + 30
+  const yBot = pathTopOf(L) - 4
+  const placed: { o: SceneObject; r: Rect }[] = []
+  const walls = [...back.map((r) => ({ ...r, y0: r.y0 - 4 })), ...slots.map((s) => slotFootprint(s))]
+  for (const a of DECOR_ANCHORS) {
+    const [w, h] = DECOR_SIZE[a.key]
+    const ax = xl + a.fx * (xr - xl)
+    const ay = yTop + a.fy * (yBot - yTop)
+    let best: { x: number; y: number; d: number } | null = null
+    for (let y = yTop + h * 0.3; y <= yBot; y += 3)
+      for (let x = xl + w / 2; x <= xr - w / 2; x += 3) {
+        // 外框的下半部要和空位、後排景物的佔地分開；整個外框要和已放的裝飾分開
+        // 腳下那一塊（素材外框下面 40%）要和空位、後排景物的佔地分開（裝飾物在空位後面被遮住是正常的 y 排序）
+        const foot = { x0: x - w / 2, x1: x + w / 2, y0: y - h, y1: y }
+        if (walls.some((r) => hit(foot, r, 4))) continue
+        const full = { x0: x - w / 2, x1: x + w / 2, y0: y - h, y1: y }
+        if (placed.some((q) => hit(full, q.r, 4))) continue
+        const d = Math.hypot(x - ax, (y - ay) * 1.4)
+        if (!best || d < best.d) best = { x, y, d }
+      }
+    if (best) placed.push({ o: { key: a.key, x: Math.round(best.x), y: Math.round(best.y) }, r: { x0: best.x - w / 2, x1: best.x + w / 2, y0: best.y - h, y1: best.y } })
+  }
+  return placed.map((q) => q.o)
+}
+
+function scene(L: Layout): { back: SceneObject[]; slots: BuildingSlot[]; decor: SceneObject[] } {
+  const c = sceneCache.get(L)
+  if (c) return c
+  const back = backRow(L)
+  const fixedFoot = backFootprints(L)
+  // 順序：先排所有建築空位（8 個），裝飾物再依偏好位置擺在剩下的地方（避開空位的佔地、後排景物與彼此）
+  const slots = computeSlots(L, SLOT_SPECS, [], fixedFoot)
+  const decor = decorRow(L, slots, fixedFoot)
+  const out = { back, slots, decor }
+  sceneCache.set(L, out)
+  return out
+}
+
+/** 固定位置的場景物件：後排景物＋裝飾物（太窄的視窗放不下的裝飾會省略） */
+export function sceneObjects(L: Layout): SceneObject[] {
+  const sc = scene(L)
+  return [...sc.back, ...sc.decor]
+}
+
+/** 固定物件在地面上的佔地（含住家）；裝飾物用素材外框下面 40%（建築空位的佔地不可和它們重疊） */
+export function footprints(L: Layout): Rect[] {
+  const out = backFootprints(L)
+  for (const o of scene(L).decor) {
+    const [w, d] = DECOR_SIZE[o.key]
     out.push({ x0: o.x - w / 2, x1: o.x + w / 2, y0: o.y - d, y1: o.y })
   }
   return out
@@ -336,66 +418,83 @@ export interface BuildingSlot {
 interface SlotSpec {
   id: string
   kind: SlotKind
-  /** 素材大小與佔地 */
   w: number
   h: number
   fw: number
   fd: number
-  /** 偏好位置：在可用範圍的水平比例，以及貼近小路（path）或在草地中間（mid） */
+  /** 偏好位置：在可用範圍的水平比例；row：edge = 貼著走道上緣、mid = 草地中段、any = 草地到走道上緣之間 */
   fx: number
-  row: 'path' | 'mid'
+  fy: number
+  row: 'edge' | 'mid' | 'any'
 }
 
 /**
- * 要預留的空位，依優先順序（先排先找位置）：
- * 狗窩、貓跳台（專用）→ 大型×2（遊樂設施蹺蹺板、篝火）→ 小型×4（食盆水盆、花圃、沙坑、野餐墊）。
- * 狗窩與貓跳台放在草地上離小路不遠、寵物容易走到的地方，彼此與邊緣都留距離。
+ * 要預留的空位，依優先順序（先排先找位置）：狗窩、貓跳台（走道上緣，彼此遠離）→ 大型 ×2（遊樂設施、篝火，草地中段）
+ * → 小型 ×4（食盆水盆、花圃、沙坑、野餐墊，草地與走道上緣）。
  */
 export const SLOT_SPECS: SlotSpec[] = [
-  { id: 'kennel', kind: 'kennel', w: 87, h: 72, fw: 70, fd: 22, fx: 0.3, row: 'path' },
-  { id: 'catTree', kind: 'catTree', w: 63, h: 79, fw: 48, fd: 22, fx: 0.72, row: 'path' },
-  { id: 'large1', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.12, row: 'mid' },
-  { id: 'large2', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.9, row: 'mid' },
-  { id: 'small1', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, row: 'path' },
-  { id: 'small2', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.12, row: 'path' },
-  { id: 'small3', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.9, row: 'path' },
-  { id: 'small4', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, row: 'mid' },
+  { id: 'kennel', kind: 'kennel', w: 87, h: 72, fw: 66, fd: 22, fx: 0.22, fy: 1, row: 'edge' },
+  { id: 'catTree', kind: 'catTree', w: 63, h: 79, fw: 46, fd: 22, fx: 0.78, fy: 1, row: 'edge' },
+  { id: 'large1', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.25, fy: 0.45, row: 'mid' },
+  { id: 'large2', kind: 'large', w: 100, h: 75, fw: 84, fd: 24, fx: 0.78, fy: 0.45, row: 'mid' },
+  { id: 'small1', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, fy: 1, row: 'edge' },
+  { id: 'small2', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.5, fy: 0.5, row: 'mid' },
+  { id: 'small3', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.05, fy: 0.75, row: 'any' },
+  { id: 'small4', kind: 'small', w: 96, h: 66, fw: 68, fd: 18, fx: 0.95, fy: 0.8, row: 'any' },
 ]
 
 /** 空位的佔地矩形 */
 export const slotFootprint = (s: BuildingSlot): Rect => ({ x0: s.x - s.fw / 2, x1: s.x + s.fw / 2, y0: s.y - s.fd, y1: s.y })
 
 /**
- * 保留給之後建築（狗窩、貓跳台、食盆水盆、花圃、沙坑、遊樂設施、篝火、野餐墊）的空位；本版不顯示。
- * 範圍：寵物活動區的草地（小路以上、鐘樓淨空範圍以左）。每個空位依偏好位置找離它最近、
- * 不和固定物件（住家、水池、樹、路燈、鐘樓、裝飾）與先放好的空位重疊的地方（結果固定，不是隨機）。
- * 放不下的不會硬放（回傳的陣列裡就沒有那一個），由呼叫端統計。
+ * 建築空位（本版不顯示、也不擋寵物）。建築購買之後才加入障礙：
+ * 把已擁有的空位交給 slotBlockers，結果併進 blockers() 的陣列（腳下佔地稍微放大一點，寵物才不會貼著牆擠進去）。
+ * 目前沒有任何建築，所以 blockers() 不含空位。
  */
-export function buildingSlots(L: Layout): BuildingSlot[] {
-  const { H, farBottom: fb } = L
+export function slotBlockers(slots: BuildingSlot[], owned: ReadonlySet<string>): Rect[] {
+  return slots.filter((s) => owned.has(s.id)).map((s) => {
+    const r = slotFootprint(s)
+    return { x0: r.x0 - 2, x1: r.x1 + 2, y0: r.y0 - 2, y1: r.y1 + 1 }
+  })
+}
+
+function computeSlots(L: Layout, specs: SlotSpec[], before: BuildingSlot[], obstacles: Rect[]): BuildingSlot[] {
+  const { farBottom: fb } = L
   const b = petBounds(L)
-  const fixed = footprints(L).map((r) => ({ x0: r.x0 - 4, x1: r.x1 + 4, y0: r.y0 - 6, y1: r.y1 + 4 }))
+  const fixed = obstacles.map((r) => ({ x0: r.x0 - 4, x1: r.x1 + 4, y0: r.y0 - 6, y1: r.y1 + 4 }))
+  const zones = walkZones(L)
   const xl = b.x0 + 6
   const xr = towerX(L) - TOWER_CLEAR
-  const pathTop = H - 6 - PATH_H
-  const yMax = pathTop - 4
-  const yMin = fb + 44
+  const pathTop = pathTopOf(L)
+  const yMax = pathTop + 2
+  // 空位的佔地要完整落在可走區域裡（水池旁那條可走帶也算，不過那裡沒有走道上緣）
+  const inside = (r: Rect): boolean => zones.some((z) => r.x0 >= z.x0 + 2 && r.x1 <= Math.min(z.x1, xr) && r.y0 >= z.y0 && r.y1 <= z.y1 + 4)
   const placed: BuildingSlot[] = []
-  const hit = (r: Rect, o: Rect, gx: number, gy: number): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
-  for (const sp of SLOT_SPECS) {
+  for (const sp of specs) {
     const ax = xl + sp.fx * (xr - xl)
-    const ay = sp.row === 'path' ? yMax : (yMin + yMax) / 2
+    const yLo = sp.row === 'edge' ? pathTop - 2 : Math.max(fb + BACK_MARGIN + sp.fd + 2, fb - 8 + sp.h)
+    const yHi = sp.row === 'edge' ? yMax : pathTop - 6
+    const ay = sp.row === 'edge' ? pathTop : yLo + sp.fy * (yHi - yLo)
     let best: { x: number; y: number; cost: number } | null = null
-    for (let y = yMin; y <= yMax; y += 3)
-      for (let x = Math.ceil(xl + sp.fw / 2); x <= xr - sp.fw / 2; x += 3) {
+    for (let y = yLo; y <= yHi; y += 3)
+      for (let x = Math.ceil(zones[zones.length - 1].x0 + sp.fw / 2); x <= xr - sp.fw / 2; x += 3) {
         if (y - sp.h < fb - 8) continue // 素材頂端不能伸進遠景
         const r = { x0: x - sp.fw / 2, x1: x + sp.fw / 2, y0: y - sp.fd, y1: y }
-        if (fixed.some((f) => hit(r, f, 0, 0))) continue
-        if (placed.some((p) => hit(r, slotFootprint(p), sp.kind === 'catTree' && p.kind === 'kennel' ? 26 : 6, sp.kind === 'catTree' && p.kind === 'kennel' ? 10 : 4))) continue
+        if (!inside(r)) continue
+        if (fixed.some((f) => hit(r, f))) continue
+        const pair = (q: BuildingSlot): boolean =>
+          (sp.kind === 'catTree' && q.kind === 'kennel') || (sp.kind === 'kennel' && q.kind === 'catTree')
+        // 狗窩與貓跳台彼此隔開（腳下佔地至少隔 12 像素）；其他空位之間留一點縫
+        if (placed.some((q) => hit(r, slotFootprint(q), pair(q) ? 12 : 8, pair(q) ? 8 : 6)) || before.some((q) => hit(r, slotFootprint(q), pair(q) ? 12 : 8, pair(q) ? 8 : 6))) continue
         const cost = Math.abs(x - ax) + 1.6 * Math.abs(y - ay)
         if (!best || cost < best.cost) best = { x, y, cost }
       }
     if (best) placed.push({ id: sp.id, kind: sp.kind, x: best.x, y: best.y, w: sp.w, h: sp.h, fw: sp.fw, fd: sp.fd })
   }
   return placed
+}
+
+/** 建築空位（排好的結果會快取） */
+export function buildingSlots(L: Layout): BuildingSlot[] {
+  return scene(L).slots
 }
