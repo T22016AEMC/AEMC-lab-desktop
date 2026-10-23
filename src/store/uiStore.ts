@@ -9,6 +9,8 @@ interface UIState {
   aboutOpen: boolean
   /** 領養視窗 */
   adoptOpen: boolean
+  /** 建築模式：場景上顯示可購買的虛線空位 */
+  buildMode: boolean
   viewport: Size
   setBooted: (v: boolean) => void
   /** ms：顯示多久（預設 2.8 秒） */
@@ -17,6 +19,7 @@ interface UIState {
   setLaunchpadOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
   setAdoptOpen: (v: boolean) => void
+  setBuildMode: (v: boolean) => void
   setViewport: (width: number, height: number) => void
 }
 
@@ -26,6 +29,7 @@ export const useUIStore = create<UIState>((set) => ({
   launchpadOpen: false,
   aboutOpen: false,
   adoptOpen: false,
+  buildMode: false,
   viewport: { width: window.innerWidth, height: window.innerHeight },
   setBooted: (booted) => set({ booted }),
   showToast: (message, ms) => set((s) => ({ toast: { id: (s.toast?.id ?? 0) + 1, message, ms } })),
@@ -33,6 +37,7 @@ export const useUIStore = create<UIState>((set) => ({
   setLaunchpadOpen: (launchpadOpen) => set({ launchpadOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
+  setBuildMode: (buildMode) => set({ buildMode }),
   setViewport: (width, height) =>
     set((s) =>
       s.viewport.width === width && s.viewport.height === height

@@ -64,7 +64,7 @@ export function AdoptDialog({ first = false }: { first?: boolean }) {
           )}
         </div>
         <div className="mt-0.5 text-xs text-[#8a5a2b]">
-          {first ? '第一隻免費' : `每隻 ${def.cost} 點（目前 ${save?.points ?? 0} 點，已養 ${save?.pets.length ?? 0}/${PET_CAPACITY} 隻）`}
+          {first ? '第一隻免費' : `每隻 ${def.cost} 金幣（目前 ${save?.points ?? 0} 金幣，已養 ${save?.pets.length ?? 0}/${PET_CAPACITY} 隻）`}
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -135,7 +135,7 @@ export function AdoptDialog({ first = false }: { first?: boolean }) {
           disabled={!first && !check.ok}
           className="px-btn mt-3 w-full py-2 text-sm"
         >
-          {first ? '開始養殖場' : `領養（${def.cost} 點）`}
+          {first ? '開始養殖場' : `領養（${def.cost} 金幣）`}
         </button>
       </div>
     </div>

@@ -47,7 +47,7 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (pet
   const stage = stageOf(pet, nowMs) === 'young' ? '幼年' : '成年'
 
   const run = (id: (typeof actions)[number]['id']) => {
-    // 洗澡：寵物自己走到水池前再跳進去（扣點在跳進水池時才扣）
+    // 洗澡：寵物自己走到水池前再跳進去（扣金幣在跳進水池時才扣）
     if (id === 'bath' && onBath) {
       onBath(pet.id)
       return
@@ -90,12 +90,12 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (pet
             key={a.id}
             type="button"
             disabled={Boolean(a.disabledReason)}
-            title={a.disabledReason ?? `${a.label}（${a.cost} 點）`}
+            title={a.disabledReason ?? `${a.label}（${a.cost} 金幣）`}
             onClick={() => run(a.id)}
             className="px-btn px-1 py-1 text-xs"
           >
             {a.label}
-            <span className="block text-[9px] font-normal opacity-70">{a.cost} 點</span>
+            <span className="block text-[9px] font-normal opacity-70">{a.cost} 金幣</span>
           </button>
         ))}
       </div>

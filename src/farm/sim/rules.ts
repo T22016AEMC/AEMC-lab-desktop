@@ -8,11 +8,11 @@ export interface Check {
   reason?: string
 }
 
-/** 能不能領養：先看容量，再看點數。第一隻免費（free） */
+/** 能不能領養：先看容量，再看金幣。第一隻免費（free） */
 export function adoptCheck(save: Pick<SaveData, 'pets' | 'points'>, species: SpeciesId, free = false): Check {
   const sp = SPECIES[species]
   if (save.pets.length >= PET_CAPACITY) return { ok: false, reason: `寵物已滿（貓狗合計最多 ${PET_CAPACITY} 隻）` }
-  if (!free && sp.cost > save.points) return { ok: false, reason: `點數不足（需要 ${sp.cost} 點，目前 ${save.points} 點）` }
+  if (!free && sp.cost > save.points) return { ok: false, reason: `金幣不足（需要 ${sp.cost} 金幣，目前 ${save.points} 金幣）` }
   return { ok: true }
 }
 

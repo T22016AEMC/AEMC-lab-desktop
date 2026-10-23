@@ -21,7 +21,7 @@ export type FarmEffect =
 export interface ActionOption {
   id: ActionId
   label: string
-  /** 消耗點數 */
+  /** 消耗金幣 */
   cost: number
   disabledReason?: string
 }
@@ -51,7 +51,7 @@ function applicable(action: ActionId, pet: Pet): boolean {
   }
 }
 
-/** 一隻寵物目前可以做的操作（氣泡選單用）：睡覺時只能撫摸或叫醒，點數不足會標示原因 */
+/** 一隻寵物目前可以做的操作（氣泡選單用）：睡覺時只能撫摸或叫醒，金幣不足會標示原因 */
 export function petActions(save: SaveData, pet: Pet, ctx: Ctx): ActionOption[] {
   const sleeping = isSleeping(pet, ctx.hour, ctx.nowMs)
   const out: ActionOption[] = []
@@ -60,13 +60,13 @@ export function petActions(save: SaveData, pet: Pet, ctx: Ctx): ActionOption[] {
     if (id === 'wake' && !sleeping) continue
     let disabledReason: string | undefined
     if (id !== 'pet' && id !== 'wake' && sleeping) disabledReason = `${pet.name}正在睡覺，可以先叫醒`
-    else if (save.points < DAILY_COST) disabledReason = `點數不足（需要 ${DAILY_COST} 點，目前 ${save.points} 點）`
+    else if (save.points < DAILY_COST) disabledReason = `金幣不足（需要 ${DAILY_COST} 金幣，目前 ${save.points} 金幣）`
     out.push({ id, label: ACTION_LABELS[id], cost: DAILY_COST, disabledReason })
   }
   return out
 }
 
-interface Delta {
+export interface Delta {
   satiety?: number
   mood?: number
   cleanliness?: number
@@ -76,7 +76,7 @@ interface Delta {
 const STAT_NAMES: Record<keyof Delta, string> = { satiety: '飽食度', mood: '心情', cleanliness: '清潔度', weight: '體重' }
 
 /** 套用數值變化（0～100 夾住），回傳新寵物與實際變化量的浮字 */
-function applyDelta(pet: Pet, d: Delta): { pet: Pet; floats: FarmEffect[] } {
+export function applyDelta(pet: Pet, d: Delta): { pet: Pet; floats: FarmEffect[] } {
   const next = { ...pet }
   const floats: FarmEffect[] = []
   for (const k of ['satiety', 'mood', 'cleanliness', 'weight'] as const) {
@@ -99,11 +99,11 @@ export interface ExecResult {
   error?: string
 }
 
-function replacePet(save: SaveData, pet: Pet): SaveData {
+export function replacePet(save: SaveData, pet: Pet): SaveData {
   return { ...save, pets: save.pets.map((p) => (p.id === pet.id ? pet : p)) }
 }
 
-/** 執行寵物操作（每次消耗 1 點）。條件不符時回傳 error，存檔不變 */
+/** 執行寵物操作（每次消耗 1 金幣）。條件不符時回傳 error，存檔不變 */
 export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: string): ExecResult {
   const fail = (error: string): ExecResult => ({ save, effects: [], error })
   const pet = save.pets.find((p) => p.id === petId)
@@ -152,7 +152,7 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
 }
 
 /**
- * 睡覺中的寵物被拖起來：醒來（不用點數）。規則和「叫醒」一樣：貓不開心（心情下降）、狗沒差，
+ * 睡覺中的寵物被拖起來：醒來（不用金幣）。規則和「叫醒」一樣：貓不開心（心情下降）、狗沒差，
  * 之後保持清醒到 idleMinutes。沒在睡覺就什麼都不做。
  */
 export function wakeForDrag(save: SaveData, ctx: Ctx, petId: string): ExecResult {

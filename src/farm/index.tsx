@@ -3,7 +3,7 @@ import { getApp } from '../config/registry'
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
-import { overrides, worldHour, worldWeather } from './overrides'
+import { gameNow, overrides, worldHour, worldWeather } from './overrides'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
@@ -134,7 +134,7 @@ export function Farm() {
       if (!canvas || !ctx) return
 
       const st = useFarmStore.getState()
-      const nowMs = Date.now()
+      const nowMs = gameNow()
       const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs), gifts: st.gifts }
       if (st.save?.pets !== lastPets) {
         lastPets = st.save?.pets
@@ -188,7 +188,7 @@ export function Farm() {
           sign.style.top = `${Math.round(d.y0 - 4)}px`
           sign.style.fontSize = `${Math.max(10, Math.round((d.x1 - d.x0) * 0.2))}px`
           // 夜晚住家亮燈，門牌也跟著微微發亮（滑鼠移上去更亮）
-          const l = engine.isHouseLit(worldHour(Date.now()))
+          const l = engine.isHouseLit(worldHour(gameNow()))
           if (l !== litRef.current) {
             litRef.current = l
             setLit(l)

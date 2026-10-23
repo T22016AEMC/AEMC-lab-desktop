@@ -1,5 +1,6 @@
+import { isBuildingId } from '../config/buildings'
 import { SPECIES, isSpeciesId, isVariantId, type SpeciesId } from '../config/species'
-import { CURRENT_SCHEMA_VERSION, type Pet, type SaveData } from './types'
+import { CURRENT_SCHEMA_VERSION, type BowlState, type EarningState, type Pet, type SaveData } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
@@ -56,7 +57,34 @@ function cleanPet(raw: unknown, version: number): Pet | null {
  * 之後資料格式升級時，在這裡依 schemaVersion 逐版轉換。
  *  - v1 → v2：狗貓的毛色改為品種／花色（cleanPet 依 version 轉換）
  *  - v2 → v3：取消海洋，海洋生物移除並依領養價格退還點數；其餘貓狗保留
+ *  - v3 → v4：新增 ownedBuildings（空）、earning（賺金幣記錄）、bowl（食盆份量）；寵物、金幣、其他欄位原樣保留
  */
+function cleanEarning(raw: unknown): EarningState {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const lastAward: Record<string, number> = {}
+  if (r.lastAward && typeof r.lastAward === 'object') {
+    for (const [k, v] of Object.entries(r.lastAward as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v)) lastAward[k] = v
+    }
+  }
+  return {
+    date: typeof r.date === 'string' ? r.date : '',
+    programCoins: Math.floor(num(r.programCoins, 0, 0)),
+    gameCoins: Math.floor(num(r.gameCoins, 0, 0)),
+    lastAward,
+  }
+}
+
+function cleanBowl(raw: unknown): BowlState {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return { date: typeof r.date === 'string' ? r.date : '', used: Math.floor(num(r.used, 0, 0)) }
+}
+
+function cleanOwned(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return [...new Set(raw.filter(isBuildingId))]
+}
+
 export function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -88,5 +116,9 @@ export function migrate(raw: unknown): SaveData | null {
     gifts: { date: typeof gifts.date === 'string' ? gifts.date : '', count: Math.floor(num(gifts.count, 0, 0)) },
     nextPetId: Math.floor(num(r.nextPetId, pets.length + 1, 1)),
     createdAt: num(r.createdAt, now),
+    // v4 新增；v3 以前沒有這些欄位，一律從空開始（不影響寵物、金幣、啟動台清單）
+    ownedBuildings: version >= 4 ? cleanOwned(r.ownedBuildings) : [],
+    earning: cleanEarning(version >= 4 ? r.earning : undefined),
+    bowl: cleanBowl(version >= 4 ? r.bowl : undefined),
   }
 }

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { BuiltinAppProps } from '../../types'
 import { FitCanvas, beginFrame } from '../shared/FitCanvas'
 import { GameShell } from '../shared/GameShell'
-import { useAnimationFrame, useBest, useGameStatus, useKeys, useSwipe } from '../shared/hooks'
+import { useAnimationFrame, useBest, useGameStatus, useKeys, useRoundReward, useSwipe } from '../shared/hooks'
 import { playSfx } from '../shared/sound'
 import { COLS, ROWS, isOpposite, newState, step, tickInterval, type Dir, type SnakeState } from './logic'
 
@@ -98,6 +98,7 @@ function draw(ctx: CanvasRenderingContext2D, s: SnakeState, time: number) {
 
 export default function Snake(props: BuiltinAppProps) {
   const game = useGameStatus(props)
+  const reward = useRoundReward('game-snake')
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const state = useRef<SnakeState>(newState())
   const queue = useRef<Dir[]>([])
@@ -117,6 +118,7 @@ export default function Snake(props: BuiltinAppProps) {
 
   const start = () => {
     reset()
+    reward.arm()
     game.start()
   }
 
@@ -157,6 +159,7 @@ export default function Snake(props: BuiltinAppProps) {
         }
         if (!state.current.alive) {
           setNewRecord(submit(state.current.score))
+          reward.report({ score: state.current.score })
           playSfx('lose')
           game.finish()
           break

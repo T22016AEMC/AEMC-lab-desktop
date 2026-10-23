@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BuiltinAppProps } from '../../types'
 import { GameShell } from '../shared/GameShell'
-import { useBest, useElementSize, useGameStatus, useKeys, useSwipe } from '../shared/hooks'
+import { useBest, useElementSize, useGameStatus, useKeys, useRoundReward, useSwipe } from '../shared/hooks'
 import { playSfx } from '../shared/sound'
 import { SIZE, canMove, maxValue, move, spawnTile, type Dir, type Tile } from './logic'
 
@@ -43,6 +43,7 @@ function initialTiles(idRef: { current: number }): Tile[] {
 
 export default function Game2048(props: BuiltinAppProps) {
   const game = useGameStatus(props)
+  const reward = useRoundReward('game-2048')
   const idRef = useRef(0)
   const [tiles, setTiles] = useState<Tile[]>([])
   const [score, setScore] = useState(0)
@@ -63,7 +64,10 @@ export default function Game2048(props: BuiltinAppProps) {
   }, [])
 
   const start = () => {
+    // 2048 沒有明確的結束：玩到一半重新開始，也把上一局當作結束判定一次
+    if (reward.pending()) reward.report({ maxTile: maxValue(tiles) })
     newGame()
+    reward.arm()
     game.start()
   }
 
@@ -86,11 +90,13 @@ export default function Game2048(props: BuiltinAppProps) {
     playSfx(res.gained > 0 ? 'merge' : 'move')
     if (!keepGoing && maxValue(next) >= 2048) {
       setWon(true)
+      reward.report({ maxTile: maxValue(next) })
       playSfx('win')
       return
     }
     if (!canMove(next)) {
       playSfx('lose')
+      reward.report({ maxTile: maxValue(next) })
       game.finish()
     }
   }

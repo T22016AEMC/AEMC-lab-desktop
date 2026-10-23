@@ -8,7 +8,7 @@ export function todayKey(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** 每日第一次開啟 +5（以本機日期判斷） */
+/** 每日第一次開啟 +5 金幣（以本機日期判斷） */
 export function claimDaily(save: SaveData, today: string): { save: SaveData; claimed: boolean } {
   if (save.lastDailyClaim === today) return { save, claimed: false }
   return { save: { ...save, points: save.points + BALANCE.dailyBonus, lastDailyClaim: today }, claimed: true }
@@ -28,7 +28,7 @@ export function registerGift(save: SaveData, today: string): SaveData {
   return { ...save, gifts: { date: today, count: giftsToday(save, today) + 1 } }
 }
 
-/** 點擊領取禮物：+1～3 點 */
+/** 點擊領取禮物：+1～3 金幣 */
 export function collectGift(save: SaveData, rand: () => number = Math.random): { save: SaveData; points: number } {
   const { minPoints, maxPoints } = BALANCE.gift
   const points = minPoints + Math.floor(rand() * (maxPoints - minPoints + 1))
@@ -41,10 +41,13 @@ export function newSave(now: number, today: string): SaveData {
     pets: [],
     points: BALANCE.startPoints,
     lastSeen: now,
-    // 第一次建立存檔時已經有起始點數，當天不再重複給每日獎勵
+    // 第一次建立存檔時已經有起始金幣，當天不再重複給每日獎勵
     lastDailyClaim: today,
     gifts: { date: today, count: 0 },
     nextPetId: 1,
     createdAt: now,
+    ownedBuildings: [],
+    earning: { date: today, programCoins: 0, gameCoins: 0, lastAward: {} },
+    bowl: { date: today, used: 0 },
   }
 }

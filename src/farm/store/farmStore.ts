@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import { BALANCE } from '../config/balance'
-import { worldHour } from '../overrides'
+import { gameNow, worldHour } from '../overrides'
 import { takeMigrationNotice } from '../save/migrate'
 import { LocalStorageAdapter } from '../save/storage'
 import type { SaveData, SaveStorage } from '../save/types'
+import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, wakeForDrag, type ActionId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
+import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
 import { advanceSave } from '../sim/stats'
 import { useUIStore } from '../../store/uiStore'
@@ -14,6 +16,7 @@ let storage: SaveStorage = new LocalStorageAdapter()
 export function setSaveStorage(next: SaveStorage): void {
   storage = next
 }
+const NO_PETS: ReadonlySet<string> = new Set()
 export function getSaveStorage(): SaveStorage {
   return storage
 }
@@ -32,8 +35,16 @@ interface FarmState {
   runAction: (action: ActionId, petId: string) => string | null
   /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
   wakeForDrag: (petId: string) => void
-  /** 週期性結算：數值下降、跨日的每日獎勵 */
-  tick: () => void
+  /** 週期性結算：數值下降、跨日的每日獎勵、睡覺的心情回復（atBuilding = 睡在建築旁的寵物 id） */
+  tick: (atBuilding?: ReadonlySet<string>) => void
+  /** 購買建築（扣金幣、紀錄、存檔）。回傳錯誤訊息或 null */
+  buyBuilding: (id: string) => string | null
+  /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）。回傳錯誤訊息或 null */
+  eatAtBowl: (petId: string) => string | null
+  /** 從啟動台成功開啟使用者的程式：依冷卻與每日上限給金幣，回傳實際給的數量 */
+  earnProgram: (appId: string) => number
+  /** 一局遊戲結束：達標才給金幣，回傳實際給的數量 */
+  earnGame: (gameId: string, result: GameResult) => number
   /** 週期性擲禮物 */
   rollGift: (rand?: () => number) => void
   collectGift: (petId: string) => void
@@ -44,7 +55,7 @@ interface FarmState {
 }
 
 const ctxNow = (): Ctx => {
-  const nowMs = Date.now()
+  const nowMs = gameNow()
   return { nowMs, hour: worldHour(nowMs) }
 }
 
@@ -56,10 +67,10 @@ export const useFarmStore = create<FarmState>((set, get) => ({
 
   init: async () => {
     const loaded = await storage.load()
-    const now = Date.now()
+    const now = gameNow()
     const notice = takeMigrationNotice()
     if (notice) {
-      useUIStore.getState().showToast('海洋已經取消，' + notice.removed + ' 隻海洋生物已移除，退還 ' + notice.refunded + ' 點')
+      useUIStore.getState().showToast('海洋已經取消，' + notice.removed + ' 隻海洋生物已移除，退還 ' + notice.refunded + ' 金幣')
       // 升級後的存檔立刻寫回，避免下次讀到舊格式又退一次
       if (loaded) void storage.save(loaded)
     }
@@ -72,7 +83,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const daily = claimDaily(save, todayKey(now))
     save = daily.save
     set({ status: 'ready', save })
-    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +5 點`)
+    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
   },
 
   adoptPet: (req) => {
@@ -102,21 +113,68 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
   },
 
-  tick: () => {
+  tick: (atBuilding = NO_PETS) => {
     const save = get().save
     if (!save) return
-    const now = Date.now()
+    const now = gameNow()
+    // 睡覺的心情回復只算線上即時的這一小段（最多 2 分鐘，背景分頁被節流也不會一次補很多）
+    const elapsedSec = Math.min(120, Math.max(0, (now - save.lastSeen) / 1000))
     let next = advanceSave(save, now, false)
+    next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
     const daily = claimDaily(next, todayKey(now))
     next = daily.save
-    if (daily.claimed) useUIStore.getState().showToast('每日登入獎勵 +5 點')
+    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
     if (next !== save) set({ save: next })
+  },
+
+  buyBuilding: (id) => {
+    const save = get().save
+    if (!save) return '尚未開始'
+    const r = buyBuilding(save, id)
+    if (r.error) return r.error
+    set({ save: r.save })
+    return null
+  },
+
+  eatAtBowl: (petId) => {
+    const save = get().save
+    if (!save) return '尚未開始'
+    const r = eatAtBowl(save, ctxNow(), petId)
+    if (r.error) return r.error
+    set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects.filter((e) => e.kind === 'float')] }))
+    return null
+  },
+
+  earnProgram: (appId) => {
+    const save = get().save
+    if (!save) return 0
+    const now = gameNow()
+    const r = claimProgram(save, appId, now)
+    if (r.save !== save) set({ save: r.save })
+    if (r.coins > 0) {
+      const p = earningToday(r.save, now)
+      useUIStore.getState().showToast(`+${r.coins} 金幣（今日 ${p.programCoins}/${p.programMax}）`)
+    }
+    return r.coins
+  },
+
+  earnGame: (gameId, result) => {
+    const save = get().save
+    if (!save) return 0
+    const now = gameNow()
+    const r = claimGame(save, gameId, result, now)
+    if (r.save !== save) set({ save: r.save })
+    if (r.coins > 0) {
+      const p = earningToday(r.save, now)
+      useUIStore.getState().showToast(`+${r.coins} 金幣（今日 ${p.gameCoins}/${p.gameMax}）`)
+    }
+    return r.coins
   },
 
   rollGift: (rand = Math.random) => {
     const { save, gifts } = get()
     if (!save) return
-    const today = todayKey(Date.now())
+    const today = todayKey(gameNow())
     const candidates = giftCandidates(save, today).filter((id) => !gifts.includes(id))
     if (candidates.length === 0 || rand() >= BALANCE.gift.chancePerMinute) return
     const id = candidates[Math.floor(rand() * candidates.length)]
@@ -130,7 +188,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     set((s) => ({
       save: r.save,
       gifts: s.gifts.filter((g) => g !== petId),
-      effects: [...s.effects, { kind: 'float', petId, text: `+${r.points} 點`, tone: 'good' }],
+      effects: [...s.effects, { kind: 'float', petId, text: `+${r.points} 金幣`, tone: 'good' }],
     }))
   },
 

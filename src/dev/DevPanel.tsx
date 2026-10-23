@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { overrides } from '../farm/overrides'
+import { gameNow, overrides } from '../farm/overrides'
 import { SPECIES } from '../farm/config/species'
 import { advanceSave, DAY_MS, HOUR_MS } from '../farm/sim/stats'
 import { todayKey } from '../farm/sim/points'
@@ -27,7 +27,16 @@ function shiftTime(save: SaveData, ms: number): SaveData {
     const d = Date.parse(`${save.lastDailyClaim}T12:00:00`)
     shifted.lastDailyClaim = todayKey(d - Math.floor(ms / DAY_MS) * DAY_MS)
   }
-  return advanceSave(shifted, Date.now(), false)
+  // 賺金幣的冷卻與今日進度、食盆今日份量也要跟著往前推，才會「時間往後走」
+  const days = Math.floor(ms / DAY_MS)
+  const shiftDate = (d: string): string => (d && days > 0 ? todayKey(Date.parse(`${d}T12:00:00`) - days * DAY_MS) : d)
+  shifted.earning = {
+    ...save.earning,
+    date: shiftDate(save.earning.date),
+    lastAward: Object.fromEntries(Object.entries(save.earning.lastAward).map(([k, v]) => [k, v - ms])),
+  }
+  shifted.bowl = { ...save.bowl, date: shiftDate(save.bowl.date) }
+  return advanceSave(shifted, gameNow(), false)
 }
 
 const btn = 'rounded bg-white/15 px-2 py-1 text-[11px] hover:bg-white/25 active:scale-95'
@@ -74,8 +83,11 @@ export default function DevPanel() {
           </div>
 
           <div className="mb-2">
-            <div className="mb-1 text-white/60">點數 {save?.points ?? '—'}</div>
+            <div className="mb-1 text-white/60">金幣 {save?.points ?? '—'}</div>
             <div className="flex gap-1.5">
+              <button className={btn} data-testid="dev-add-coins" onClick={() => mutate((s) => ({ ...s, points: s.points + 10 }))}>
+                加金幣 +10
+              </button>
               <button className={btn} onClick={() => mutate((s) => ({ ...s, points: s.points + 100 }))}>
                 +100
               </button>

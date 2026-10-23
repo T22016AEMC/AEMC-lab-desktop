@@ -1,6 +1,6 @@
 import type { SpeciesId } from '../config/species'
 
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 export interface Pet {
   id: string
@@ -21,6 +21,27 @@ export interface Pet {
   awakeUntil?: number
 }
 
+/**
+ * 賺金幣的記錄（v4 起）。純前端、存在瀏覽器，無法防作弊（之後帳號與雲端階段再處理）。
+ * 時間一律來自遊戲時間來源（overrides.gameNow），不是 Date.now()。
+ */
+export interface EarningState {
+  /** 今日進度所屬的本地日期（YYYY-MM-DD）；日期變了就把今日金幣歸零 */
+  date: string
+  /** 今日從啟動台程式賺到的金幣（上限 BALANCE.earn.program.dailyMax） */
+  programCoins: number
+  /** 今日玩遊戲賺到的金幣（上限 BALANCE.earn.game.dailyMax） */
+  gameCoins: number
+  /** 各程式上次給金幣的時間（毫秒時間戳，程式 id → 時間）；冷卻跨日也有效 */
+  lastAward: Record<string, number>
+}
+
+/** 食盆水盆今日已用掉的份量（本地日期 00:00 補滿） */
+export interface BowlState {
+  date: string
+  used: number
+}
+
 /** 存檔：單一物件，包含 schemaVersion 以便未來升級資料格式 */
 export interface SaveData {
   schemaVersion: number
@@ -34,6 +55,10 @@ export interface SaveData {
   gifts: { date: string; count: number }
   nextPetId: number
   createdAt: number
+  /** 已購買的建築 id（v4 起）；視窗太小放不下的建築紀錄仍保留，畫面上隱藏 */
+  ownedBuildings: string[]
+  earning: EarningState
+  bowl: BowlState
 }
 
 /**

@@ -17,6 +17,8 @@ export function MenuBar() {
   const petCount = useFarmStore((st) => st.save?.pets.length ?? null)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const setLaunchpadOpen = useUIStore((s) => s.setLaunchpadOpen)
+  const buildMode = useUIStore((s) => s.buildMode)
+  const setBuildMode = useUIStore((s) => s.setBuildMode)
   const { menuBar } = getMetrics()
 
   return (
@@ -73,12 +75,24 @@ export function MenuBar() {
           </button>
         )}
         {petCount !== null && (
+          <button
+            type="button"
+            data-testid="build-button"
+            aria-pressed={buildMode}
+            onClick={() => setBuildMode(!buildMode)}
+            className={`rounded px-2 py-px font-semibold hover:bg-white/20 ${buildMode ? 'bg-white/25 text-[#ffd98a]' : ''}`}
+            title="建築（再按一次或按 Esc 離開）"
+          >
+            建築
+          </button>
+        )}
+        {petCount !== null && (
           <span className="tabular-nums" title="寵物數量" aria-label={`寵物 ${petCount}/${PET_CAPACITY}`}>
             🐾 {petCount}/{PET_CAPACITY}
           </span>
         )}
         {points !== null && (
-          <span className="tabular-nums" title="點數" aria-label={`點數 ${points}`}>
+          <span className="tabular-nums" title="金幣" aria-label={`金幣 ${points}`}>
             🪙 {points}
           </span>
         )}

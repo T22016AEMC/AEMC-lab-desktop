@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import type { GameResult } from '../../farm/sim/earning'
+import { useFarmStore } from '../../farm/store/farmStore'
 import { readNumber, writeNumber } from '../../lib/storage'
 import type { BuiltinAppProps } from '../../types'
 
@@ -32,6 +34,27 @@ export function useGameStatus({ active, minimized }: BuiltinAppProps) {
   }, [pause])
 
   return { status, start, pause, resume, finish, reset }
+}
+
+/**
+ * 一局結束時把成績回報給養殖場（達標就給金幣，達標條件在 balance.ts 的 gameGoals）。
+ * 每局只判定一次：start() 時 arm()，結束時 report()，重複呼叫不會重複給。
+ */
+export function useRoundReward(gameId: string) {
+  const done = useRef(true)
+  return {
+    /** 新的一局開始 */
+    arm: () => {
+      done.current = false
+    },
+    /** 這局還沒回報過嗎（2048 這種沒有明確結束的遊戲，重新開始時用來補判定） */
+    pending: () => !done.current,
+    report: (result: GameResult) => {
+      if (done.current) return
+      done.current = true
+      useFarmStore.getState().earnGame(gameId, result)
+    },
+  }
 }
 
 /** 最高紀錄（存在 localStorage）。lowerIsBetter 用於「時間越短越好」的紀錄 */

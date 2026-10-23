@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuiltinAppProps } from '../../types'
 import { GameShell } from '../shared/GameShell'
-import { useBest, useElementSize, useGameStatus } from '../shared/hooks'
+import { useBest, useElementSize, useGameStatus, useRoundReward } from '../shared/hooks'
 import { playSfx } from '../shared/sound'
 import {
   DIFFICULTIES,
@@ -26,6 +26,7 @@ function pad3(n: number): string {
 
 export default function Minesweeper(props: BuiltinAppProps) {
   const game = useGameStatus(props)
+  const reward = useRoundReward('game-minesweeper')
   const [difficultyId, setDifficultyId] = useState<DifficultyId>('beginner')
   const difficulty = useMemo<Difficulty>(() => DIFFICULTIES.find((d) => d.id === difficultyId)!, [difficultyId])
   const [board, setBoard] = useState<Cell[]>(() => emptyBoard(DIFFICULTIES[0]))
@@ -61,6 +62,7 @@ export default function Minesweeper(props: BuiltinAppProps) {
   const finishGame = (next: Cell[], won: boolean, time: number) => {
     setBoard(revealAllMines(next, won))
     setResult(won ? 'won' : 'lost')
+    reward.report({ won })
     if (won) {
       setNewRecord(submit(time))
       playSfx('win')
@@ -132,6 +134,7 @@ export default function Minesweeper(props: BuiltinAppProps) {
 
   const start = () => {
     newGame(difficulty)
+    reward.arm()
     game.start()
   }
 

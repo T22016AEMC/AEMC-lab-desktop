@@ -1,6 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { gameNow } from '../farm/overrides'
+import { earningToday } from '../farm/sim/earning'
+import { useFarmStore } from '../farm/store/farmStore'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { openExternal } from '../lib/openExternal'
 import { useAppListStore } from '../store/appListStore'
 import { useUIStore } from '../store/uiStore'
 import type { ExternalApp } from '../types'
@@ -89,10 +93,13 @@ function LaunchpadView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [menu, dialog])
 
+  const save = useFarmStore((s) => s.save)
+  const today = save ? earningToday(save, gameNow()) : null
+
   const launch = (app: ExternalApp) => {
     close()
-    // 外部程式一律用瀏覽器新分頁開啟
-    window.open(app.url, '_blank', 'noopener,noreferrer')
+    // 外部程式一律用瀏覽器新分頁開啟；開啟成功（沒被擋）才給金幣（冷卻與每日上限由 earnProgram 判斷）
+    if (openExternal(app.url)) useFarmStore.getState().earnProgram(app.id)
   }
 
   const onMenu = (e: React.MouseEvent, app: ExternalApp) => {
@@ -161,6 +168,12 @@ function LaunchpadView() {
           </div>
         )}
       </div>
+
+      {today && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-5 text-center text-xs text-white/55" data-testid="launchpad-earn">
+          開啟程式可得金幣（每個程式每小時一次）· 今日 {today.programCoins}/{today.programMax}
+        </div>
+      )}
 
       {/* 右鍵選單：編輯、刪除 */}
       {menu && (

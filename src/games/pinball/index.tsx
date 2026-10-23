@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BuiltinAppProps } from '../../types'
 import { FitCanvas, beginFrame } from '../shared/FitCanvas'
 import { GameShell } from '../shared/GameShell'
-import { useAnimationFrame, useBest, useGameStatus, useKeys } from '../shared/hooks'
+import { useAnimationFrame, useBest, useGameStatus, useKeys, useRoundReward } from '../shared/hooks'
 import { playSfx, type Sfx } from '../shared/sound'
 import { drawPinball } from './draw'
 import { H, START_LIVES, W, createPinball, type Pinball, type PinballEvent, type Phase } from './engine'
@@ -19,6 +19,7 @@ const SFX_MAP: Record<PinballEvent, Sfx> = {
 
 export default function PinballGame(props: BuiltinAppProps) {
   const game = useGameStatus(props)
+  const reward = useRoundReward('game-pinball')
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const tableRef = useRef<Pinball | null>(null)
   // 懶建立：React StrictMode 會在開發模式下卸載再掛載一次，所以銷毀後要能重新建立
@@ -57,6 +58,7 @@ export default function PinballGame(props: BuiltinAppProps) {
     setLives(START_LIVES)
     setPhase('waiting')
     setNewRecord(false)
+    reward.arm()
     game.start()
   }
 
@@ -124,6 +126,7 @@ export default function PinballGame(props: BuiltinAppProps) {
       setPhase((p) => (p === pb.phase ? p : pb.phase))
       if (pb.phase === 'over') {
         setNewRecord(submit(pb.score))
+        reward.report({ score: pb.score })
         game.finish()
       }
     }
