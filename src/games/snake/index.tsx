@@ -1,9 +1,8 @@
 import { useRef, useState } from 'react'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { BuiltinAppProps } from '../../types'
 import { FitCanvas, beginFrame } from '../shared/FitCanvas'
 import { GameShell } from '../shared/GameShell'
-import { useAnimationFrame, useBest, useElementSize, useGameStatus, useKeys, useSwipe } from '../shared/hooks'
+import { useAnimationFrame, useBest, useGameStatus, useKeys, useSwipe } from '../shared/hooks'
 import { playSfx } from '../shared/sound'
 import { COLS, ROWS, isOpposite, newState, step, tickInterval, type Dir, type SnakeState } from './logic'
 
@@ -107,10 +106,6 @@ export default function Snake(props: BuiltinAppProps) {
   const [score, setScore] = useState(0)
   const { best, submit } = useBest('snake:best')
   const [newRecord, setNewRecord] = useState(false)
-  const touch = useMediaQuery('(pointer: coarse)')
-  const [areaRef, area] = useElementSize<HTMLDivElement>()
-  // 橫向（寬大於高）時方向鍵放在右側，避免壓縮棋盤
-  const sideways = area.width > area.height * 1.15
 
   const reset = () => {
     state.current = newState()
@@ -174,20 +169,6 @@ export default function Snake(props: BuiltinAppProps) {
 
   const level = Math.floor((150 - tickInterval(score)) / 15) + 1
 
-  const dpad = (dir: Dir, label: string, cls: string) => (
-    <button
-      type="button"
-      aria-label={label}
-      onPointerDown={(e) => {
-        e.preventDefault()
-        steer(dir)
-      }}
-      className={`absolute flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-lg active:bg-white/30 ${cls}`}
-    >
-      {label}
-    </button>
-  )
-
   return (
     <GameShell
       title="貪食蛇"
@@ -199,7 +180,7 @@ export default function Snake(props: BuiltinAppProps) {
       onPause={game.pause}
       onRestart={start}
       overBanner
-      help={['方向鍵或 WASD 控制方向', '觸控裝置：在畫面上滑動，或用下方方向鍵', '吃越多越快，撞牆或撞到自己就結束']}
+      help={['方向鍵或 WASD 控制方向', '吃越多越快，撞牆或撞到自己就結束']}
       overTitle="遊戲結束"
       overDetail={
         <>
@@ -215,22 +196,10 @@ export default function Snake(props: BuiltinAppProps) {
         </>
       }
     >
-      <div
-        ref={areaRef}
-        {...swipe}
-        className={`flex h-full w-full touch-none ${sideways ? 'flex-row items-center' : 'flex-col'}`}
-      >
+      <div {...swipe} className="flex h-full w-full touch-none flex-col">
         <div className="h-full min-h-0 min-w-0 flex-1 p-2">
           <FitCanvas width={W} height={H} canvasRef={canvasRef} />
         </div>
-        {touch && (
-          <div className={`relative h-[120px] w-[150px] shrink-0 ${sideways ? 'mr-3' : 'mx-auto mb-2'}`}>
-            {dpad('up', '▲', 'left-[53px] top-0')}
-            {dpad('left', '◀', 'left-0 top-[38px]')}
-            {dpad('right', '▶', 'right-0 top-[38px]')}
-            {dpad('down', '▼', 'left-[53px] top-[76px]')}
-          </div>
-        )}
       </div>
     </GameShell>
   )

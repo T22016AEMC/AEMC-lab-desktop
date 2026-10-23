@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import { getApp, isComingSoon } from '../config/registry'
+import { getApp } from '../config/registry'
 import { getDockTarget } from '../lib/dock'
 import { DEFAULT_MIN_SIZE, DEFAULT_WINDOW_SIZE, clamp, workArea } from '../lib/layout'
-import type { DesktopApp, Rect } from '../types'
+import type { BuiltinApp, Rect } from '../types'
 import { useUIStore } from './uiStore'
 
 export interface WindowState extends Rect {
@@ -13,22 +13,19 @@ export interface WindowState extends Rect {
   maximized: boolean
   /** 最小化時要縮向的 Dock 圖示中心點 */
   minimizeTo: { x: number; y: number } | null
-  /** 每次「重新載入」加 1，讓 iframe 重新建立 */
-  reloadKey: number
 }
 
 interface WindowStore {
   windows: Record<string, WindowState>
   activeId: string | null
   zCounter: number
-  openApp: (app: DesktopApp) => void
+  openApp: (app: BuiltinApp) => void
   closeWindow: (id: string) => void
   minimizeWindow: (id: string) => void
   toggleMaximize: (id: string) => void
   focusWindow: (id: string) => void
   setRect: (id: string, rect: Rect) => void
   moveWindow: (id: string, x: number, y: number) => void
-  reloadWindow: (id: string) => void
 }
 
 /** 最上層且未最小化的視窗 */
@@ -46,22 +43,12 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   zCounter: 100,
 
   openApp: (app) => {
-    // 尚未上線：只顯示提示
-    if (isComingSoon(app)) {
-      useUIStore.getState().showToast(`${app.name} 尚未上線，敬請期待`)
-      return
-    }
-    // 新分頁模式：不建立視窗
-    if (app.kind === 'external' && app.openMode === 'tab') {
-      window.open(app.url, '_blank', 'noopener,noreferrer')
-      return
-    }
     if (get().windows[app.id]) {
       get().focusWindow(app.id) // 已開啟：切換過去；已最小化就還原
       return
     }
-    const { viewport, compact } = useUIStore.getState()
-    const wa = workArea(viewport, compact)
+    const { viewport } = useUIStore.getState()
+    const wa = workArea(viewport)
     const size = app.defaultSize ?? DEFAULT_WINDOW_SIZE
     const width = Math.min(size.width, wa.width - 24)
     const height = Math.min(size.height, wa.height - 16)
@@ -86,7 +73,6 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
             minimized: false,
             maximized: false,
             minimizeTo: null,
-            reloadKey: 0,
           },
         },
       }
@@ -145,16 +131,10 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
       return { windows: { ...s.windows, [id]: { ...w, x, y } } }
     }),
 
-  reloadWindow: (id) =>
-    set((s) => {
-      const w = s.windows[id]
-      if (!w) return s
-      return { windows: { ...s.windows, [id]: { ...w, reloadKey: w.reloadKey + 1 } } }
-    }),
 }))
 
 /** 目前作用中視窗對應的 app */
-export function useActiveApp(): DesktopApp | undefined {
+export function useActiveApp(): BuiltinApp | undefined {
   const id = useWindowStore((s) => s.activeId)
   return id ? getApp(id) : undefined
 }

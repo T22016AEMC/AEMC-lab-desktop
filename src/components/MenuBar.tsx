@@ -8,17 +8,16 @@ import { Logo } from './Logo'
 
 export function MenuBar() {
   const now = useClock()
-  const compact = useUIStore((s) => s.compact)
   const aboutOpen = useUIStore((s) => s.aboutOpen)
   const setAboutOpen = useUIStore((s) => s.setAboutOpen)
   const activeApp = useActiveApp()
   const points = useFarmStore((st) => st.save?.points ?? null)
-  const { menuBar } = getMetrics(compact)
+  const { menuBar } = getMetrics()
 
   return (
     <header
       className="glass-dark fixed inset-x-0 top-0 z-[9500] flex items-center justify-between border-b border-white/10 px-2 text-white"
-      style={{ height: menuBar, fontSize: compact ? 11 : 13 }}
+      style={{ height: menuBar, fontSize: 13 }}
     >
       <div className="flex min-w-0 items-center gap-1">
         <button
@@ -26,7 +25,7 @@ export function MenuBar() {
           onClick={() => setAboutOpen(!aboutOpen)}
           className="flex h-5 items-center rounded px-2 hover:bg-white/20"
         >
-          <Logo size={compact ? 12 : 15} />
+          <Logo size={15} />
         </button>
         <span className="truncate px-1 font-semibold">{activeApp ? activeApp.name : '桌面'}</span>
       </div>

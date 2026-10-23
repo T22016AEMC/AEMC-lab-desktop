@@ -5,7 +5,6 @@ import { DEFAULT_MIN_SIZE, clamp, getMetrics, visibleRect, workArea } from '../l
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import type { Rect } from '../types'
-import { IframeContent } from './IframeContent'
 
 type Dir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
@@ -39,10 +38,9 @@ export function Window({ id }: { id: string }) {
   const app = getApp(id)
   const win = useWindowStore((s) => s.windows[id])
   const isActive = useWindowStore((s) => s.activeId === id)
-  const { closeWindow, minimizeWindow, toggleMaximize, focusWindow, setRect, reloadWindow } =
+  const { closeWindow, minimizeWindow, toggleMaximize, focusWindow, setRect } =
     useWindowStore.getState()
   const viewport = useUIStore((s) => s.viewport)
-  const compact = useUIStore((s) => s.compact)
 
   const gesture = useRef<Gesture | null>(null)
   const [interacting, setInteracting] = useState(false)
@@ -55,9 +53,9 @@ export function Window({ id }: { id: string }) {
 
   if (!app || !win) return null
 
-  const metrics = getMetrics(compact)
-  const maxed = win.maximized || compact
-  const rect: Rect = maxed ? workArea(viewport, compact) : visibleRect(win, viewport, compact)
+  const metrics = getMetrics()
+  const maxed = win.maximized
+  const rect: Rect = maxed ? workArea(viewport) : visibleRect(win, viewport)
   const min = {
     width: Math.min(app.minSize?.width ?? DEFAULT_MIN_SIZE.width, viewport.width),
     height: Math.min(app.minSize?.height ?? DEFAULT_MIN_SIZE.height, viewport.height - metrics.menuBar),
@@ -66,10 +64,6 @@ export function Window({ id }: { id: string }) {
   // 縮向 Dock 圖示的位移（相對視窗中心）
   const dx = win.minimizeTo ? win.minimizeTo.x - (rect.x + rect.width / 2) : 0
   const dy = win.minimizeTo ? win.minimizeTo.y - (rect.y + rect.height / 2) : viewport.height
-
-  const openInTab = () => {
-    if (app.kind === 'external' && app.url) window.open(app.url, '_blank', 'noopener,noreferrer')
-  }
 
   const beginGesture = (e: ReactPointerEvent<HTMLElement>, g: Gesture) => {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -126,10 +120,9 @@ export function Window({ id }: { id: string }) {
   }
 
   const colors = isActive ? LIGHT_COLORS : IDLE_COLORS
-  const light = compact ? 'h-3.5 w-3.5' : 'h-3 w-3'
-  const Content = app.kind === 'builtin' ? app.component : null
-  // 只有拖曳或調整大小時才蓋透明遮罩（否則滑鼠事件會被 iframe 吃掉）；
-  // 點背景視窗的 iframe 由 useIframeFocusSync 偵測焦點後置頂，不靠遮罩
+  const light = 'h-3 w-3'
+  const Content = app.component
+  // 拖曳或調整大小時蓋一層透明遮罩，避免滑鼠事件被內容吃掉
   const shield = interacting
 
   return (
@@ -171,7 +164,7 @@ export function Window({ id }: { id: string }) {
           onPointerUp={endGesture}
           onPointerCancel={endGesture}
           onDoubleClick={(e) => {
-            if (!(e.target as HTMLElement).closest('[data-nodrag]') && !compact) toggleMaximize(id)
+            if (!(e.target as HTMLElement).closest('[data-nodrag]')) toggleMaximize(id)
           }}
         >
           <div data-nodrag className="group/lights flex items-center gap-2 pl-3">
@@ -198,10 +191,8 @@ export function Window({ id }: { id: string }) {
             <button
               type="button"
               aria-label={win.maximized ? '還原' : '最大化'}
-              onClick={() => !compact && toggleMaximize(id)}
-              className={`flex items-center justify-center rounded-full ${light} ${colors.max} ${
-                compact ? 'cursor-default' : ''
-              }`}
+              onClick={() => toggleMaximize(id)}
+              className={`flex items-center justify-center rounded-full ${light} ${colors.max}`}
             >
               <svg width="7" height="7" viewBox="0 0 8 8" className="opacity-0 group-hover/lights:opacity-100">
                 <path d="M1 1h4L1 5zM7 7H3l4-4z" fill="#003d0a" />
@@ -217,65 +208,26 @@ export function Window({ id }: { id: string }) {
             {app.name}
           </div>
 
-          {app.kind === 'external' && (
-            <div data-nodrag className="ml-auto flex items-center gap-0.5 pr-2">
-              <button
-                type="button"
-                aria-label="重新載入"
-                title="重新載入"
-                onClick={() => reloadWindow(id)}
-                className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-black/10 hover:text-neutral-800"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 11a8 8 0 1 0-2.3 5.7" />
-                  <path d="M20 4v7h-7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label="在新分頁開啟"
-                title="在新分頁開啟"
-                onClick={openInTab}
-                className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-black/10 hover:text-neutral-800"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 4h6v6" />
-                  <path d="M20 4l-9 9" />
-                  <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* 內容 */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {app.kind === 'external' ? (
-            <IframeContent
-              key={win.reloadKey}
-              windowId={id}
-              url={app.url ?? 'about:blank'}
-              title={app.name}
-              onOpenInTab={openInTab}
-            />
-          ) : (
-            Content && (
-              <Suspense
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center bg-slate-900 text-sm text-white/70">
-                    載入中…
-                  </div>
-                }
-              >
-                <Content active={isActive} minimized={minimized} />
-              </Suspense>
-            )
+          {Content && (
+            <Suspense
+              fallback={
+                <div className="flex h-full w-full items-center justify-center bg-slate-900 text-sm text-white/70">
+                  載入中…
+                </div>
+              }
+            >
+              <Content active={isActive} minimized={minimized} />
+            </Suspense>
           )}
           {shield && <div className="absolute inset-0 z-10" />}
         </div>
       </div>
 
-      {/* 縮放把手（最大化或手機模式時不可用） */}
+      {/* 縮放把手（最大化時不可用） */}
       {!maxed &&
         HANDLES.map(({ dir, className }) => (
           <div

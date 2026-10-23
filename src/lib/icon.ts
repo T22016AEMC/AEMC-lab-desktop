@@ -22,11 +22,10 @@ const GRADIENTS: [string, string][] = [
   ['#94a3b8', '#475569'],
 ]
 
-/** 依 id 決定 emoji 圖示的底色，同一個 app 永遠同一組顏色 */
-export function gradientFor(id: string, colors?: [string, string]): string {
-  if (colors) return `linear-gradient(145deg, ${colors[0]}, ${colors[1]})`
+/** 依字串（名稱或 id）雜湊決定圖示底色，同一個名稱永遠同一組顏色 */
+export function gradientFor(key: string): string {
   let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
   const [a, b] = GRADIENTS[h % GRADIENTS.length]
   return `linear-gradient(145deg, ${a}, ${b})`
 }

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { COMPACT_HEIGHT } from '../lib/layout'
 import type { Size } from '../types'
 
 interface UIState {
@@ -9,8 +8,6 @@ interface UIState {
   launchpadOpen: boolean
   aboutOpen: boolean
   viewport: Size
-  /** 手機尺寸（橫向高度小於 500px） */
-  compact: boolean
   setBooted: (v: boolean) => void
   showToast: (message: string) => void
   hideToast: () => void
@@ -25,7 +22,6 @@ export const useUIStore = create<UIState>((set) => ({
   launchpadOpen: false,
   aboutOpen: false,
   viewport: { width: window.innerWidth, height: window.innerHeight },
-  compact: window.innerHeight < COMPACT_HEIGHT,
   setBooted: (booted) => set({ booted }),
   showToast: (message) => set((s) => ({ toast: { id: (s.toast?.id ?? 0) + 1, message } })),
   hideToast: () => set({ toast: null }),
@@ -35,6 +31,6 @@ export const useUIStore = create<UIState>((set) => ({
     set((s) =>
       s.viewport.width === width && s.viewport.height === height
         ? s
-        : { viewport: { width, height }, compact: height < COMPACT_HEIGHT },
+        : { viewport: { width, height } },
     ),
 }))

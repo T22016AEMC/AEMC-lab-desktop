@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect } from 'react'
-import { enterFullscreen, lockLandscape } from '../lib/fullscreen'
 import { useUIStore } from '../store/uiStore'
 import { Logo } from './Logo'
 
@@ -8,14 +7,9 @@ export function BootScreen() {
   const booted = useUIStore((s) => s.booted)
   const setBooted = useUIStore((s) => s.setBooted)
 
-  // 必須在使用者手勢內同步呼叫 requestFullscreen，所以先呼叫再 await
   const start = () => {
     if (useUIStore.getState().booted) return
-    const pending = enterFullscreen()
     setBooted(true)
-    void pending.then((ok) => {
-      if (ok) void lockLandscape()
-    })
   }
 
   useEffect(() => {

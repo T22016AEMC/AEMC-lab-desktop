@@ -39,9 +39,7 @@ export default defineConfig({
         lang: 'zh-TW',
         start_url: base,
         scope: base,
-        display: 'fullscreen',
-        display_override: ['fullscreen', 'standalone'],
-        orientation: 'landscape',
+        display: 'standalone',
         background_color: '#000000',
         theme_color: '#000000',
         icons: [

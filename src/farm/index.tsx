@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { BALANCE } from './config/balance'
 import { getMetrics } from '../lib/layout'
-import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { worldHour, worldWeather } from './overrides'
 import { FarmEngine, type FrameInfo } from './render/engine'
@@ -25,12 +24,9 @@ export function Farm() {
 
   const status = useFarmStore((s) => s.status)
   const hasSave = useFarmStore((s) => s.save !== null)
-  const compact = useUIStore((s) => s.compact)
 
-  // 有視窗最大化（手機模式下所有視窗都是最大化）時，場景被蓋住，暫停動畫
-  const covered = useWindowStore((s) =>
-    Object.values(s.windows).some((w) => !w.minimized && (w.maximized || compact)),
-  )
+  // 有視窗最大化時，場景被蓋住，暫停動畫
+  const covered = useWindowStore((s) => Object.values(s.windows).some((w) => !w.minimized && w.maximized))
   const coveredRef = useRef(covered)
   coveredRef.current = covered
 
@@ -121,7 +117,7 @@ export function Farm() {
     } else setSelected(null)
   }
 
-  const { menuBar } = getMetrics(compact)
+  const { menuBar } = getMetrics()
 
   return (
     <div ref={boxRef} className="absolute inset-x-0 bottom-0 overflow-hidden bg-sky-300" style={{ top: menuBar }}>

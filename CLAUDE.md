@@ -16,13 +16,12 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 階段一（桌面主體）完成為 v1.0.0
 - 階段二（小遊戲）完成為 v1.1.0
 
-## 新增小程式
+## 外部程式（啟動台）
 
-只修改 `src/config/apps.ts`，不要動其他檔案（若要用圖片圖示，另外把圖片放進 `public/icons/<id>.<副檔名>`）。
-
-- 決定 `openMode` 前先檢查目標網址的回應標頭：有 `X-Frame-Options` 或 CSP `frame-ancestors` 禁止嵌入 → `'tab'`，否則 `'window'`；無法判斷時預設 `'window'` 並告知使用者。Render 免費方案冷啟動要 30～60 秒，檢查時逾時要設長一點並重試。
-- 圖示：優先用網站 `<link rel="icon">`／apple-touch-icon／manifest 中解析度最大的；抓不到或小於 64px 就用文字圖示（`icon: ''`，可加 `iconColor`，每個程式顏色不同）。
-- 尚未上線的程式：設 `status: 'coming-soon'`（`url` 可省略）。桌面、Dock、啟動台顯示半透明圖示加「即將推出」標籤，點擊只出現「XXX 尚未上線，敬請期待」提示。**上線時只需補上 `url` 並刪除 `status` 這一行**。
+- 外部程式清單是使用者自己的，存在瀏覽器（`store/appListStore.ts`，鍵名 `aemc-desktop:app-list`，含 `schemaVersion`），一律透過 `lib/documentStorage.ts` 的儲存層讀寫，不可直接呼叫 localStorage（之後會搬到帳號雲端）。
+- 預設清單在 `src/config/apps.ts` 的 `DEFAULT_APPS`（新使用者與「恢復預設程式」用）。新增預設程式只改這個檔案；圖片圖示放進 `public/icons/<id>.<副檔名>`。
+- 所有外部程式一律用 `window.open(url, '_blank', 'noopener,noreferrer')` 新分頁開啟，不使用 iframe，也沒有 openMode 或「即將推出」機制。視窗系統只給內建程式（小遊戲）。
+- 本網站只支援電腦：可視寬度低於 1024px 顯示提示頁、不載入桌面；不要再加手機介面或觸控虛擬按鈕。不使用全螢幕。
 
 ## GitHub 與部署
 
@@ -59,6 +58,5 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 ## 其他約定
 
 - 「關於這個桌面」顯示的版本號必須從 `package.json` 讀取，不可寫死。
-- 嵌入程式的 iframe 不可加 `sandbox` 屬性（需支援檔案上傳與下載）。
 - 小遊戲不使用外部圖片素材，一律以程式繪製；每個遊戲放在 `src/games/<遊戲名稱>/`。
 - 最高分等 localStorage 讀寫一律包在 try/catch 中。

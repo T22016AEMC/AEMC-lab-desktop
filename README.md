@@ -6,14 +6,14 @@ macOS 風格的虛擬桌面網頁，桌面是一座寵物養殖場，用來集�
 
 ## 功能
 
-- 開機畫面，點擊後進入全螢幕（不支援全螢幕的瀏覽器如 iPhone 會直接進桌面）
+- 開機畫面，點擊後直接進入桌面（不需要全螢幕）
 - 頂部選單列（Logo →「關於這個桌面」、作用中程式名稱、點數、日期時間）
-- 桌面是寵物養殖場（見下方）；底部 Dock 平時只有「啟動台」，開啟的程式才會出現圖示；啟動台（搜尋、遊戲資料夾）是開啟所有程式的入口
-- 視窗系統：紅黃綠按鈕、拖曳、邊緣與角落縮放、雙擊標題列最大化、最小化動畫、置頂、同一程式只開一個視窗
-- 外部程式以 iframe 嵌入（不加 sandbox，可上傳與下載檔案），有載入中動畫與逾時提示
-- 手機橫向適配（視窗一律最大化、Dock 與選單列縮小）、直拿時提示轉為橫向
+- 桌面是寵物養殖場（見下方），畫面貼合瀏覽器可視區域（扣掉選單列），視窗縮放時即時重新計算；底部 Dock 平時只有「啟動台」，開啟中的內建視窗（小遊戲）才會出現圖示
+- 視窗系統（只給內建程式使用）：紅黃綠按鈕、拖曳、邊緣與角落縮放、雙擊標題列最大化、最小化動畫、置頂、同一程式只開一個視窗
+- 外部程式一律用瀏覽器新分頁開啟；啟動台是使用者自己的程式清單，可新增、編輯（右鍵）、刪除（右鍵、需確認）、恢復預設程式，清單存在瀏覽器
+- 電腦專用：可視寬度低於 1024px 時只顯示「本網站僅支援電腦瀏覽，請使用電腦開啟」，不載入桌面與養殖場
 - 5 個內建小遊戲（踩地雷、2048、貪食蛇、彈珠台、飛機打怪），收在啟動台的「遊戲」資料夾
-- PWA：可「加到主畫面」，`display: fullscreen`、`orientation: landscape`
+- PWA：可安裝成電腦的獨立視窗（`display: standalone`）
 
 ## 本機啟動
 
@@ -71,58 +71,29 @@ npm run preview    # 網址 http://localhost:4173/
 
 **預留給後續階段**：玩耍相關指令、7 個建築（鐘樓、狗窩、貓跳台、食盆、花圃、路燈、珊瑚礁，座標已定義在 `src/farm/config/buildings.ts`）、小程式與遊戲的點數獎勵。
 
-## 如何新增程式
+## 管理程式（啟動台）
 
-只需要修改 [src/config/apps.ts](src/config/apps.ts)，在陣列中加一筆：
+外部程式清單是使用者自己的，存在瀏覽器（`aemc-desktop:app-list`，含 `schemaVersion`，透過 `src/lib/documentStorage.ts` 的可替換儲存層，之後可搬到帳號雲端）。
 
-```ts
-{
-  id: 'my-app',                       // 唯一識別碼（英文）
-  name: '我的程式',                    // 顯示名稱
-  icon: '🧪',                         // emoji，或圖片路徑（見下方）
-  url: 'https://example.onrender.com/',
-  openMode: 'window',                 // 'window'：桌面內開視窗；'tab'：開新分頁
-  defaultSize: { width: 960, height: 640 }, // 選填，視窗預設大小
-}
-```
+- 新增：啟動台右上角的「＋」→ 填網址（沒寫 http 會自動補 https，只接受 http／https）、名稱、圖示（上傳圖片會置中裁成正方形並縮成 256×256，或使用文字圖示：名稱前 1～2 個字、顏色依名稱雜湊決定）。
+- 編輯、刪除：在程式圖示上按右鍵（刪除前會確認）。預設的 5 個程式也可以編輯與刪除；內建遊戲只能「隱藏」。
+- 「恢復預設程式」：還原成預設清單並重新顯示隱藏的遊戲。
+- 所有外部程式都用新分頁開啟（`window.open`，帶 `noopener,noreferrer`），所以不需要檢查網站能不能嵌入。
 
-使用圖片當圖示：把圖片放進 `public/icons/`，`icon` 寫 `'icons/my-app.png'`（會自動接上部署的子路徑）。網站沒有可用的圖示時，`icon` 寫 `''`，會顯示「文字圖示」：圓角方形、漸層底色，顯示名稱前兩個字母；可用 `iconColor: ['#起', '#迄']` 指定顏色，沒設定就依 id 自動決定。
-
-### 尚未上線的程式（即將推出）
-
-程式還沒上線時，在 `apps.ts` 加一筆並設 `status: 'coming-soon'`，`url` 可以省略：
-
-```ts
-{
-  id: 'autoellipso',
-  name: 'AutoEllipso',
-  icon: '',
-  status: 'coming-soon',
-}
-```
-
-桌面、Dock 與啟動台都會顯示它的圖示，但圖示半透明並加上「即將推出」小標籤；點擊時不開視窗，只顯示「XXX 尚未上線，敬請期待」的提示。
-
-**上線時**只要補上 `url`（需要時調整 `openMode`、`defaultSize`、圖示），並刪除 `status` 這一行即可。
-
-### 嵌入限制（重要）
-
-視窗模式用 iframe 載入網站。如果目標網站的回應標頭有 `X-Frame-Options: DENY/SAMEORIGIN`，或 CSP 的 `frame-ancestors` 不允許本站，瀏覽器會拒絕顯示，而且網頁端無法偵測到這件事（只會看到空白或瀏覽器的錯誤頁）。這類網站請把 `openMode` 設為 `'tab'`，或在視窗右上角用「在新分頁開啟」。
-
-Render 免費方案冷啟動可能需要 30 秒以上，視窗會顯示「載入中…」，60 秒後仍未載入才會出現逾時提示。
+預設的 5 個程式（FilMaster、SpecReader、CheMScutter、EluSim、AutoEllipso）定義在 [src/config/apps.ts](src/config/apps.ts) 的 `DEFAULT_APPS`；圖片圖示放在 `public/icons/`，`icon` 寫 `'icons/檔名.png'`，寫 `''` 則是文字圖示。
 
 ## 內建程式與小遊戲
 
-`src/config/builtinApps.ts` 用來登錄「內建程式」：不使用 iframe，直接在視窗中渲染 React 元件。元件會收到 `active`（是否為作用中視窗）與 `minimized`（是否最小化）兩個屬性。`category: 'games'` 的程式會歸入啟動台的「遊戲」資料夾，不顯示在桌面圖示，只有開啟時才出現在 Dock。
+`src/config/builtinApps.ts` 用來登錄「內建程式」：直接在桌面視窗中渲染 React 元件。元件會收到 `active`（是否為作用中視窗）與 `minimized`（是否最小化）兩個屬性。`category: 'games'` 的程式會歸入啟動台的「遊戲」資料夾，不顯示在桌面圖示，只有開啟時才出現在 Dock。
 
 目前的 5 個遊戲（程式碼在 `src/games/<遊戲名稱>/`，共用的暫停、結算畫面、音效、縮放畫布在 `src/games/shared/`）：
 
 | 遊戲 | 資料夾 | 操作 |
 | --- | --- | --- |
-| 踩地雷 | `minesweeper` | 初級 9×9、中級 16×16、高級 30×16；左鍵翻開、右鍵插旗、點數字快速翻開；觸控輕點翻開、長按插旗。最高紀錄是各難度的最短時間 |
-| 2048 | `game2048` | 方向鍵或 WASD；觸控滑動 |
-| 貪食蛇 | `snake` | 方向鍵或 WASD；觸控滑動或螢幕方向鍵；分數越高速度越快 |
-| 彈珠台 | `pinball` | Z／← 左擋板、/／→ 右擋板；按住空白鍵蓄力、放開發射；觸控點畫面左半邊或右半邊，用「發射」按鈕蓄力。物理使用 matter-js，3 顆球 |
+| 踩地雷 | `minesweeper` | 初級 9×9、中級 16×16、高級 30×16；左鍵翻開、右鍵插旗、點數字快速翻開。最高紀錄是各難度的最短時間 |
+| 2048 | `game2048` | 方向鍵或 WASD |
+| 貪食蛇 | `snake` | 方向鍵或 WASD；分數越高速度越快 |
+| 彈珠台 | `pinball` | Z／← 左擋板、/／→ 右擋板；按住空白鍵蓄力、放開發射；也可以點畫面左半邊或右半邊控制擋板、用「發射」按鈕蓄力。物理使用 matter-js，3 顆球 |
 | 飛機打怪 | `shooter` | 自動射擊；方向鍵、WASD 或拖曳移動。每 5 波一隻 Boss；P 火力升級（最高 5 級）、S 護盾 |
 
 共通行為：
@@ -158,5 +129,5 @@ src/
 ├─ components/    BootScreen、MenuBar、AboutDialog、Desktop、Dock、Launchpad、Window、RotateHint …
 ├─ games/         minesweeper、game2048、snake、pinball、shooter、shared（共用元件）
 ├─ hooks/         useClock、useMediaQuery、useViewportSync、useIframeFocusSync
-└─ lib/           layout、fullscreen、format、icon、dock
+└─ lib/           layout、format、icon、dock、documentStorage、appUrl、iconImage
 ```

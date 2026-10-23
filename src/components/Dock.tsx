@@ -72,23 +72,20 @@ function LaunchpadGlyph() {
 
 export function Dock() {
   const mouseX = useMotionValue(Infinity)
-  const compact = useUIStore((s) => s.compact)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const setLaunchpadOpen = useUIStore((s) => s.setLaunchpadOpen)
   const windows = useWindowStore((s) => s.windows)
   const openApp = useWindowStore((s) => s.openApp)
-  const base = getMetrics(compact).dockIcon
-  const dotOffset = compact ? -3 : -7
+  const base = getMetrics().dockIcon
+  const dotOffset = -7
 
-  // 平時只有「啟動台」；程式或遊戲開啟後才出現圖示，關閉後移除
+  // 平時只有「啟動台」；內建視窗（小遊戲）開啟後才出現圖示，關閉後移除。外部程式在新分頁開啟，不會出現在 Dock
   const items = allApps.filter((a) => windows[a.id])
 
   return (
     <nav
-      className={`glass fixed left-1/2 z-[9000] flex max-w-[98vw] -translate-x-1/2 items-end ${
-        compact ? 'bottom-1 gap-1 rounded-xl px-1.5 pb-1 pt-1' : 'bottom-2 gap-1.5 rounded-[22px] px-2 pb-2 pt-2'
-      }`}
-      style={{ height: base + (compact ? 10 : 18) }}
+      className="glass fixed bottom-2 left-1/2 z-[9000] flex max-w-[98vw] -translate-x-1/2 items-end gap-1.5 rounded-[22px] px-2 pb-2 pt-2"
+      style={{ height: base + 18 }}
       onPointerMove={(e) => e.pointerType === 'mouse' && mouseX.set(e.clientX)}
       onPointerLeave={() => mouseX.set(Infinity)}
     >
@@ -97,7 +94,7 @@ export function Dock() {
         dockId="__launchpad"
         mouseX={mouseX}
         base={base}
-        magnify={!compact}
+        magnify
         running={false}
         dotOffset={dotOffset}
         onClick={() => setLaunchpadOpen(!launchpadOpen)}
@@ -112,7 +109,7 @@ export function Dock() {
           dockId={app.id}
           mouseX={mouseX}
           base={base}
-          magnify={!compact}
+          magnify
           running={Boolean(windows[app.id])}
           dotOffset={dotOffset}
           onClick={() => openApp(app)}

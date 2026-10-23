@@ -16,17 +16,12 @@ export default {
         ],
       },
       keyframes: {
-        rotatePhone: {
-          '0%, 20%': { transform: 'rotate(0deg)' },
-          '60%, 100%': { transform: 'rotate(-90deg)' },
-        },
         blink: {
           '0%, 100%': { opacity: '0.9' },
           '50%': { opacity: '0.25' },
         },
       },
       animation: {
-        'rotate-phone': 'rotatePhone 2.4s ease-in-out infinite',
         blink: 'blink 2s ease-in-out infinite',
       },
     },
