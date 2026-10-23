@@ -5,7 +5,7 @@ import type { Weather } from '../sim/worldTime'
 import { releaseUse, updateBuildingUse, type BuildingUse } from './buildingUse'
 import type { BuildingSlot, Layout } from './layout'
 import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
-import { findPath, lineClear, type Pt } from './nav'
+import { findPath, lineClear, type FixedPet, type Pt } from './nav'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -136,6 +136,8 @@ export interface BehaviorEnv {
   bowlLeft: number
   /** 在食盆吃一份（用掉份量、回復飽食度）；回傳 null 表示成功，否則是失敗原因 */
   eatAtBowl: (a: Actor) => string | null
+  /** 睡著或坐在座位上、不會動的寵物（尋路時繞開） */
+  fixed: readonly FixedPet[]
 }
 
 const rr = (rand: () => number, a: number, b: number): number => a + rand() * (b - a)
@@ -623,7 +625,7 @@ function moveToward(a: Actor, dt: number, speed: number, env: BehaviorEnv): void
   if (a.pathKey !== key || a.pathAge > 3) {
     a.pathKey = key
     a.pathAge = 0
-    a.path = findPath(env.layout, a.x, a.y, a.tx, a.ty) ?? []
+    a.path = findPath(env.layout, a.x, a.y, a.tx, a.ty, env.fixed, a.id) ?? []
   }
   while (a.path.length > 1 && Math.hypot(a.path[0].x - a.x, a.path[0].y - a.y) < 2.5) a.path.shift()
   const wp = a.path.length ? a.path[0] : { x: a.tx, y: a.ty }

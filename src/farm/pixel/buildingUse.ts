@@ -147,6 +147,11 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
       if (use.phase === 'at') ops.setAction(a, 'sleep', 1e9)
     }
     if (keep && use.purpose === 'eat' && st.sleeping) keep = false
+    // 還在走去食盆的路上、份量就被吃完了：放棄（已經在吃的讓牠吃完）
+    if (keep && use.purpose === 'eat' && use.phase === 'walk' && env.bowlLeft <= 0) {
+      keep = false
+      a.bowlCool = 20
+    }
     // 被操作（餵食、撫摸、叫醒、散步…）：離開建築去互動；睡著時被撫摸（override tag pet）不會醒，留在座位上
     if (keep && a.override && !(use.purpose === 'sleep' && use.phase === 'at' && a.override.tag === 'pet')) keep = false
     // 氣泡選單開著：還在走的就停下來；已經在座位上的繼續

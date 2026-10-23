@@ -29,6 +29,14 @@ interface Grid {
 
 const gridCache = new WeakMap<Layout, { owned: ReadonlySet<string>; grid: Grid }>()
 
+/** 睡著或坐在建築座位上的寵物（不會動）：路徑要離牠們一小段距離，不要從牠們身上穿過去 */
+export interface FixedPet extends Pt {
+  id: string
+}
+const AVOID_X = 38
+const AVOID_Y = 13
+const inAvoid = (avoid: readonly Pt[], x: number, y: number): boolean => avoid.some((p) => ((x - p.x) / AVOID_X) ** 2 + ((y - p.y) / AVOID_Y) ** 2 < 1)
+
 /** 這個點離所有障礙至少 MARGIN 像素、而且在活動範圍內嗎 */
 export function isClear(L: Layout, x: number, y: number): boolean {
   if (!walkZones(L).some((z) => x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1)) return false
@@ -49,7 +57,7 @@ function gridOf(L: Layout): Grid {
 }
 
 /** 兩點之間的直線（每 2 像素取樣）有沒有碰到障礙 */
-export function lineClear(L: Layout, x0: number, y0: number, x1: number, y1: number): boolean {
+export function lineClear(L: Layout, x0: number, y0: number, x1: number, y1: number, avoid: readonly Pt[] = []): boolean {
   const d = Math.hypot(x1 - x0, y1 - y0)
   const n = Math.max(1, Math.ceil(d / 2))
   for (let i = 1; i <= n; i++) {
@@ -57,6 +65,7 @@ export function lineClear(L: Layout, x0: number, y0: number, x1: number, y1: num
     const x = x0 + (x1 - x0) * t
     const y = y0 + (y1 - y0) * t
     // 只檢查障礙（起點可能剛好貼著牆）；障礙往外放寬一點，路徑才不會擦著牆角走
+    if (avoid.length && inAvoid(avoid, x, y)) return false
     for (const r of blockers(L)) if (x > r.x0 - LINE_PAD && x < r.x1 + LINE_PAD && y > r.y0 - LINE_PAD && y < r.y1 + LINE_PAD) return false
   }
   return true
@@ -90,8 +99,10 @@ function nearestCell(g: Grid, x: number, y: number): number {
  * 從 (x0, y0) 到 (x1, y1) 的路徑點（不含起點，最後一點是目標本身）。
  * 直線走得通 → 只有目標一個點；繞得過去 → 轉折點；目標在牆裡面或不可達 → null（呼叫端退回直線走）。
  */
-export function findPath(L: Layout, x0: number, y0: number, x1: number, y1: number): Pt[] | null {
-  if (lineClear(L, x0, y0, x1, y1)) return [{ x: x1, y: y1 }]
+export function findPath(L: Layout, x0: number, y0: number, x1: number, y1: number, fixed: readonly FixedPet[] = [], self = ''): Pt[] | null {
+  // 起點或終點本身就在某隻不會動的寵物旁邊（例如走去自己的座位）：那一隻不算
+  const avoid = fixed.filter((p) => p.id !== self && !inAvoid([p], x0, y0) && !inAvoid([p], x1, y1))
+  if (lineClear(L, x0, y0, x1, y1, avoid)) return [{ x: x1, y: y1 }]
   const g = gridOf(L)
   const s = nearestCell(g, x0, y0)
   const e = nearestCell(g, x1, y1)
@@ -161,6 +172,7 @@ export function findPath(L: Layout, x0: number, y0: number, x1: number, y1: numb
         if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue
         const ni = ny * cols + nx
         if (!g.ok[ni] || closed[ni]) continue
+        if (avoid.length && ni !== e && inAvoid(avoid, nx * CELL, ny * CELL)) continue
         // 斜走不可切過牆角
         if (dx && dy && (!g.ok[cy * cols + nx] || !g.ok[ny * cols + cx])) continue
         // 垂直方向走得慢（斜視角），所以垂直步的代價高一點，路徑傾向橫向繞
@@ -184,7 +196,7 @@ export function findPath(L: Layout, x0: number, y0: number, x1: number, y1: numb
   let anchor = 0
   while (anchor < pts.length - 1) {
     let far = pts.length - 1
-    while (far > anchor + 1 && !lineClear(L, pts[anchor].x, pts[anchor].y, pts[far].x, pts[far].y)) far--
+    while (far > anchor + 1 && !lineClear(L, pts[anchor].x, pts[anchor].y, pts[far].x, pts[far].y, avoid)) far--
     out.push(pts[far])
     anchor = far
   }

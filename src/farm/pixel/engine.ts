@@ -205,6 +205,7 @@ export class PixelEngine {
       layout: this.layout, nowMs: f.nowMs, hour: f.hour, rand: this.rand, selectedId: this.selectedId, others: list, emit: this.emit,
       fx: this.fx, requestBath: this.requestBath, notify: (m) => this.hooks.notify(m),
       weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id),
+      fixed: list.filter((a) => !a.drag && !a.fly && !a.bath && (a.action === 'sleep' || a.bld?.phase === 'at')).map((a) => ({ id: a.id, x: a.x, y: a.y })),
     }
     for (const a of list) updateActor(a, dt, env)
     for (const an of this.anims) an.t += dt
