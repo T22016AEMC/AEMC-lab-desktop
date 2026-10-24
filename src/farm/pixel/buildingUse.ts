@@ -49,6 +49,18 @@ export function capacityOf(id: BuildingId): number {
   return 0
 }
 
+/**
+ * 座位坐滿時多出來的寵物（睡覺、躲雨）改睡在建築「前方」的可走位置：腳底比建築腳底低 OVERFLOW_DY，
+ * 不會被屋頂遮住，也離洗澡通道很遠。每個建築 2 個，排在真正的座位之後（index >= capacity）。食盆沒有。
+ */
+const OVERFLOW_DX: Partial<Record<BuildingId, number>> = { kennel: 40, catTree: 36 }
+const OVERFLOW_DY = 28
+
+/** 這個座位是「多出來的」前方位置（不是建築旁的真座位，沒有睡覺心情加成） */
+export function isOverflowSeat(id: BuildingId, seat: number): boolean {
+  return seat >= capacityOf(id)
+}
+
 /** 一個建築的座位（腳底座標）：左右並排；食盆朝向中間，狗窩／貓跳台朝外 */
 export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose): Seat[] {
   const n = capacityOf(id)
@@ -59,6 +71,8 @@ export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose)
     const inward = id === 'bowls'
     out.push({ x: slot.x + side * dx, y: slot.y + SEAT_DY[purpose], face: (inward ? -side || 1 : side || 1) as 1 | -1 })
   }
+  const odx = OVERFLOW_DX[id]
+  if (odx !== undefined && purpose !== 'eat') for (const side of [-1, 1] as const) out.push({ x: slot.x + side * odx, y: slot.y + OVERFLOW_DY, face: side })
   return out
 }
 
@@ -89,13 +103,17 @@ function claim(a: Actor, env: BehaviorEnv, id: BuildingId, purpose: UsePurpose):
   const seats = seatsOf(id, slot, purpose)
   let best = -1
   let bd = Infinity
-  for (let i = 0; i < seats.length; i++) {
-    if (seatTaken(env, id, i, a)) continue
-    const d = Math.hypot(seats[i].x - a.x, (seats[i].y - a.y) * 1.6)
-    if (d < bd) {
-      bd = d
-      best = i
+  // 先找真座位；都被占了才用建築前方多出來的位置
+  for (const overflow of [false, true]) {
+    for (let i = 0; i < seats.length; i++) {
+      if (isOverflowSeat(id, i) !== overflow || seatTaken(env, id, i, a)) continue
+      const d = Math.hypot(seats[i].x - a.x, (seats[i].y - a.y) * 1.6)
+      if (d < bd) {
+        bd = d
+        best = i
+      }
     }
+    if (best >= 0) break
   }
   if (best < 0) return false
   const near = a.y >= slot.y + LANE_DY - 6 && Math.abs(a.x - seats[best].x) < 60
@@ -159,6 +177,19 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
     if (!keep) {
       releaseUse(a)
       use = null
+    }
+  }
+
+  // 睡在前方多出來位置的寵物：真座位空出來了就換過去
+  if (use && use.phase === 'at' && use.purpose !== 'eat' && isOverflowSeat(use.id, use.seat)) {
+    let free = false
+    for (let i = 0; i < capacityOf(use.id); i++) if (!seatTaken(env, use.id, i, a)) free = true
+    if (free) {
+      const id = use.id
+      const purpose = use.purpose
+      releaseUse(a)
+      claim(a, env, id, purpose)
+      use = a.bld
     }
   }
 

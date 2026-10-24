@@ -7,6 +7,14 @@ export interface DocumentStorage<T> {
   load(): Promise<T | null>
   save(data: T): Promise<void>
   clear(): Promise<void>
+  /**
+   * 匯入存檔用：寫入失敗時丟出例外（save 會吞掉錯誤並顯示提示）。
+   * 搭配 snapshot／restore 可以做到「整批成功或整批不寫」。換成雲端儲存時整組一起實作。
+   */
+  saveStrict(data: T): Promise<void>
+  /** 目前儲存的原始內容（沒有資料 = null），給 restore 還原用 */
+  snapshot(): Promise<string | null>
+  restore(snapshot: string | null): Promise<void>
 }
 
 type ErrorHandler = (message: string) => void
@@ -50,6 +58,27 @@ export class LocalStorageDocument<T> implements DocumentStorage<T> {
     } catch {
       // 無痕模式、被封鎖或空間已滿：不會讓程式當掉，但要讓使用者知道沒有存到
       reportFailure()
+    }
+  }
+
+  async saveStrict(data: T): Promise<void> {
+    localStorage.setItem(this.key, JSON.stringify(data))
+  }
+
+  async snapshot(): Promise<string | null> {
+    try {
+      return localStorage.getItem(this.key)
+    } catch {
+      return null
+    }
+  }
+
+  async restore(snapshot: string | null): Promise<void> {
+    try {
+      if (snapshot === null) localStorage.removeItem(this.key)
+      else localStorage.setItem(this.key, snapshot)
+    } catch {
+      // 還原也失敗時沒有更多辦法
     }
   }
 

@@ -11,7 +11,7 @@ import {
   DOOR, HOUSE_H, HOUSE_W, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
   toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
 } from './layout'
-import { releaseUse } from './buildingUse'
+import { isOverflowSeat, releaseUse } from './buildingUse'
 import {
   beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
@@ -144,7 +144,7 @@ export class PixelEngine {
   /** 睡在狗窩／貓跳台旁邊的寵物 id（睡覺的心情回復倍率用） */
   sleepersAtBuilding(): Set<string> {
     const out = new Set<string>()
-    for (const a of this.actors.values()) if (a.bld?.purpose === 'sleep' && a.bld.phase === 'at') out.add(a.id)
+    for (const a of this.actors.values()) if (a.bld?.purpose === 'sleep' && a.bld.phase === 'at' && !isOverflowSeat(a.bld.id, a.bld.seat)) out.add(a.id)
     return out
   }
 

@@ -45,6 +45,9 @@ export function defaultAppList(): AppListData {
 
 let storage: DocumentStorage<AppListData> = new LocalStorageDocument<AppListData>(KEY, parseAppList)
 /** 之後換成雲端儲存時呼叫（測試也會用到） */
+export function getAppListStorage(): DocumentStorage<AppListData> {
+  return storage
+}
 export function setAppListStorage(next: DocumentStorage<AppListData>): void {
   storage = next
 }

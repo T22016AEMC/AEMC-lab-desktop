@@ -6,12 +6,10 @@ import { useFarmStore } from '../farm/store/farmStore'
 import { getApp } from '../config/registry'
 import { useUIStore } from '../store/uiStore'
 import { useActiveApp, useWindowStore } from '../store/windowStore'
-import { Logo } from './Logo'
+import { LogoMenu } from './LogoMenu'
 
 export function MenuBar() {
   const now = useClock()
-  const aboutOpen = useUIStore((s) => s.aboutOpen)
-  const setAboutOpen = useUIStore((s) => s.setAboutOpen)
   const activeApp = useActiveApp()
   const points = useFarmStore((st) => st.save?.points ?? null)
   const petCount = useFarmStore((st) => st.save?.pets.length ?? null)
@@ -27,13 +25,7 @@ export function MenuBar() {
       style={{ height: menuBar, fontSize: 13 }}
     >
       <div className="flex min-w-0 items-center gap-1">
-        <button
-          aria-label="關於這個桌面"
-          onClick={() => setAboutOpen(!aboutOpen)}
-          className="flex h-5 items-center rounded px-2 hover:bg-white/20"
-        >
-          <Logo size={15} />
-        </button>
+        <LogoMenu />
         <span className="truncate px-1 font-semibold">{activeApp ? activeApp.name : '桌面'}</span>
         {/* 啟動台的備用入口（主要入口是住家的門；快捷鍵 F4） */}
         <button

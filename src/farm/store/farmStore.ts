@@ -212,7 +212,21 @@ export const useFarmStore = create<FarmState>((set, get) => ({
 // 存檔有變化時節流寫入；離開頁面時立刻寫一次
 let saveTimer: number | undefined
 let lastSaved: SaveData | null = null
+/** 匯入存檔後要重新整理網頁：停止自動寫入，否則離開頁面時會把記憶體裡的舊存檔寫回去、蓋掉剛匯入的 */
+let savesSuspended = false
+export function suspendSaves(): void {
+  savesSuspended = true
+  window.clearTimeout(saveTimer)
+  saveTimer = undefined
+}
+
+/** 立刻把待寫入的存檔寫進儲存層（匯出前呼叫，確保匯出的是最新的） */
+export function flushSave(): void {
+  flush()
+}
+
 function flush(): void {
+  if (savesSuspended) return
   window.clearTimeout(saveTimer)
   saveTimer = undefined
   const s = useFarmStore.getState().save

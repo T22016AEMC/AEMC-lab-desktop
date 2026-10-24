@@ -69,4 +69,8 @@ export interface SaveStorage {
   load(): Promise<SaveData | null>
   save(data: SaveData): Promise<void>
   clear(): Promise<void>
+  /** 匯入存檔用（見 DocumentStorage）：失敗丟例外、可還原 */
+  saveStrict(data: SaveData): Promise<void>
+  snapshot(): Promise<string | null>
+  restore(snapshot: string | null): Promise<void>
 }

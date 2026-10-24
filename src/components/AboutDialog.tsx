@@ -7,6 +7,7 @@ import { Logo } from './Logo'
 export function AboutDialog() {
   const open = useUIStore((s) => s.aboutOpen)
   const setOpen = useUIStore((s) => s.setAboutOpen)
+  const persisted = useUIStore((s) => s.persisted)
 
   useEffect(() => {
     if (!open) return
@@ -61,6 +62,8 @@ export function AboutDialog() {
                 <dd>{__APP_VERSION__}</dd>
                 <dt className="text-neutral-500">更新日期</dt>
                 <dd>{formatIsoDate(__APP_DATE__)}</dd>
+                <dt className="text-neutral-500">持久儲存</dt>
+                <dd data-testid="about-persisted">{persisted === null ? '不支援' : persisted ? '已啟用' : '未啟用'}</dd>
               </dl>
             </div>
           </motion.div>
