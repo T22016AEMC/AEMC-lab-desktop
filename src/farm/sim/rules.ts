@@ -1,4 +1,4 @@
-import { PET_CAPACITY } from '../config/balance'
+import { BALANCE, PET_CAPACITY } from '../config/balance'
 import { SPECIES, type SpeciesId } from '../config/species'
 import type { Pet, SaveData } from '../save/types'
 import { isSleepTime } from './worldTime'
@@ -14,6 +14,12 @@ export function adoptCheck(save: Pick<SaveData, 'pets' | 'points'>, species: Spe
   if (save.pets.length >= PET_CAPACITY) return { ok: false, reason: `寵物已滿（貓狗合計最多 ${PET_CAPACITY} 隻）` }
   if (!free && sp.cost > save.points) return { ok: false, reason: `金幣不足（需要 ${sp.cost} 金幣，目前 ${save.points} 金幣）` }
   return { ok: true }
+}
+
+/** 營火有沒有亮：日落（litFromHour）到睡覺時間開始（23:00）；其餘時間熄滅 */
+export function campfireLit(hour: number): boolean {
+  const h = ((hour % 24) + 24) % 24
+  return h >= BALANCE.buildings.campfire.litFromHour && h < BALANCE.sleep.startHour
 }
 
 /** 陸地寵物是否正在睡覺：在睡覺時間內，而且沒有被叫醒（或叫醒／互動後已閒置超過一段時間） */

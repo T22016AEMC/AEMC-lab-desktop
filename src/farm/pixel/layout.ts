@@ -45,26 +45,36 @@ export const TOWER_W = 123
 export const TOWER_H = 160
 export const LAMP_W = 51
 export const LAMP_H = 84
-/** 路燈素材的錨點 x（水平中心欄）與燈桿的欄範圍（相對素材左緣，右界不含）；要和 manifest 的 lamp 圖一致（測試會檢查） */
+/** 路燈素材的錨點 x（水平中心欄）；要和 manifest 的 lamp 圖一致（測試會檢查） */
 export const LAMP_AX = 26
-export const LAMP_POLE_X1 = 27
 /**
- * 狗窩素材的錨點 x（水平中心欄）、尺寸。狗窩在路燈後面（前後排，路燈在前）：左側牆面的外緣（素材第 KENNEL_WALL_X 欄）
- * 被燈桿蓋住 KENNEL_TUCK 像素，燈桿與狗窩之間不會露出草地縫；牆外的花叢與屋簷尖端被路燈（燈罩、燈桿）蓋住或露在燈的左側都可以。
+ * 狗窩素材的錨點 x（水平中心欄）、尺寸。狗窩與路燈是前後排（路燈在前），兩個素材的「不透明像素」左右相接、不重疊：
+ * 狗窩往右移到和路燈（燈罩與燈桿）的可見像素最窄處只留 1 像素縫（測試用素材的實際不透明像素逐列量過）。位置只由路燈決定，和視窗大小無關。
  */
 export const KENNEL_W = 99
 export const KENNEL_H = 83
 export const KENNEL_AX = 50
-export const KENNEL_WALL_X = 12
-export const KENNEL_TUCK = 4
+export const KENNEL_DX_FROM_LAMP = 55
 export const CAT_TREE_W = 72
 export const CAT_TREE_H = 90
 export const BOWLS_W = 57
 export const BOWLS_H = 26
-/** 狗窩與食盆水盆之間的間隔（兩個素材外框之間，邏輯像素） */
-export const BOWLS_GAP = 12
+/** v3.4.0 營火的素材尺寸與錨點 x（A、B、熄滅版同一畫布，要和 manifest 一致，測試會比對） */
+export const CAMPFIRE_W = 96
+export const CAMPFIRE_H = 81
+export const CAMPFIRE_AX = 48
+/** 營火火焰光暈的範圍（相對腳底中心）：水池水花與塔門都不可落在這個範圍內（排位時檢查） */
+export const CAMPFIRE_GLOW = { rx: 40, up: 62, down: 10 }
+/** 食盆水盆緊貼狗窩右緣：食盆水盆的錨點 x = 狗窩的錨點 x + 這個值（兩個素材的不透明像素逐列量過，最窄處只留 1 像素縫，不重疊） */
+export const BOWLS_DX_FROM_KENNEL = 79
+/** 貓跳台中心 = 鐘樓中心 + 這個值（v3.3.1 是 −6，v3.4.0 往右移 12）；右緣離畫面右緣約 30 */
+export const CAT_TREE_DX_FROM_TOWER = 6
 /** 貓跳台右緣離畫面右緣至少這麼遠 */
-export const CAT_TREE_RIGHT_MARGIN = 41
+export const CAT_TREE_RIGHT_MARGIN = 28
+/** 營火左右兩側聚集位置離營火中心的水平距離（buildingUse 的座位用同一個值） */
+export const CAMPFIRE_SIDE_SEAT_DX = 54
+/** 營火：水平中心對齊右邊那棵樹，腳底比樹腳底低這個範圍（偏好值是中間） */
+export const CAMPFIRE_BELOW_TREE = [40, 60] as const
 /** 貓跳台頂端再往上這麼多（睡在頂層平台的貓比平台高約 10 像素；頂層貓的 ZZZ 畫在頭旁邊，不再往上）要在塔門下緣之下 */
 export const CAT_TREE_HEADROOM = 12
 export const TREE_W = 82
@@ -164,8 +174,8 @@ export interface SceneObject {
 }
 
 export const lampX = (): number => HOUSE_X0 + HOUSE_W + 26
-/** 狗窩的水平中心（錨點）：牆面外緣 = 燈桿右緣 - KENNEL_TUCK。位置只由路燈決定，和視窗大小無關 */
-export const kennelX = (): number => lampX() - LAMP_AX + LAMP_POLE_X1 - KENNEL_TUCK - KENNEL_WALL_X + KENNEL_AX
+/** 狗窩的水平中心（錨點）：和路燈的不透明像素相接（見 KENNEL_DX_FROM_LAMP） */
+export const kennelX = (): number => lampX() + KENNEL_DX_FROM_LAMP
 export const towerX = (L: Layout): number => L.W - TOWER_MARGIN - Math.round(TOWER_W / 2)
 /**
  * 後排景物（鐘樓、樹）的腳底貼近草地上緣：樹 = 草地上緣 + 10、+8；鐘樓同樣是草地上緣 + 10，
@@ -323,6 +333,8 @@ export const DECOR_SIZE: Record<string, [number, number]> = {
 const DECOR_BLOCK_D = 10
 
 const hit = (r: Rect, o: Rect, gx = 0, gy = gx): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
+/** 草地上的建築 id（排位時要檢查素材外框） */
+const GRASS_IDS = ['campfire', 'picnicMat', 'sandbox']
 const sceneCache = new WeakMap<Layout, { back: SceneObject[]; slots: BuildingSlot[]; decor: SceneObject[] }>()
 
 /** 草地上的小路上緣（路與草地的交界）；建築空位貼在這條線上 */
@@ -448,8 +460,8 @@ export type SlotKind = 'kennel' | 'catTree' | 'small' | 'large'
 /**
  * 建築空位：x、y = 腳底中心（邏輯座標）；w、h = 之後放的素材外框大小（佔位範圍）；
  * fw、fd = 腳下的佔地（寬、深），空位彼此、與固定物件的佔地都不重疊。
- * id 就是專用標記：kennel（狗窩）、bowls（食盆水盆）、catTree（貓跳台）、playground（遊樂設施）、campfire（營火）、
- * picnicMat（野餐墊）、flowerbed（花圃）、sandbox（沙坑）。
+ * id 就是專用標記：kennel（狗窩）、bowls（食盆水盆）、catTree（貓跳台）、campfire（營火）、
+ * picnicMat（野餐墊）、sandbox（沙坑）。
  */
 export interface BuildingSlot {
   id: string
@@ -477,11 +489,9 @@ export const SLOT_SPECS: SlotSpec[] = [
   { id: 'kennel', name: '狗窩', kind: 'kennel', w: KENNEL_W, h: KENNEL_H, fw: 76, fd: 22 },
   { id: 'bowls', name: '食盆水盆', kind: 'small', w: BOWLS_W, h: BOWLS_H, fw: 48, fd: 12 },
   { id: 'catTree', name: '貓跳台', kind: 'catTree', w: CAT_TREE_W, h: CAT_TREE_H, fw: 53, fd: 22 },
+  { id: 'campfire', name: '營火', kind: 'large', w: CAMPFIRE_W, h: CAMPFIRE_H, fw: 74, fd: 20 },
   { id: 'picnicMat', name: '野餐墊', kind: 'small', w: 117, h: 69, fw: 84, fd: 20 },
-  { id: 'playground', name: '遊樂設施', kind: 'large', w: 100, h: 75, fw: 84, fd: 24 },
-  { id: 'campfire', name: '營火', kind: 'large', w: 100, h: 75, fw: 84, fd: 24 },
-  { id: 'flowerbed', name: '花圃', kind: 'small', w: 96, h: 66, fw: 68, fd: 18 },
-  { id: 'sandbox', name: '沙坑', kind: 'small', w: 96, h: 66, fw: 68, fd: 18 },
+  { id: 'sandbox', name: '沙坑', kind: 'small', w: 110, h: 65, fw: 84, fd: 16 },
 ]
 
 /** 走道上的空位（狗窩、食盆水盆、貓跳台）腳底在走道上緣再往下這麼多：落在沙地走道的上半部 */
@@ -532,6 +542,16 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
   const fixed = obstacles.map((r) => ({ x0: r.x0 - 4, x1: r.x1 + 4, y0: r.y0 - 6, y1: r.y1 + 4 }))
   // 洗澡通道（水池右邊的窄可走帶）不可被任何空位占用
   if (strip) fixed.push({ x0: strip.x0 - 8, x1: strip.x1 + 8, y0: strip.y0 - 4, y1: strip.y1 + 4 })
+  // v3.4.0：草地上的建築（素材外框）不可蓋住狗窩、食盆水盆、貓跳台、住家、路燈、水池、塔門、洗澡通道，彼此也要隔開（前後依腳底高度排，但外框不重疊比較好看）
+  const pd = pondPos(L)
+  const door = towerDoorRect(L)
+  const avoid: Rect[] = [
+    { x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - HOUSE_H, y1: L.house.baseY },
+    { x0: lampX() - LAMP_AX, x1: lampX() - LAMP_AX + LAMP_W, y0: L.H - 12 - LAMP_H, y1: L.H - 12 },
+    { x0: pd.x - POND_AX, x1: pd.x - POND_AX + POND_W, y0: pd.y - POND_H, y1: pd.y },
+    { x0: door.x0 - 6, x1: door.x1 + 6, y0: door.y0 - 6, y1: door.y1 + 6 },
+  ]
+  if (strip) avoid.push({ x0: strip.x0, x1: strip.x1 + 8, y0: strip.y0 - 4, y1: strip.y1 + 4 })
   const placed: BuildingSlot[] = []
   const get = (id: string): BuildingSlot | undefined => placed.find((q) => q.id === id)
   const inMain = (r: Rect): boolean => r.x0 >= b.x0 + 2 && r.x1 <= b.x1 - 10 && r.y0 >= b.y0 && r.y1 <= b.y1
@@ -543,25 +563,25 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
     const yGrassMax = pathTop - 14 // 草地空位腳底的最大 y（和走道上的空位隔開）
     switch (sp.id) {
       case 'kennel':
-        // 狗窩在路燈後面：左緣被燈桿蓋住 KENNEL_TUCK 像素，位置固定（只由路燈決定）
+        // 狗窩與路燈的不透明像素左右相接（位置固定，只由路燈決定）
         x0 = kennelX()
         x1 = x0
         ax = x0
         break
       case 'bowls': {
-        // 食盆水盆跟著狗窩：兩個素材外框之間約 BOWLS_GAP 像素
+        // 食盆水盆緊貼狗窩右緣（不透明像素逐列量過，縫 1 像素）
         const k = get('kennel')
         if (!k) continue
-        x0 = Math.round(k.x + k.w / 2 + BOWLS_GAP + sp.w / 2)
-        x1 = x0 + 40
+        x0 = k.x + BOWLS_DX_FROM_KENNEL
+        x1 = x0
         ax = x0
         break
       }
       case 'catTree':
-        // 鐘樓正下方偏左：右緣離畫面右緣 > 40，頂端（含睡在頂層的貓）在塔門下緣之下
-        x0 = tx - 14
-        x1 = tx - 2
-        ax = tx - 6
+        // 鐘樓中心再往右 CAT_TREE_DX_FROM_TOWER：右緣離畫面右緣約 30，頂端（含睡在頂層的貓）在塔門下緣之下
+        x0 = tx + CAT_TREE_DX_FROM_TOWER
+        x1 = x0
+        ax = x0
         break
       case 'picnicMat': {
         // 塔門正下方、貓跳台上方：素材頂端在塔腳之下（不蓋塔門、不擋塔門的 hover 與點擊範圍），腳下佔地不壓貓跳台
@@ -575,35 +595,29 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         gap = 10
         break
       }
-      case 'playground':
-        // 水池右邊、洗澡通道的右側（離通道 20 像素以上）
-        x0 = (strip ? strip.x1 : b.x0) + 20 + sp.fw / 2
-        x1 = x0 + 90
-        ax = x0
-        y0 = yGrass0
-        y1 = Math.min(yGrassMax, pondPos(L).y + 50)
-        ay = pondPos(L).y
-        break
-      case 'campfire':
-        // 草地中段偏右，離鐘樓有一段距離
-        x0 = b.x0 + 8 + sp.fw / 2
-        x1 = xr - sp.fw / 2
-        ax = b.x0 + 8 + 0.62 * (xr - b.x0)
-        y0 = yGrass0 + 8
-        y1 = yGrassMax - 10
+      case 'campfire': {
+        // 右邊那棵樹的正下方：水平中心對齊該樹，腳底比樹腳底低 CAMPFIRE_BELOW_TREE（偏好中間），在樹的前面
+        const trees = backRow(L).filter((o) => o.key === 'tree')
+        if (!trees.length) continue
+        const tr = trees.reduce((m, o) => (o.x > m.x ? o : m))
+        x0 = tr.x
+        x1 = tr.x
+        ax = tr.x
+        y0 = tr.y + CAMPFIRE_BELOW_TREE[0]
+        y1 = tr.y + CAMPFIRE_BELOW_TREE[1]
         ay = (y0 + y1) / 2
-        gap = 14
+        gap = 8
         break
-      case 'flowerbed':
+      }
       case 'sandbox':
-        // 草地中段，和營火、遊樂設施、野餐墊保持距離
+        // 還沒開放（留給之後的版本）：草地中段偏右
         x0 = b.x0 + 8 + sp.fw / 2
         x1 = xr + 22 - sp.fw / 2
-        ax = b.x0 + 8 + (sp.id === 'flowerbed' ? 0.3 : 0.8) * (xr - b.x0)
+        ax = b.x0 + 8 + 0.8 * (xr - b.x0)
         y0 = yGrass0 + 12
         y1 = yGrassMax
-        ay = sp.id === 'flowerbed' ? y1 : (y0 + y1) / 2
-        gap = 12
+        ay = (y0 + y1) / 2
+        gap = 8
         break
     }
     let best: { x: number; y: number; cost: number } | null = null
@@ -614,6 +628,18 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         if (sp.id === 'kennel' ? !(r.x1 <= b.x1 - 10 && r.y0 >= b.y0 && r.y1 <= b.y1) : !inMain(r)) continue
         if (sp.id === 'catTree' && (x + sp.w / 2 > L.W - CAT_TREE_RIGHT_MARGIN || y - sp.h - CAT_TREE_HEADROOM < towerDoorRect(L).y1 + 1)) continue
         if (fixed.some((f) => hit(r, f))) continue
+        if (GRASS_IDS.includes(sp.id)) {
+          const box = { x0: x - Math.floor(sp.w / 2), x1: x - Math.floor(sp.w / 2) + sp.w, y0: y - sp.h, y1: y }
+          if (avoid.some((q) => hit(box, q))) continue
+          if (placed.some((q) => ['kennel', 'bowls', 'catTree'].includes(q.id) ? hit(box, slotBox(q), 4) : hit(box, slotBox(q), 6, 4))) continue
+          // 營火的光暈範圍不可蓋到水池（水花）與塔門
+          if (sp.id === 'campfire') {
+            // 左側的聚集位置（中心左 CAMPFIRE_SIDE_SEAT_DX）要離洗澡通道至少 30 像素
+            if (strip && x - CAMPFIRE_SIDE_SEAT_DX < strip.x1 + 30) continue
+            const g = { x0: x - CAMPFIRE_GLOW.rx, x1: x + CAMPFIRE_GLOW.rx, y0: y - CAMPFIRE_GLOW.up, y1: y + CAMPFIRE_GLOW.down }
+            if (hit(g, avoid[2], 6) || hit(g, avoid[3], 4)) continue
+          }
+        }
         // 野餐墊、貓跳台與路燈之外的空位：和已放的空位保持 gap；走道上的空位彼此間隔 12
         if (placed.some((q) => hit(r, slotFootprint(q), gap, Math.max(6, gap / 2)))) continue
         const cost = Math.abs(x - ax) + 1.6 * Math.abs(y - ay)

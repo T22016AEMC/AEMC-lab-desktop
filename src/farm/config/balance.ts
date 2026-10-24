@@ -71,7 +71,7 @@ export const BALANCE = {
    * 行為只決定「動作名稱與位置」，畫面由 pixel/ 負責。
    */
   buildings: {
-    price: { bowls: 10, kennel: 20, catTree: 20 },
+    price: { bowls: 10, kennel: 20, catTree: 20, campfire: 20 },
     /** 食盆水盆：飽食度低於 threshold 且沒在睡覺、洗澡、被操作時，自己走去吃 */
     bowls: {
       threshold: 60,
@@ -90,6 +90,11 @@ export const BALANCE = {
     kennel: { capacity: 2 },
     /** 貓跳台：夜間睡覺與下雨躲雨，最多 2 隻貓。之後若有爬台素材再加爬上去的動畫（本版只站在旁邊） */
     catTree: { capacity: 2 },
+    /**
+     * 營火（v3.4.0）：日落（19:30）到睡覺時間（23:00）亮起，其他時間熄滅。亮著、沒下雨時，醒著的寵物每分鐘有 chancePerMinute 的機率
+     * 走到營火旁的聚集位置（最多 capacity 隻）坐下 gatherSeconds 秒，期間心情每秒上升 moodPerSecond（比一般待機快：待機只會慢慢下降），之後 cooldown 秒內不再去。
+     */
+    campfire: { capacity: 4, chancePerMinute: 0.5, gatherSeconds: [25, 55], moodPerSecond: 0.08, cooldown: 90, litFromHour: 19.5 },
     /** 下雨時躲雨：下雨後每隻隨機等這麼久（秒）才出發；雨停後再待這麼久才離開 */
     shelter: { startDelay: [0.5, 6], leaveDelay: [2, 6] },
   },

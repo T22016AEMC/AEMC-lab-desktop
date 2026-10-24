@@ -7,6 +7,7 @@ import type { Weather } from '../sim/worldTime'
 import { assets, drawSprite, type Sprite } from './assets'
 import { drawClock } from './clock'
 import { drawEmptyIcon } from './icons'
+import { campfireLit } from '../sim/rules'
 import {
   DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
   toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
@@ -292,9 +293,12 @@ export class PixelEngine {
       })
     }
     // 已購買的建築（這個視窗放得下的才畫）：依腳底 y 排前後；食盆空了在上方顯示「空」
+    const fireLit = campfireLit(f.hour)
     for (const slot of this.buildings().values()) {
       const def = buildingDef(slot.id)
-      const spr = def ? assets.get(def.sprite) : null
+      // 營火：亮著時 A、B 兩幀交替閃動（節奏不是等間隔），熄滅時用沒有火焰的版本
+      const key = slot.id === 'campfire' ? (fireLit ? (Math.floor(this.time * 7 + Math.sin(this.time * 2.3) * 2) & 1 ? 'campfire_b' : 'campfire_a') : 'campfire_off') : def?.sprite
+      const spr = key ? assets.get(key) : null
       if (spr) items.push({ y: slot.y, draw: () => drawSprite(ctx, spr, slot.x, slot.y) })
       if (slot.id === 'bowls' && this.bowlLeft <= 0) items.push({ y: slot.y + 60, draw: () => drawEmptyIcon(ctx, slot.x, slot.y - slot.h - 3 + Math.round(Math.sin(this.time * 3) * 1)) })
     }
@@ -357,6 +361,9 @@ export class PixelEngine {
       ctx.fillRect(tl.x + sx0 - 2, tl.y + sy0 - 2, sx1 - sx0 + 4, sy1 - sy0 + 4)
       ctx.restore()
     }
+    // 營火的光暈（亮著時）：範圍在排位時已確認不蓋到水池與塔門
+    if (fireLit)
+      for (const slot of this.buildings().values()) if (slot.id === 'campfire') drawGlow(ctx, slot.x, slot.y - 26, 1)
     const glow = Math.min(1, Math.max(0, (dark - 0.18) / 0.3))
     if (glow > 0) {
       const lamp = sceneObjects(L).find((o) => o.key === 'lamp')
@@ -386,6 +393,17 @@ export class PixelEngine {
   isHouseLit(hour: number): boolean {
     const h = ((hour % 24) + 24) % 24
     return h >= 19.5 || h < 5.5
+  }
+
+  /** 營火聚集期間累積的心情增加量（寵物 id → 增加量），取走並歸零；畫面層每次結算時併進存檔 */
+  takeMoodGains(): Map<string, number> {
+    const out = new Map<string, number>()
+    for (const a of this.actors.values())
+      if (a.moodGain > 0) {
+        out.set(a.id, a.moodGain)
+        a.moodGain = 0
+      }
+    return out
   }
 
   /** 水池本體＋泡澡中的寵物（用水面橢圓裁切，只露出水面以上）＋漣漪 */
@@ -634,6 +652,8 @@ export class PixelEngine {
       a.x = v.x
       a.y = v.y
     }
+    // 營火聚集中被拖走：30 秒內不會再回去，不會一放開就跑回去
+    if (a.bld?.purpose === 'gather') a.gatherCool = Math.max(a.gatherCool, 30)
     releaseUse(a, false)
     if (isSleeping(a.pet, this.lastFrame.hour, this.lastFrame.nowMs)) this.hooks.wake(id)
     const p = fromCss(this.layout, cssX, cssY)

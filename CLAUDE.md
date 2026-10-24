@@ -56,7 +56,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 ## 寵物養殖場（src/farm/）
 
 - 桌面是像素風草地養殖場，沒有桌面圖示；**住家是啟動台的入口**（點門；備用入口：選單列小圖示、F4），**鐘塔的門是遊戲館的入口**（滑鼠移上去換開門版與「遊戲」招牌，點門開遊戲館視窗；備用入口：選單列的遊戲館小圖示）。5 個內建遊戲只放在遊戲館，啟動台只放使用者自己的程式（沒有「隱藏內建遊戲」，`app-list` 存檔的 `hiddenBuiltins` 欄位已移除、讀到要安全忽略）。Dock 平時隱藏，有內建視窗（小遊戲）開啟時才滑出，沒有啟動台按鈕。
-- 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件（目前 **v4**：v3 → v4 新增 `ownedBuildings`、`earning`、`bowl`，舊存檔升級後建築為空、其餘原樣保留），改資料格式要同步更新 `migrate.ts` 並補測試（v2 含海洋生物、乾淨 v2、v3 → v4 都要驗證）。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。寫入失敗要提示使用者（`setStorageErrorHandler`），不可靜默忽略。
+- 存檔只能透過 `SaveStorage` 介面（`src/farm/save/`）；存檔是含 `schemaVersion` 的單一物件（目前 **v5**，見下方「v3.4.0 強制重置」：**舊格式（schema 1～4）不再升級，一律重置**，沒有 v3→v4 之類的升級程式；`migrate.ts` 只剩 `parseSave`（只吃 schema 5，並清理欄位）與 `isResetSchema`）。改資料格式時：新增欄位且舊 v5 存檔讀得進來就不必升 schema；否則要升版並決定舊存檔怎麼辦（升級或重置），補測試。寵物存檔鍵名 `aemc-desktop:farm-save`，遊戲最高分的舊鍵名不能動。寫入失敗要提示使用者（`setStorageErrorHandler`），不可靜默忽略。
 - 測試模式與圖鑑（`src/dev/`）只能在 `import.meta.env.DEV` 下條件式動態載入，正式 build 不可包含；改完要檢查 `dist/` 搜尋不到「測試模式」「生物圖鑑」`__farm`、`shiftTime` 等字串。測試用的修改入口不要放進 `farmStore`。
 - 純邏輯（`sim/`、`pixel/pets.ts`）不碰 DOM，可在 Node 測試。寵物行為只決定「動作名稱」，畫哪一幀由 `ANIMS` 表對應（邏輯與畫圖分離）；不做旋轉、傾斜、縮放，往左走用水平翻轉。
 
@@ -70,7 +70,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 鐘樓時鐘由程式畫（`pixel/clock.ts`），位置來自處理管線偵測到的鐘面中心（manifest 的 `meta.clock`）；時間必須來自遊戲的時間來源（含測試模式覆寫），不可直接用 `Date.now()`；指針角度公式有純函式測試，改動要保留。
 - 場景配置固定（住家左下、路燈右側、鐘樓最右後排且周圍留空、2 棵樹、固定裝飾），寵物活動範圍與障礙物都在 `pixel/layout.ts`（`petBounds`、`blockers`），不要讓寵物走進住家、停在燈柱後面或鐘樓底座；領養按鈕放在選單列，不要放浮動按鈕在畫面角落。
 - 水池（開局就有，住家右上方後排）：位置與水面橢圓在 `pixel/layout.ts`（`pondPos`、`waterEllipse`、`WATER`），數值要與 manifest 的 `pond_a.meta.water`、尺寸一致（測試會比對）；水池與石頭、樹幹、鐘樓底座都在 `blockers`，寵物不會走進去。樹與裝飾要讓出水池，不可重疊。
-- 版面（v3.1.1）：後排景物（鐘塔、2 棵樹、水池）與裝飾物貼草地上緣，位置全由 `pixel/layout.ts` 依草地上緣計算（`BACK_BASE`、`DECOR_BASE`、`BACK_MARGIN`），不手調座標；樹不縮放；裝飾物腳底與樹同一個 y；寵物活動範圍從草地上緣下 14 像素開始（草地中段也能跑）。建築空位（`buildingSlots`）有 8 個專用標記：走道上 kennel、bowls、catTree（腳底在走道上緣下 `PATH_FOOT` = 24，走道下半部至少留 `PATH_FREE_MIN` = 36 給寵物；狗窩位置見下方 v3.3.1），草地上 picnicMat（塔門正下方、貓跳台上方、貼地，不遮塔門）、playground（洗澡通道右邊）、campfire、flowerbed、sandbox。空位不顯示、不擋寵物；建築購買後才用 `slotBlockers` 加入障礙（購買後走道上會變窄，寵物要繞行）；窄視窗放不下的建築用 `buildingAvailability` 判斷、購買時提示 `SLOT_UNAVAILABLE_MESSAGE`，不要刪建築種類。
+- 版面（v3.1.1）：後排景物（鐘塔、2 棵樹、水池）與裝飾物貼草地上緣，位置全由 `pixel/layout.ts` 依草地上緣計算（`BACK_BASE`、`DECOR_BASE`、`BACK_MARGIN`），不手調座標；樹不縮放；裝飾物腳底與樹同一個 y；寵物活動範圍從草地上緣下 14 像素開始（草地中段也能跑）。建築空位（`buildingSlots`）有 8 個專用標記：走道上 kennel、bowls、catTree（腳底在走道上緣下 `PATH_FOOT` = 24，走道下半部至少留 `PATH_FREE_MIN` = 36 給寵物；狗窩位置見下方 v3.3.1），草地上 campfire（v3.4.0，右邊那棵樹正下方）、picnicMat、sandbox（留給之後的版本）。空位不顯示、不擋寵物；建築購買後才用 `slotBlockers` 加入障礙（購買後走道上會變窄，寵物要繞行）；窄視窗放不下的建築用 `buildingAvailability` 判斷、購買時提示 `SLOT_UNAVAILABLE_MESSAGE`，不要刪建築種類。
 - 拖曳寵物：按住 150 ms 或移動超過 4 px 才算拖曳，沒拖就是點擊；座標一律用 `fromCss`／`toCss`（處理 dpr 與整數縮放，不可有偏移）；放開用 `dropKind` 判斷落地、彈回（`nearestWalkable`）或洗澡。睡覺中被拖起用 `wakeForDrag`（不扣點，規則同叫醒）。
 - 水池洗澡：同一時間只允許一隻（`usesPond`）；數值在 `BALANCE.bath`，扣點走既有的 `runAction('bath')`（跳進水池時才扣）；洗澡中的寵物不能被點、被拖；氣泡選單的洗澡是「走到水池前再跳進去」，途中點擊或拖曳取消。泡澡時寵物用水面橢圓裁切（程式裁切，不旋轉、不縮放）。
 - 新素材 `scene_pond`（2 幀）、`fx_water`、`scene_clocktower_open` 由處理管線產生；開門鐘塔必須與 `clocktower` 同尺寸（123×160）、同錨點；夜晚開門版的門縫暖光要在暗色疊層之後再畫一次，鐘面維持清楚可讀。
@@ -80,7 +80,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 - 介面上一律叫「金幣」，內部欄位仍叫 `points`（不改名）。新存檔初始 50（`BALANCE.startPoints`；已有存檔不補發）、每日 +5、日常活動 −1、領養 15／25／35。
 - 賺金幣的規則是 `sim/earning.ts` 的純函式，數值在 `balance.ts`（`BALANCE.earn`、`gameGoals`）：啟動台開啟使用者的程式 +3（每程式每小時一次、合計每天 +10，開啟成功才給、管理清單不給）；遊戲達標 +1（合計每天 5，遊戲結束時判定一次，達標條件見 `gameGoals`）。**冷卻與每日上限的時間一律用遊戲時間來源 `gameNow()`**（`farm/overrides.ts`，測試模式可平移），每日進度以本地日期 00:00 重置；不可直接用 `Date.now()`。純前端、存在瀏覽器，**無法防作弊**（程式註解有寫），帳號與雲端階段再處理，不要為此加複雜機制。遊戲用 `games/shared/hooks.ts` 的 `useRoundReward` 在每局結束時回報成績。
-- **空位專用標記**：8 個建築空位的 id 就是專用標記，也是存檔 `ownedBuildings` 的值與 `config/buildings.ts` 的建築 id：`kennel` 狗窩、`bowls` 食盆水盆、`catTree` 貓跳台（走道上半部）、`picnicMat`、`playground`、`campfire`、`flowerbed`、`sandbox`（草地）。**本版只開放前三種購買**（`PURCHASABLE`、`buyBuilding` 擋掉其他的），其餘 5 種不顯示、不開放，資料與 `buildingAvailability` 保留，v3.3.0 才做。價格在 `BALANCE.buildings.price`（食盆水盆 10、狗窩與貓跳台各 20）。
+- **空位專用標記**：建築空位的 id 就是專用標記，也是存檔 `ownedBuildings` 的值與 `config/buildings.ts` 的建築 id：`kennel` 狗窩、`bowls` 食盆水盆、`catTree` 貓跳台（走道上半部）、`campfire`（草地）、`picnicMat`、`sandbox`（草地，留給之後的版本）。**可購買的建築由 `PURCHASABLE` 決定**（`buyBuilding` 擋掉其他的）：v3.4.0 起有食盆水盆、狗窩、貓跳台、營火；野餐墊、沙坑不顯示、不開放，資料與 `buildingAvailability` 保留（留給之後的版本）。價格在 `BALANCE.buildings.price`（食盆水盆 10、狗窩／貓跳台／營火各 20）。
 - **購買規則**：建築選單列「建築」按鈕進入建築模式（`uiStore.buildMode`，再按一次或 Esc 離開），`ui/BuildLayer.tsx` 在可購買而未購買的空位顯示虛線框與價格，點開小卡片購買；金幣不足停用。窄視窗放不下的建築（`buildingAvailability` 的 `available` 為 false）不顯示空位，建築模式改顯示 `SLOT_UNAVAILABLE_MESSAGE`；已購買但放不下的建築，紀錄保留、畫面與障礙都隱藏（`engine.buildings()` 只回傳已購買且放得下的），放大後自動恢復，不退款不刪除。
 - 購買後建築的腳下佔地才進障礙（v3.3.1 佔地：狗窩 76×22、食盆水盆 48×12、貓跳台 53×22）：`Layout.owned`（引擎在存檔變動時換新的 Set）→ `blockers(L)` 併入 `slotBlockers(slots, owned)`；走道下半部寬度必須維持 ≥ `PATH_FREE_MIN`（36，實際 44），三個建築全買完寵物也要走得過去（`pixel/nav.ts` 的 A* 尋路，測試會檢查連通）。貓跳台的素材外框不可遮到塔門與招牌（測試會檢查）。
 - 建築行為（`pixel/buildingUse.ts`）只決定去哪裡與動作名稱，動作畫面由 `ANIMS` 對應，不旋轉不傾斜。食盆：飽食度 < 60 且沒在睡覺／洗澡／被操作／選單開著，每天 6 份（存檔 `bowl`，本地日期 00:00 補滿）、同時最多 2 隻，用完顯示程式畫的「空」圖示（`pixel/icons.ts`）；狗窩／貓跳台：睡覺時間睡在座位上、下雨躲雨，各最多 2 隻（座位位置見 v3.3.1），睡在真座位心情回復 ×2.5（`BALANCE.sleepMood`，睡覺的基準回復每小時 +4，只在線上即時結算）；走去座位先走到建築前方的走道（lane），再到座位旁（near）；使用中的寵物位置固定、避讓機制不推牠們（別的寵物離牠們更遠一點）；兩隻都在走去建築座位的寵物之間不互相推開（座位旁靠得近，互推會卡住）。
@@ -89,8 +89,8 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 ## 存檔匯出／匯入與備份提醒（v3.3.0）
 
 - Logo 選單（`components/LogoMenu.tsx`）：關於這個桌面、匯出存檔…、匯入存檔…、持久儲存狀態。啟動時呼叫 `navigator.storage.persist()`（失敗不顯示錯誤），結果在 Logo 選單與「關於這個桌面」顯示。
-- 匯出檔格式（`lib/backup.ts`）：`{ format: "aemc-desktop-backup", formatVersion: 1, exportedAt, appVersion, data: { farm, appList } }`，檔名 `aemc-desktop-backup-YYYYMMDD-HHmm.json`（本地時間）。**讀取一律走 `SaveStorage`／`DocumentStorage`（`getSaveStorage()`、`getAppListStorage()`），不要在別處直接讀 localStorage**，之後換雲端時才能整體替換。`DocumentStorage` 因此多了 `saveStrict`（失敗丟例外）、`snapshot`、`restore`，換雲端時整組一起實作。
-- 匯入檢查順序：大小（5 MB）→ JSON → format → formatVersion／schema 不高於目前（較新的拒絕，訊息「這個存檔來自較新版本，請重新整理網頁更新後再試」）→ `migrate()` 升級流程 → 啟動台清單 `parseAppList`。`parseBackup` 不寫入；按「匯入」才 `applyBackup`：先 snapshot 兩份資料、依序 saveStrict，任何一份失敗就全部還原（整批成功或整批不寫）。成功後 `suspendSaves()`（否則離開頁面時自動存檔會把記憶體裡的舊存檔寫回去）再重新整理。不做防竄改。
+- 匯出檔格式（`lib/backup.ts`）：`{ format: "aemc-desktop-backup", formatVersion: 2, exportedAt, appVersion, data: { farm, appList } }`，檔名 `aemc-desktop-backup-YYYYMMDD-HHmm.json`（本地時間）。**讀取一律走 `SaveStorage`／`DocumentStorage`（`getSaveStorage()`、`getAppListStorage()`），不要在別處直接讀 localStorage**，之後換雲端時才能整體替換。`DocumentStorage` 因此多了 `saveStrict`（失敗丟例外）、`snapshot`、`restore`，換雲端時整組一起實作。
+- 匯入檢查順序：大小（5 MB）→ JSON → format → formatVersion／schema 不高於目前（較新的拒絕，訊息「這個存檔來自較新版本，請重新整理網頁更新後再試」；formatVersion 1 或養殖場 schema 4 以下一律拒絕，訊息「這個備份來自重置前的版本，無法匯入」）→ `parseSave()` 驗證 → 啟動台清單 `parseAppList`。`parseBackup` 不寫入；按「匯入」才 `applyBackup`：先 snapshot 兩份資料、依序 saveStrict，任何一份失敗就全部還原（整批成功或整批不寫）。成功後 `suspendSaves()`（否則離開頁面時自動存檔會把記憶體裡的舊存檔寫回去）再重新整理。不做防竄改。
 - 匯入舊備份時：離線補算照舊（`lastSeen` 是備份當時，所以重新整理時一次補算到現在，數值最低掉到 `offlineFloor` 20，原本就更低的維持）；每日 +5 依 `lastDailyClaim`（備份的日期早於今天就領一次，只領一次不會補領每一天）；程式與遊戲的今日進度、食盆份量、禮物次數依日期歸零重算；各程式的冷卻以備份當時的時間計。
 - 備份提醒（`components/BackupReminder.tsx`、`lib/backupReminder.ts`）：從未匯出且有寵物領養滿 3 天，或距上次匯出超過 14 天，顯示不擋操作的小提示（匯出／不再提醒），每天最多一次。上次匯出時間、「不再提醒」、上次提醒日期存在獨立的設定鍵 `aemc-desktop:settings`（`lib/settings.ts`），**不寫進養殖場存檔，也不放進匯出檔**。
 - 狗窩／貓跳台座位（2 個）坐滿時，多出來的寵物睡覺、躲雨改站在建築「前方」的前方位置（腳底比建築低 28、離洗澡通道遠，`seatsOf` 的 index ≥ capacity），不會被屋頂遮住；真座位空出來就換過去。這些位置沒有睡覺心情加成。
@@ -104,6 +104,16 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
   - 貓跳台（睡覺）：座位 0 = **頂層圓平台**（`CAT_TREE_TOP_SEAT`，素材座標）、座位 1 = **中層平台**（`CAT_TREE_MID_SEAT`），用現有睡姿、腳底貼平台表面；ZZZ 畫在平台外側（左邊、貓頭高度），不往上伸。貓跳台躲雨沒有爬台素材，醒著的貓用建築前方的地面座位（左右各一）。
   - 座位坐滿多出來的寵物：沿用 v3.3.0 的前方位置（index ≥ capacity，腳底比建築低 `OVERFLOW_DY`=28，沒有心情加成）。窩裡、門口、兩層平台都算真座位（睡覺心情 ×2.5）。躲雨躲到睡覺時間：放掉躲雨座位、重新分配成睡覺座位。
   - 引擎（`engine.ts` 的 `seatView()`）：窩裡與平台上的寵物用 `sortY = slot.y + 0.5` 排前後（在建築之後、建築前方的寵物之前）；點擊判定只算露出來的部分（窩裡的狗 = 門洞內）；氣泡選單錨點在露出來的頭上方。座位資訊不進存檔。
+
+## v3.4.0：營火＋一次性強制重置（花圃與遊樂設施取消）
+
+- **強制重置**：存檔 schema 5。載入時（`SaveStorage.loadOrReset`，`save/storage.ts`）若養殖場存檔是 schema 1～4：先把原始內容**原封不動**複製到 `aemc-desktop:farm-pre-v5-backup`（只寫一次，已存在不覆蓋；寫入失敗不阻擋；不讀取、不顯示、不進匯出檔），再寫入全新存檔（0 隻寵物、50 金幣、無建築、賺金幣與每日領取歸零、`resetNotice: true`）。**寫入新存檔失敗時不改動舊存檔**（`resetFailed`，畫面顯示說明、不能領養，下次載入重試）。不動 `aemc-desktop:app-list` 與 `aemc-desktop:settings`。沒有存檔（全新玩家）、無法解析的存檔都不重置、沒有提示。沒有選單的重置按鈕。`farmStore.init` 同一時間只跑一次（StrictMode 會呼叫兩次）。
+- **一次性提示**（`ui/ResetNotice.tsx`）：「養殖場已重新開始，所有寵物與金幣已重置，請重新領養。」旗標 `resetNotice` 存在新存檔裡，按「確定」清掉並存檔，之後不再出現。沒有寵物（全新玩家或重置後）走第一次領養流程：第一隻免費（`adoptPet` 的 `isFirst` = 沒有存檔或 0 隻寵物），提示顯示期間先不顯示領養視窗。
+- 匯出檔 `formatVersion` 升到 2；匯入 schema 4 以下（或 formatVersion 1）的備份一律拒絕。
+- **花圃（蝴蝶）與遊樂設施（蹺蹺板）取消**（從來沒有發布過）：不留任何程式、數值、素材（管線不輸出 `flowerbed`、`seesaw`、`butterfly_*`，`dist` 與圖集都沒有，測試會檢查）。建築 id 只剩 `kennel`、`bowls`、`catTree`、`campfire`（可購買）與 `picnicMat`、`sandbox`（留給之後的版本，不顯示、不開放）。
+- **位置**（`layout.ts`）：路燈、住家位置不動。狗窩 = 路燈 + `KENNEL_DX_FROM_LAMP`(55)，食盆水盆 = 狗窩 + `BOWLS_DX_FROM_KENNEL`(79)：兩組間隙都是用素材**不透明像素逐列量過**（路燈與狗窩、狗窩與食盆水盆最窄處縫 1 像素、不重疊；測試用圖集像素重新量一次，要求 0～2）；改素材尺寸或內容後要重算這兩個常數。貓跳台 = 鐘樓中心 + `CAT_TREE_DX_FROM_TOWER`(6)（右緣離畫面右緣約 30，頂端與頂層的貓不蓋塔門）。營火 = 右邊那棵樹正下方（水平中心 = 該樹 x，腳底 = 樹腳底 + 40～60，偏好 50，在樹前面）；外框不可蓋住水池、洗澡通道、狗窩、食盆水盆、貓跳台、塔門、路燈、住家，光暈範圍（`CAMPFIRE_GLOW`）不蓋水池與塔門，左側聚集位置離洗澡通道至少 30。放不下就隱藏（不為了擠進去而改別的物件位置）：目前只有 1024×768 放不下營火。
+- **營火**（素材 `buildings_new.png` 的篝火 A、B；管線把 A、B 貼到同一個 96×81 畫布，另做 `campfire_off` = A 去掉火焰的熄滅版）：19:30～23:00 亮起（`campfireLit`；A、B 交替閃動＋`drawGlow` 光暈，畫在暗色疊層之後），其餘時間顯示 `campfire_off`。行為框架同食盆與座位（`pixel/buildingUse.ts`，用途 `gather`，數值在 `BALANCE.buildings.campfire`）：亮著、沒下雨時醒著的寵物每分鐘 0.5 的機率走到聚集位置（最多 4 個：前方兩個、左右各一，在火前面或側面、不在火後面）坐 25～55 秒，心情每秒 +0.08，之後冷卻 90 秒；睡覺時間、下雨、營火熄滅就離開（回去睡覺座位或躲雨）；被拖走的 30 秒內不會回去。聚集期間的心情增加量累積在 `Actor.moodGain`，畫面層每 10 秒用 `engine.takeMoodGains()` 取走、`applyMoodGains` 併進存檔。
+- **寵物走動區**：整條走道（沙地路面）除了建築腳下的障礙（狗窩、食盆水盆、貓跳台、路燈、住家）之外都能走；測試把活動範圍切成 4 像素格，要求所有「清楚」的格子是同一個連通區塊（沒有死角），且從各起點走得到所有使用位置（食盆、狗窩座位旁、貓跳台座位旁、營火座位、洗澡站位）。
 
 ## 其他約定
 

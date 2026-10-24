@@ -10,6 +10,7 @@ import * as layoutMod from './pixel/layout'
 import { bowlLeft } from './sim/buildings'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
 
@@ -41,6 +42,8 @@ export function Farm() {
   const status = useFarmStore((s) => s.status)
   const hasSave = useFarmStore((s) => s.save !== null)
   const petCount = useFarmStore((s) => s.save?.pets.length ?? 0)
+  /** 還沒有任何寵物（全新玩家，或一次性重置之後）：走第一次領養流程（第一隻免費）；重置提示或失敗說明顯示期間先不顯示 */
+  const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed)
   const adoptOpen = useUIStore((s) => s.adoptOpen)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const buildMode = useUIStore((s) => s.buildMode)
@@ -87,7 +90,7 @@ export function Farm() {
 
   // 數值結算（每 10 秒）與禮物擲骰（每分鐘）。不受動畫暫停影響，用真實時間
   useEffect(() => {
-    const stat = window.setInterval(() => useFarmStore.getState().tick(engine.sleepersAtBuilding()), BALANCE.statTickSeconds * 1000)
+    const stat = window.setInterval(() => useFarmStore.getState().tick(engine.sleepersAtBuilding(), engine.takeMoodGains()), BALANCE.statTickSeconds * 1000)
     const gift = window.setInterval(() => useFarmStore.getState().rollGift(), 60_000)
     return () => {
       window.clearInterval(stat)
@@ -232,8 +235,8 @@ export function Farm() {
     if (buildMode) setSelected(null)
   }, [buildMode])
   useEffect(() => {
-    if (!hasSave && buildMode) useUIStore.getState().setBuildMode(false)
-  }, [hasSave, buildMode])
+    if ((!hasSave || petCount === 0) && buildMode) useUIStore.getState().setBuildMode(false)
+  }, [hasSave, petCount, buildMode])
 
   const local = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -456,8 +459,9 @@ export function Farm() {
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} />}
 
-      {status === 'ready' && assetsReady && !hasSave && <AdoptDialog first />}
-      {hasSave && adoptOpen && <AdoptDialog />}
+      {status === 'ready' && assetsReady && needFirst && <AdoptDialog first />}
+      {status === 'ready' && assetsReady && <ResetNotice />}
+      {hasSave && !needFirst && adoptOpen && <AdoptDialog />}
 
       {DevPanel && (
         <Suspense fallback={null}>

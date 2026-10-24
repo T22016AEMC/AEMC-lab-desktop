@@ -1,6 +1,9 @@
 import type { SpeciesId } from '../config/species'
 
-export const CURRENT_SCHEMA_VERSION = 4
+/**
+ * 目前的存檔格式。v5（v3.4.0）起，舊格式（v4 以前）不再升級，第一次載入時一律重置為全新存檔（見 storage.ts 的 loadOrReset）。
+ */
+export const CURRENT_SCHEMA_VERSION = 5
 
 export interface Pet {
   id: string
@@ -59,14 +62,27 @@ export interface SaveData {
   ownedBuildings: string[]
   earning: EarningState
   bowl: BowlState
+  /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
+  resetNotice?: true
 }
 
 /**
  * 儲存層介面：目前實作是 LocalStorageAdapter，之後會換成綁定帳號的雲端存檔，
  * 所以方法都回傳 Promise。
  */
+/** loadOrReset 的結果：reset = 'done' 剛把舊存檔換成全新存檔；'failed' 寫入新存檔失敗（舊存檔原封不動，下次載入重試） */
+export interface LoadResult {
+  save: SaveData | null
+  reset: 'none' | 'done' | 'failed'
+}
+
 export interface SaveStorage {
   load(): Promise<SaveData | null>
+  /**
+   * 啟動時讀存檔。schema 4 或更舊的存檔：先把原始內容備份到獨立的鍵（只寫一次，失敗不阻擋），
+   * 再換成 makeFresh() 做的全新存檔；寫入新存檔失敗就不改動舊存檔。
+   */
+  loadOrReset(makeFresh: () => SaveData): Promise<LoadResult>
   save(data: SaveData): Promise<void>
   clear(): Promise<void>
   /** 匯入存檔用（見 DocumentStorage）：失敗丟例外、可還原 */

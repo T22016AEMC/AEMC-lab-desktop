@@ -65,3 +65,15 @@ export function applySleepRecovery(save: SaveData, ctx: Ctx, elapsedSec: number,
   })
   return changed ? { ...save, pets } : save
 }
+
+/** 玩樂（追蝴蝶、蹺蹺板、營火聚集）期間累積的心情增加量（寵物 id → 增加量），由畫面層每次結算時取走併進存檔 */
+export function applyMoodGains(save: SaveData, gains: ReadonlyMap<string, number>): SaveData {
+  let changed = false
+  const pets = save.pets.map((p) => {
+    const g = gains.get(p.id)
+    if (!g || g <= 0 || p.mood >= 100) return p
+    changed = true
+    return { ...p, mood: Math.min(100, p.mood + g) }
+  })
+  return changed ? { ...save, pets } : save
+}

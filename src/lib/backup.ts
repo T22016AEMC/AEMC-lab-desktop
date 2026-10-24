@@ -1,5 +1,5 @@
 import { buildingDef } from '../farm/config/buildings'
-import { migrate, takeMigrationNotice } from '../farm/save/migrate'
+import { isResetSchema, parseSave } from '../farm/save/migrate'
 import { CURRENT_SCHEMA_VERSION, type SaveData, type SaveStorage } from '../farm/save/types'
 import { APP_LIST_SCHEMA_VERSION, parseAppList, type AppListData } from '../store/appListStore'
 import type { DocumentStorage } from './documentStorage'
@@ -9,7 +9,8 @@ import type { DocumentStorage } from './documentStorage'
  * 個人存檔，不做防竄改。檔案是一個 JSON：養殖場存檔＋啟動台程式清單（含使用者上傳的圖示）。
  */
 export const BACKUP_FORMAT = 'aemc-desktop-backup'
-export const BACKUP_FORMAT_VERSION = 1
+export const BACKUP_FORMAT_VERSION = 2
+export const PRE_RESET_MESSAGE = '這個備份來自重置前的版本，無法匯入'
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024
 export const NEWER_VERSION_MESSAGE = '這個存檔來自較新版本，請重新整理網頁更新後再試'
 
@@ -57,7 +58,7 @@ export function summarize(b: BackupFile): BackupSummary {
 }
 
 /**
- * 依序檢查：檔案大小 → JSON 可解析 → format → 版本（較新的拒絕）→ 存檔升級流程（v3 → v4…）→ 啟動台清單。
+ * 依序檢查：檔案大小 → JSON 可解析 → format → 版本（較新的拒絕、重置前的舊版也拒絕）→ 存檔驗證（schema 5）→ 啟動台清單。
  * 任何一步失敗都回傳原因；這個函式本身不寫入，所以失敗時不會改動任何資料。
  */
 export function parseBackup(text: string, sizeBytes: number): ParseResult {
@@ -71,6 +72,7 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   if (!raw || typeof raw !== 'object' || (raw as Record<string, unknown>).format !== BACKUP_FORMAT) return fail('這不是 AEMC Lab Desktop 的備份檔（format 不符）')
   const r = raw as Record<string, unknown>
   if (typeof r.formatVersion !== 'number' || !Number.isInteger(r.formatVersion) || r.formatVersion < 1) return fail('備份檔的格式版本無法辨識')
+  if (r.formatVersion < BACKUP_FORMAT_VERSION) return fail(PRE_RESET_MESSAGE)
   if (r.formatVersion > BACKUP_FORMAT_VERSION) return fail(NEWER_VERSION_MESSAGE)
   const data = r.data as Record<string, unknown> | null | undefined
   if (!data || typeof data !== 'object') return fail('備份檔缺少資料（data）')
@@ -79,8 +81,8 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   const listRaw = data.appList as Record<string, unknown> | null | undefined
   if (!listRaw || typeof listRaw !== 'object') return fail('備份檔裡的啟動台程式清單無法辨識')
   if (farmRaw.schemaVersion > CURRENT_SCHEMA_VERSION || (typeof listRaw.schemaVersion === 'number' && listRaw.schemaVersion > APP_LIST_SCHEMA_VERSION)) return fail(NEWER_VERSION_MESSAGE)
-  const farm = migrate(farmRaw)
-  takeMigrationNotice() // 只是預覽，不要讓「海洋已取消」的提示留到下次
+  if (isResetSchema(farmRaw)) return fail(PRE_RESET_MESSAGE)
+  const farm = parseSave(farmRaw)
   if (!farm) return fail('備份檔裡的養殖場存檔無法辨識或已損毀')
   const appList = parseAppList(listRaw)
   if (!appList) return fail('備份檔裡的啟動台程式清單無法辨識或已損毀')

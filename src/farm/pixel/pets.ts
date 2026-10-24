@@ -101,6 +101,10 @@ export interface Actor {
   bld: BuildingUse | null
   /** 去食盆吃之後，至少隔這麼久（秒）才會再去 */
   bowlCool: number
+  /** 營火聚集之後的冷卻（秒） */
+  gatherCool: number
+  /** 聚集期間累積、還沒併進存檔的心情增加量（畫面層每次結算時取走） */
+  moodGain: number
   /** 去建築失敗（走太久、份量被吃完）之後暫時不再嘗試（秒） */
   bldCool: number
   /** 下雨後多久出發去躲雨（秒）；null = 沒在下雨 */
@@ -151,7 +155,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
-    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null,
+    bld: null, bowlCool: 0, gatherCool: 0, moodGain: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x

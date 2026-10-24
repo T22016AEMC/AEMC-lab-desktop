@@ -1,6 +1,7 @@
 import { BALANCE } from '../config/balance'
 import type { BuildingId } from '../config/buildings'
-import { KENNEL_AX, KENNEL_H, CAT_TREE_H, petMinX, type BuildingSlot } from './layout'
+import { KENNEL_AX, KENNEL_H, CAT_TREE_H, CAMPFIRE_SIDE_SEAT_DX, petMinX, type BuildingSlot } from './layout'
+import { campfireLit } from '../sim/rules'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
@@ -14,7 +15,7 @@ import type { Action, Actor, BehaviorEnv } from './pets'
  *  - 座位坐滿時多出來的寵物睡覺、躲雨改站在建築「前方」（index >= capacity，沒有心情加成）；建築被占滿、或這個視窗放不下建築 → 用原本的睡覺行為，不會互相推擠。
  */
 
-export type UsePurpose = 'eat' | 'sleep' | 'shelter'
+export type UsePurpose = 'eat' | 'sleep' | 'shelter' | 'gather'
 
 export interface BuildingUse {
   id: BuildingId
@@ -30,6 +31,8 @@ export interface BuildingUse {
   poseIn: number
   /** 走去座位的兩段路：lane = 先走到建築前方的走道（離已經坐著的寵物遠一點），再從下面走上座位 */
   stage: 'lane' | 'seat'
+  /** 營火聚集：這次要待多久（秒） */
+  dur: number
   /** 座位旁邊的地面位置（走得到的地方）：走到這裡才出現在座位上；座位被放掉（叫醒、建築消失）時寵物回到這裡 */
   near: { x: number; y: number }
 }
@@ -53,7 +56,7 @@ export interface Seat {
 /** 食盆、貓跳台躲雨的地面座位離建築中心的水平距離：兩個座位並排，素材最寬的睡姿（黃金獵犬 56）也不重疊 */
 const SEAT_DX: Partial<Record<BuildingId, number>> = { bowls: 26, catTree: 24 }
 /** 地面座位在建築腳底線再往下（前方）多少：站在建築前面，畫面上排在建築之前 */
-const SEAT_DY: Record<UsePurpose, number> = { sleep: 7, shelter: 8, eat: 10 }
+const SEAT_DY: Record<UsePurpose, number> = { sleep: 7, shelter: 8, eat: 10, gather: 12 }
 
 /**
  * 狗窩的座位幾何（座標都相對於狗窩素材左上角，像素）：門洞內部（要和素材一致，素材改尺寸要重量）。
@@ -77,6 +80,7 @@ export const CAT_TREE_TOP_SEAT = { x: 46, y: 9 }
 export const CAT_TREE_MID_SEAT = { x: 19, y: 34 }
 
 export function capacityOf(id: BuildingId): number {
+  if (id === 'campfire') return BALANCE.buildings.campfire.capacity
   if (id === 'bowls') return BALANCE.buildings.bowls.capacity
   if (id === 'kennel') return BALANCE.buildings.kennel.capacity
   if (id === 'catTree') return BALANCE.buildings.catTree.capacity
@@ -114,6 +118,12 @@ export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose)
     const tl = slot.x - 36
     out.push({ x: tl + CAT_TREE_TOP_SEAT.x, y: top + CAT_TREE_TOP_SEAT.y, face: -1, kind: 'platform', near: { x: slot.x + 8, y: slot.y + 12 } })
     out.push({ x: tl + CAT_TREE_MID_SEAT.x, y: top + CAT_TREE_MID_SEAT.y, face: 1, kind: 'platform', near: { x: slot.x - 16, y: slot.y + 12 } })
+  } else if (id === 'campfire') {
+    // 營火前方與兩側（不在火的後面）：前面兩個、左右各一個，面向火堆
+    for (const [dx, dy, face] of [[-30, 16, 1], [30, 16, -1], [-CAMPFIRE_SIDE_SEAT_DX, 2, 1], [CAMPFIRE_SIDE_SEAT_DX, 2, -1]] as const) {
+      const g = { x: slot.x + dx, y: slot.y + dy }
+      out.push({ ...g, face, kind: 'ground', near: g })
+    }
   } else {
     const dx = SEAT_DX[id] ?? 24
     for (let i = 0; i < n; i++) {
@@ -163,6 +173,15 @@ function seatTaken(env: BehaviorEnv, id: BuildingId, seat: number, except: Actor
   return false
 }
 
+/** 夜晚營火亮著、醒著而且沒在做別的事的寵物：有一定機率走去營火旁聚集。回傳是否有去 */
+function tryGather(a: Actor, env: BehaviorEnv, dt: number): boolean {
+  const cfg = BALANCE.buildings.campfire
+  if (!env.buildings.has('campfire') || a.gatherCool > 0 || !campfireLit(env.hour) || env.rand() >= (dt * cfg.chancePerMinute) / 60) return false
+  if (!claim(a, env, 'campfire', 'gather')) return false
+  a.bld!.dur = rr(env.rand, cfg.gatherSeconds[0], cfg.gatherSeconds[1])
+  return true
+}
+
 /** 想去這個建築：挑離自己最近、還空著的座位；沒有空位回傳 false */
 function claim(a: Actor, env: BehaviorEnv, id: BuildingId, purpose: UsePurpose): boolean {
   const slot = env.buildings.get(id)
@@ -185,7 +204,8 @@ function claim(a: Actor, env: BehaviorEnv, id: BuildingId, purpose: UsePurpose):
   if (best < 0) return false
   const nr = seats[best].near
   const close = a.y >= slot.y + LANE_DY - 6 && Math.abs(a.x - nr.x) < 60
-  a.bld = { id, seat: best, purpose, phase: 'walk', t: 0, leaveIn: null, poseIn: 0, stage: close ? 'seat' : 'lane', near: nr }
+  const noLane = id === 'campfire' // 營火在草地上，直接走到座位旁（A* 繞行），不繞前方走道
+  a.bld = { id, seat: best, purpose, phase: 'walk', t: 0, leaveIn: null, poseIn: 0, stage: close || noLane ? 'seat' : 'lane', near: nr, dur: 0 }
   a.tx = nr.x
   a.ty = nr.y
   a.path = []
@@ -216,6 +236,7 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
   const raining = env.weather === 'rain'
   if (a.bldCool > 0) a.bldCool = Math.max(0, a.bldCool - dt)
   if (a.bowlCool > 0) a.bowlCool = Math.max(0, a.bowlCool - dt)
+  if (a.gatherCool > 0) a.gatherCool = Math.max(0, a.gatherCool - dt)
   // 躲雨的出發倒數：下雨後每隻隨機等一下才出發；雨停就清掉
   if (raining) {
     if (a.rainIn === null) a.rainIn = rr(env.rand, cfg.shelter.startDelay[0], cfg.shelter.startDelay[1])
@@ -233,6 +254,8 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
       a.bldCool = 0
     }
     if (keep && use.purpose === 'eat' && st.sleeping) keep = false
+    // 營火聚集：睡覺時間、下雨、營火熄滅就離開（回到座位旁，之後恢復一般行為或去睡覺座位／躲雨）
+    if (keep && use.purpose === 'gather' && (st.sleeping || raining || !campfireLit(env.hour))) keep = false
     // 還在走去食盆的路上、份量就被吃完了：放棄（已經在吃的讓牠吃完）
     if (keep && use.purpose === 'eat' && use.phase === 'walk' && env.bowlLeft <= 0) {
       keep = false
@@ -269,6 +292,7 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
       if (env.buildings.has('bowls') && wantsToEat(a, env) && claim(a, env, 'bowls', 'eat')) {
         /* 去吃 */
       } else if (raining && a.rainIn !== null && a.rainIn <= 0 && env.buildings.has(home)) claim(a, env, home, 'shelter')
+      else if (!raining) tryGather(a, env, dt)
     }
     use = a.bld
   }
@@ -308,6 +332,10 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
         use.phase = 'at'
         use.t = 0
         ops.setAction(a, 'sleep', 1e9)
+      } else if (use.purpose === 'gather') {
+        use.phase = 'at'
+        use.t = 0
+        ops.setAction(a, 'sit', 1e9)
       } else {
         use.phase = 'at'
         use.t = 0
@@ -344,6 +372,16 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
     if (a.override) {
       a.override.left -= dt
       if (a.override.left <= 0) a.override = null
+    }
+  } else if (use.purpose === 'gather') {
+    // 營火聚集：坐著，心情每秒小幅上升（累積在 a.moodGain，由畫面層每次結算時併進存檔），時間到就離開
+    if (a.pet.mood + a.moodGain < 100) a.moodGain += cfg.campfire.moodPerSecond * dt
+    if (a.action !== 'sit') ops.setAction(a, 'sit', 1e9)
+    if (use.t >= use.dur) {
+      a.gatherCool = cfg.campfire.cooldown
+      releaseUse(a)
+      ops.setAction(a, 'idle', rr(env.rand, 0.8, 1.6))
+      return true
     }
   } else if (use.purpose === 'eat') {
     if (a.action !== 'eat') ops.setAction(a, 'eat', cfg.bowls.eatSeconds)

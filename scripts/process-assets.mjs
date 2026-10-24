@@ -365,6 +365,11 @@ function addFrame(group, key, spr, extra = {}) {
   return frame
 }
 
+/** 保持畫布大小不裁切（熄滅版要和 A、B 同尺寸同錨點） */
+function cleanSprite0(s) {
+  return s
+}
+
 function flipX(s) {
   const out = Buffer.alloc(s.rgba.length)
   for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) s.rgba.copy(out, (y * s.w + x) * 4, (y * s.w + (s.w - 1 - x)) * 4, (y * s.w + (s.w - x)) * 4)
@@ -608,9 +613,37 @@ async function main() {
     }
     // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'], scales: BUILDING_SCALES })
-    for (const f of small.frames) addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
+    // 花圃（flowerbed）取消（v3.4.0 不使用）：不輸出，不進圖集
+    for (const f of small.frames) if (f.name !== 'flowerbed') addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
+    // v3.4.0：營火 A、B 兩幀貼到同一個畫布（底部中心對齊）才不會閃動時跳位，
+    // 另做熄滅版 campfire_off（白天用）：把 A 的火焰去掉，只留木柴與石圈
     const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
-    for (const f of bn.frames) addFrame('scene', f.name, f.spr)
+    const fr = Object.fromEntries(bn.frames.map((f) => [f.name, f.spr]))
+    const CW = Math.max(fr.campfire_a.w, fr.campfire_b.w), CH = Math.max(fr.campfire_a.h, fr.campfire_b.h)
+    const padBottom = (spr) => {
+      const out = Buffer.alloc(CW * CH * 4)
+      const ox = Math.round((CW - spr.w) / 2), oy = CH - spr.h
+      for (let y = 0; y < spr.h; y++) spr.rgba.copy(out, ((y + oy) * CW + ox) * 4, y * spr.w * 4, (y + 1) * spr.w * 4)
+      return { w: CW, h: CH, rgba: out }
+    }
+    const cA = padBottom(fr.campfire_a), cB = padBottom(fr.campfire_b)
+    // 熄滅版：木柴線（第 LOG_TOP 列）以上全部去掉，木柴線以下只去掉火焰的亮紅／橘／黃（r > 205、b < 150、限第 62 列以上；木柴是偏暗的棕色）
+    const off = { w: cA.w, h: cA.h, rgba: Buffer.from(cA.rgba) }
+    const LOG_TOP = 46
+    for (let y = 0; y < CH; y++)
+      for (let x = 0; x < CW; x++) {
+        const i = (y * CW + x) * 4
+        // 火焰只在畫布中央（兩側是花）：木柴線上下一小段內，亮紅／橘／黃（含淡黃的焰心）去掉
+        const flame = x > 24 && x < 72 && y < 58 && off.rgba[i] > 200 && off.rgba[i + 2] < 190 && off.rgba[i] - off.rgba[i + 2] > 60
+        if (off.rgba[i + 3] && (y < LOG_TOP || flame)) off.rgba[i + 3] = 0
+      }
+    info('營火：A、B 貼到 ' + CW + '×' + CH + ' 同一畫布；熄滅版去掉第 ' + LOG_TOP + ' 列以上與火焰色')
+    for (const f of bn.frames) {
+      if (f.name === 'campfire_a') addFrame('scene', 'campfire_a', cA)
+      else if (f.name === 'campfire_b') addFrame('scene', 'campfire_b', cB)
+      else if (f.name !== 'seesaw' && !f.name.startsWith('butterfly')) addFrame('scene', f.name, f.spr) // 蹺蹺板、蝴蝶取消（v3.4.0 不使用），不輸出
+    }
+    addFrame('scene', 'campfire_off', cleanSprite0(off, CW, CH))
     // 裝飾物各縮小到目標高度：蘑菇 36、樹樁 36、灌木 40、高草叢 38、石頭堆 34、小花叢 28
     const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], targets: { bush: 40, rocks: 34, flowers: 28, tall_grass: 38, mushroom: 36, stump: 36 } })
     for (const f of dc.frames) addFrame('scene', f.name, f.spr)
