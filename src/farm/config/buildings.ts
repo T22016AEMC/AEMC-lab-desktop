@@ -30,7 +30,7 @@ const DEFS: Partial<Record<BuildingId, BuildingDef>> = {
   kennel: {
     id: 'kennel',
     name: '狗窩',
-    blurb: '夜晚狗狗會來這裡睡覺，睡得更好；下雨時也會躲在旁邊（最多 2 隻）',
+    blurb: '夜晚狗狗會睡在窩裡和窩門口（最多 2 隻），睡得更好；下雨時也會來躲雨',
     price: BALANCE.buildings.price.kennel,
     sprite: 'doghouse',
   },
@@ -44,7 +44,7 @@ const DEFS: Partial<Record<BuildingId, BuildingDef>> = {
   catTree: {
     id: 'catTree',
     name: '貓跳台',
-    blurb: '夜晚貓咪會來這裡睡覺，睡得更好；下雨時也會躲在旁邊（最多 2 隻）',
+    blurb: '夜晚貓咪會睡在跳台的兩層平台上（最多 2 隻），睡得更好；下雨時也會躲在旁邊',
     price: BALANCE.buildings.price.catTree,
     sprite: 'cat_tree',
   },

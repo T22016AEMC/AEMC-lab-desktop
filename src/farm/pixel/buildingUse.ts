@@ -1,15 +1,17 @@
 import { BALANCE } from '../config/balance'
 import type { BuildingId } from '../config/buildings'
-import type { BuildingSlot } from './layout'
+import { KENNEL_AX, KENNEL_H, CAT_TREE_H, petMinX, type BuildingSlot } from './layout'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
  * 寵物使用建築的行為（邏輯）。只決定「去哪裡、做什麼動作（名稱）」，畫哪一幀由 pets.ts 的 ANIMS 表對應；不旋轉、不縮放。
  *
  *  - 食盆水盆（bowls）：飽食度低於門檻、沒在睡覺／洗澡／被操作、今天還有份量 → 走到食盆前吃（eat 動作），吃完走開。最多 2 隻同時吃，其他等待（照常閒晃，之後再檢查）。
- *  - 狗窩（kennel）／貓跳台（catTree）：睡覺時間走到旁邊（建築前方）睡（sleep 動作）；下雨時走到旁邊坐著躲雨（sit／idle）。各最多 2 隻。
- *    之後若有爬台素材再加貓爬上貓跳台的動畫（本版沒有素材，只站在旁邊）。
- *  - 建築被占滿、或這個視窗放不下建築 → 用原本的睡覺與（沒有）躲雨行為，不會互相推擠。
+ *  - 狗窩（kennel）／貓跳台（catTree）：睡覺時間走到座位旁，直接出現在座位上睡（沒有跳上去、走進去的過場）；各 2 個座位：
+ *      狗窩 0 = 窩裡（只露出頭與 ZZZ，身體被窩的前緣遮住，畫面上裁切到門洞）、1 = 窩門口（完整躺在窩前，與座位 0 錯開約半個身體）；
+ *      貓跳台 0 = 頂部圓平台、1 = 中間平台。下雨時狗窩的狗用同樣兩個座位（窩裡的狗躺著、門口的狗坐著），貓跳台的貓睡著就繼續睡在平台上，
+ *      醒著的貓躲在跳台旁（建築前方的地面座位，沒有爬台素材）。
+ *  - 座位坐滿時多出來的寵物睡覺、躲雨改站在建築「前方」（index >= capacity，沒有心情加成）；建築被占滿、或這個視窗放不下建築 → 用原本的睡覺行為，不會互相推擠。
  */
 
 export type UsePurpose = 'eat' | 'sleep' | 'shelter'
@@ -28,19 +30,51 @@ export interface BuildingUse {
   poseIn: number
   /** 走去座位的兩段路：lane = 先走到建築前方的走道（離已經坐著的寵物遠一點），再從下面走上座位 */
   stage: 'lane' | 'seat'
+  /** 座位旁邊的地面位置（走得到的地方）：走到這裡才出現在座位上；座位被放掉（叫醒、建築消失）時寵物回到這裡 */
+  near: { x: number; y: number }
 }
+
+/**
+ * 座位種類：ground = 地面（腳底就是座位）；inside = 狗窩裡（畫面上裁切到門洞，只露出頭）；platform = 貓跳台的平台（腳底在平台表面）。
+ * inside／platform 的座位不在可走範圍內，寵物走到 near 之後直接出現在座位上。
+ */
+export type SeatKind = 'ground' | 'inside' | 'platform'
 
 export interface Seat {
   x: number
   y: number
   /** 面向：1 = 右、-1 = 左 */
   face: 1 | -1
+  kind: SeatKind
+  /** 走到座位旁邊的地面位置（ground 座位就是座位本身） */
+  near: { x: number; y: number }
 }
 
-/** 座位離建築中心的水平距離：兩個座位並排，素材最寬的睡姿（黃金獵犬 56）也不重疊 */
-const SEAT_DX: Partial<Record<BuildingId, number>> = { kennel: 30, bowls: 26, catTree: 22 }
-/** 座位在建築腳底線再往下（前方）多少：站在建築前面，畫面上排在建築之前 */
+/** 食盆、貓跳台躲雨的地面座位離建築中心的水平距離：兩個座位並排，素材最寬的睡姿（黃金獵犬 56）也不重疊 */
+const SEAT_DX: Partial<Record<BuildingId, number>> = { bowls: 26, catTree: 24 }
+/** 地面座位在建築腳底線再往下（前方）多少：站在建築前面，畫面上排在建築之前 */
 const SEAT_DY: Record<UsePurpose, number> = { sleep: 7, shelter: 8, eat: 10 }
+
+/**
+ * 狗窩的座位幾何（座標都相對於狗窩素材左上角，像素）：門洞內部（要和素材一致，素材改尺寸要重量）。
+ * 窩裡的狗畫在狗窩素材之後、裁切到門洞（KENNEL_DOOR_CLIP 是門洞的階梯形矩形，頂端是拱形），底邊貼在窩內墊子前緣（KENNEL_INSIDE_BOTTOM）；
+ * 吻部對齊門洞右緣（KENNEL_INSIDE_RIGHT），身體被左邊的門框擋住，所以只露出頭。窩前的框緣在門洞底邊之下，不會被狗蓋到。
+ */
+export const KENNEL_DOOR_CLIP: readonly { x0: number; x1: number; y0: number; y1: number }[] = [
+  { x0: 32, x1: 45, y0: 44, y1: 45 },
+  { x0: 30, x1: 47, y0: 45, y1: 47 },
+  { x0: 28, x1: 49, y0: 47, y1: 49 },
+  { x0: 28, x1: 50, y0: 49, y1: 73 },
+]
+export const KENNEL_INSIDE_RIGHT = 49
+export const KENNEL_INSIDE_BOTTOM = 73
+/** 門洞中心 x（相對素材左緣） */
+export const KENNEL_DOOR_CX = 39
+/** 窩門口的狗：身體中心離門洞中心的水平距離（約半個身體），頭朝左靠著窩 */
+const KENNEL_FRONT_DX = 21
+/** 貓跳台平台的位置（相對素材左上角）：頂部圓平台表面中心、中間平台表面前緣中心；貓的腳底落在這裡 */
+export const CAT_TREE_TOP_SEAT = { x: 46, y: 9 }
+export const CAT_TREE_MID_SEAT = { x: 19, y: 34 }
 
 export function capacityOf(id: BuildingId): number {
   if (id === 'bowls') return BALANCE.buildings.bowls.capacity
@@ -53,7 +87,7 @@ export function capacityOf(id: BuildingId): number {
  * 座位坐滿時多出來的寵物（睡覺、躲雨）改睡在建築「前方」的可走位置：腳底比建築腳底低 OVERFLOW_DY，
  * 不會被屋頂遮住，也離洗澡通道很遠。每個建築 2 個，排在真正的座位之後（index >= capacity）。食盆沒有。
  */
-const OVERFLOW_DX: Partial<Record<BuildingId, number>> = { kennel: 40, catTree: 36 }
+const OVERFLOW_DX: Partial<Record<BuildingId, [number, number]>> = { kennel: [20, 76], catTree: [-40, 40] }
 const OVERFLOW_DY = 28
 
 /** 這個座位是「多出來的」前方位置（不是建築旁的真座位，沒有睡覺心情加成） */
@@ -61,18 +95,40 @@ export function isOverflowSeat(id: BuildingId, seat: number): boolean {
   return seat >= capacityOf(id)
 }
 
-/** 一個建築的座位（腳底座標）：左右並排；食盆朝向中間，狗窩／貓跳台朝外 */
+/** 一個建築的座位（腳底座標）。狗窩（睡覺、躲雨）：0 = 窩裡、1 = 窩門口；貓跳台睡覺：0 = 頂部平台、1 = 中間平台；
+ *  其餘（食盆、貓跳台躲雨）是建築前方的地面座位，左右並排；食盆朝向中間 */
 export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose): Seat[] {
   const n = capacityOf(id)
-  const dx = SEAT_DX[id] ?? 24
   const out: Seat[] = []
-  for (let i = 0; i < n; i++) {
-    const side = n === 1 ? 0 : i === 0 ? -1 : 1
-    const inward = id === 'bowls'
-    out.push({ x: slot.x + side * dx, y: slot.y + SEAT_DY[purpose], face: (inward ? -side || 1 : side || 1) as 1 | -1 })
+  const left = slot.x - KENNEL_AX
+  if (id === 'kennel' && purpose !== 'eat') {
+    const doorX = left + KENNEL_DOOR_CX
+    // 狗窩在路燈後面、門在可走範圍的左緣附近：窩前的位置只能站在 petMinX 右邊（左邊被燈座的石圈蓋住）
+    const minX = petMinX() + 3
+    out.push({ x: left + KENNEL_INSIDE_RIGHT - 24, y: slot.y - KENNEL_H + KENNEL_INSIDE_BOTTOM, face: 1, kind: 'inside', near: { x: Math.max(doorX - 4, minX), y: slot.y + 20 } })
+    // 躲雨時站著或坐著（比躺著高），再往右一點，不擋住窩裡的狗的頭
+    const front = { x: Math.max(doorX + KENNEL_FRONT_DX + (purpose === 'shelter' ? 14 : 0), minX + 4), y: slot.y + 8 }
+    out.push({ ...front, face: -1, kind: 'ground', near: front })
+  } else if (id === 'catTree' && purpose === 'sleep') {
+    const top = slot.y - CAT_TREE_H
+    const tl = slot.x - 36
+    out.push({ x: tl + CAT_TREE_TOP_SEAT.x, y: top + CAT_TREE_TOP_SEAT.y, face: -1, kind: 'platform', near: { x: slot.x + 8, y: slot.y + 12 } })
+    out.push({ x: tl + CAT_TREE_MID_SEAT.x, y: top + CAT_TREE_MID_SEAT.y, face: 1, kind: 'platform', near: { x: slot.x - 16, y: slot.y + 12 } })
+  } else {
+    const dx = SEAT_DX[id] ?? 24
+    for (let i = 0; i < n; i++) {
+      const side = n === 1 ? 0 : i === 0 ? -1 : 1
+      const inward = id === 'bowls'
+      const g = { x: slot.x + side * dx, y: slot.y + SEAT_DY[purpose] }
+      out.push({ ...g, face: (inward ? -side || 1 : side || 1) as 1 | -1, kind: 'ground', near: g })
+    }
   }
   const odx = OVERFLOW_DX[id]
-  if (odx !== undefined && purpose !== 'eat') for (const side of [-1, 1] as const) out.push({ x: slot.x + side * odx, y: slot.y + OVERFLOW_DY, face: side })
+  if (odx !== undefined && purpose !== 'eat')
+    odx.forEach((dx, i) => {
+      const g = { x: slot.x + dx, y: slot.y + OVERFLOW_DY }
+      out.push({ ...g, face: (i === 0 ? -1 : 1) as 1 | -1, kind: 'ground', near: g })
+    })
   return out
 }
 
@@ -84,7 +140,18 @@ export function homeOf(a: Actor): BuildingId {
   return a.pet.species === 'dog' ? 'kennel' : 'catTree'
 }
 
-export function releaseUse(a: Actor): void {
+/**
+ * 放掉座位。原本在窩裡、平台上的寵物（座位不在可走範圍內）回到座位旁邊的地面（叫醒、建築消失時），
+ * 不會留在半空中；拖曳開始時 toGround 傳 false（寵物跟著游標，位置由拖曳決定）。
+ */
+export function releaseUse(a: Actor, toGround = true): void {
+  const u = a.bld
+  if (u && toGround && u.phase === 'at') {
+    a.x = u.near.x
+    a.y = u.near.y
+    a.tx = a.x
+    a.ty = a.y
+  }
   a.bld = null
   a.path = []
   a.pathKey = ''
@@ -107,7 +174,7 @@ function claim(a: Actor, env: BehaviorEnv, id: BuildingId, purpose: UsePurpose):
   for (const overflow of [false, true]) {
     for (let i = 0; i < seats.length; i++) {
       if (isOverflowSeat(id, i) !== overflow || seatTaken(env, id, i, a)) continue
-      const d = Math.hypot(seats[i].x - a.x, (seats[i].y - a.y) * 1.6)
+      const d = Math.hypot(seats[i].near.x - a.x, (seats[i].near.y - a.y) * 1.6)
       if (d < bd) {
         bd = d
         best = i
@@ -116,10 +183,11 @@ function claim(a: Actor, env: BehaviorEnv, id: BuildingId, purpose: UsePurpose):
     if (best >= 0) break
   }
   if (best < 0) return false
-  const near = a.y >= slot.y + LANE_DY - 6 && Math.abs(a.x - seats[best].x) < 60
-  a.bld = { id, seat: best, purpose, phase: 'walk', t: 0, leaveIn: null, poseIn: 0, stage: near ? 'seat' : 'lane' }
-  a.tx = seats[best].x
-  a.ty = seats[best].y
+  const nr = seats[best].near
+  const close = a.y >= slot.y + LANE_DY - 6 && Math.abs(a.x - nr.x) < 60
+  a.bld = { id, seat: best, purpose, phase: 'walk', t: 0, leaveIn: null, poseIn: 0, stage: close ? 'seat' : 'lane', near: nr }
+  a.tx = nr.x
+  a.ty = nr.y
   a.path = []
   a.pathKey = ''
   return true
@@ -159,10 +227,10 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
     const slot = env.buildings.get(use.id)
     let keep = !!slot
     if (keep && use.purpose === 'sleep' && !st.sleeping) keep = false
+    // 躲雨躲到睡覺時間：放掉躲雨座位（回到座位旁），下面再依睡覺座位重新分配（睡覺座位和躲雨座位的位置不一樣）
     if (keep && use.purpose === 'shelter' && st.sleeping) {
-      // 躲雨躲到睡覺時間：留在原位，直接睡
-      use.purpose = 'sleep'
-      if (use.phase === 'at') ops.setAction(a, 'sleep', 1e9)
+      keep = false
+      a.bldCool = 0
     }
     if (keep && use.purpose === 'eat' && st.sleeping) keep = false
     // 還在走去食盆的路上、份量就被吃完了：放棄（已經在吃的讓牠吃完）
@@ -212,13 +280,14 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
 
   if (use.phase === 'walk') {
     // 先走到建築前方的走道（lane），再從下面走上座位
-    const lane = { x: seat.x, y: slot.y + LANE_DY }
+    const lane = { x: seat.near.x, y: slot.y + LANE_DY }
     if (use.stage === 'lane' && Math.hypot(lane.x - a.x, lane.y - a.y) < 4) use.stage = 'seat'
-    const goal = use.stage === 'lane' ? lane : seat
+    const goal = use.stage === 'lane' ? lane : seat.near
     a.tx = goal.x
     a.ty = goal.y
     if (a.action !== 'walk') ops.setAction(a, 'walk', 1e9)
-    if (use.stage === 'seat' && Math.hypot(seat.x - a.x, seat.y - a.y) < 2.5) {
+    // 走到座位旁邊：地面座位就站上去；窩裡、平台上的座位直接出現在座位上（沒有跳上去、走進去的過場）
+    if (use.stage === 'seat' && Math.hypot(seat.near.x - a.x, seat.near.y - a.y) < 2.5) {
       a.x = seat.x
       a.y = seat.y
       a.facing = seat.face

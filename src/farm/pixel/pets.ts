@@ -658,6 +658,8 @@ export function computeSeparation(actors: Actor[]): void {
     for (let j = i + 1; j < actors.length; j++) {
       const A = actors[i]
       const B = actors[j]
+      // 兩隻都在使用建築（走去座位或已在座位上）：各有各的目標位置，互相推開會把彼此卡在座位旁邊（座位旁邊的位置靠得很近），不推
+      if (A.bld && B.bld) continue
       // 坐在建築座位上、睡著的不會動：別的寵物要離牠們更遠一點（範圍放大 1.4 倍）
       const k = A.bld?.phase === 'at' || B.bld?.phase === 'at' || A.action === 'sleep' || B.action === 'sleep' ? 1.4 : 1
       const rx = 50 * k

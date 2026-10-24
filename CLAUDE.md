@@ -64,13 +64,13 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 - 素材一律由 `node scripts/process-assets.mjs "<原圖資料夾>"` 從洋紅底原圖產生到 `public/assets/`（圖集＋`manifest.json`）；**原圖不進 repo**（資料夾在 `.gitignore`）。不要手動改圖集，改處理腳本後重跑。
 - **素材檔名必須帶內容雜湊**（`<組名>.<8 碼>.png`、`manifest.<8 碼>.json`，`src/farm/pixel/assetIndex.ts` 記錄目前的 manifest 檔名），一律由處理管線產生，不可手動放沒有雜湊的 png／json 進 `public/assets/`。原因：vite-plugin-pwa 把 `assets/` 底下的檔案當成「檔名已帶雜湊」而不比對內容，沒有雜湊的素材會永遠停在舊的 service worker 快取（v3.1.0 上線時新水池看不到就是這個）。改素材後要驗證舊快取升級：把舊版的 dist 與新版的 dist 分別建好，用能切換內容的靜態伺服器（Cache-Control: max-age=600）先載入舊版、切換成新版後重新整理，檢查載入的 manifest／圖集檔名是新的、快取裡沒有舊素材、存檔還在（測試腳本範例在 scratchpad 的 upgrade-test.mjs，不進 repo）；另外邏輯測試會檢查檔名雜湊與內容一致。頁面是網路優先、service worker 立刻接手但不自動重新整理（會顯示「有新版本，重新整理即可」），不要改回 autoUpdate（會在使用者洗澡或玩遊戲時突然重新整理）。
-- 全部素材 1 格像素 = 1 邏輯像素，畫面上像素大小一致（整數倍放大，不旋轉、不縮放）；各素材可各自取樣來調整大小（取樣比例 p 越小圖越大），但同一隻動物的所有姿勢共用同一個 p，貓的 extra 檔維持與 core 的相對取樣。目前尺寸：狗站姿高 46／43／41／36／34／31（黃金／哈士奇／邊牧／柴犬／貴賓／柯基）、貓 33／32／31／30／29／28（布偶／英短藍貓／暹羅／橘虎斑／三花／黑貓）；住家 139×134、鐘樓 123×160、樹 82×103、路燈 51×84；狀態與特效圖示約 15 高。改尺寸要改 `process-assets.mjs` 的目標值、重跑，並同步 `pixel/layout.ts` 的尺寸常數（測試會比對）。場景邏輯解析度約 480×270，整數倍放大（`image-rendering: pixelated`、處理 devicePixelRatio）；畫圖座標一律取整數。
+- 全部素材 1 格像素 = 1 邏輯像素，畫面上像素大小一致（整數倍放大，不旋轉、不縮放）；各素材可各自取樣來調整大小（取樣比例 p 越小圖越大），但同一隻動物的所有姿勢共用同一個 p，貓的 extra 檔維持與 core 的相對取樣。目前尺寸：狗站姿高 46／43／41／36／34／31（黃金／哈士奇／邊牧／柴犬／貴賓／柯基）、貓 33／32／31／30／29／28（布偶／英短藍貓／暹羅／橘虎斑／三花／黑貓）；住家 139×134、鐘樓 123×160、樹 82×103、路燈 51×84、狗窩 99×83、貓跳台 72×90、食盆水盆 57×26（建築三個用 `process-assets.mjs` 的 `BUILDING_SCALES` 縮放係數：狗窩 ×1.15、貓跳台 ×1.15、食盆水盆 ×0.7，係數是除在像素格 p 上重新取樣，不是事後縮放）；狀態與特效圖示約 15 高。改尺寸要改 `process-assets.mjs` 的目標值、重跑，並同步 `pixel/layout.ts` 的尺寸常數（測試會比對）。場景邏輯解析度約 480×270，整數倍放大（`image-rendering: pixelated`、處理 devicePixelRatio）；畫圖座標一律取整數。
 - 每張素材有錨點：`ax` 水平中心、`ay` 腳底基準線；同一隻動物所有姿勢腳底對齊。alpha 只有 0 或 255。
 - 動物素材鍵名：`dog_<品種>_<動作>`、`cat_<花色>_<動作>`、`front_dog_*`／`front_cat_*`（領養預覽）；品種 id 與素材鍵名的對應在 `config/species.ts`（`assetKey`）。貓的 `sit_b` 是背面，標記 `unused_back`，不可用在動畫上。
 - 鐘樓時鐘由程式畫（`pixel/clock.ts`），位置來自處理管線偵測到的鐘面中心（manifest 的 `meta.clock`）；時間必須來自遊戲的時間來源（含測試模式覆寫），不可直接用 `Date.now()`；指針角度公式有純函式測試，改動要保留。
 - 場景配置固定（住家左下、路燈右側、鐘樓最右後排且周圍留空、2 棵樹、固定裝飾），寵物活動範圍與障礙物都在 `pixel/layout.ts`（`petBounds`、`blockers`），不要讓寵物走進住家、停在燈柱後面或鐘樓底座；領養按鈕放在選單列，不要放浮動按鈕在畫面角落。
 - 水池（開局就有，住家右上方後排）：位置與水面橢圓在 `pixel/layout.ts`（`pondPos`、`waterEllipse`、`WATER`），數值要與 manifest 的 `pond_a.meta.water`、尺寸一致（測試會比對）；水池與石頭、樹幹、鐘樓底座都在 `blockers`，寵物不會走進去。樹與裝飾要讓出水池，不可重疊。
-- 版面（v3.1.1）：後排景物（鐘塔、2 棵樹、水池）與裝飾物貼草地上緣，位置全由 `pixel/layout.ts` 依草地上緣計算（`BACK_BASE`、`DECOR_BASE`、`BACK_MARGIN`），不手調座標；樹不縮放；裝飾物腳底與樹同一個 y；寵物活動範圍從草地上緣下 14 像素開始（草地中段也能跑）。建築空位（`buildingSlots`）有 8 個專用標記：走道上 kennel、bowls、catTree（腳底在走道上緣下 `PATH_FOOT` = 24，走道下半部至少留 `PATH_FREE_MIN` = 36 給寵物），草地上 picnicMat（塔門正下方、貓跳台上方、貼地，不遮塔門）、playground（洗澡通道右邊）、campfire、flowerbed、sandbox。空位不顯示、不擋寵物；建築購買後才用 `slotBlockers` 加入障礙（購買後走道上會變窄，寵物要繞行）；窄視窗放不下的建築用 `buildingAvailability` 判斷、購買時提示 `SLOT_UNAVAILABLE_MESSAGE`，不要刪建築種類。
+- 版面（v3.1.1）：後排景物（鐘塔、2 棵樹、水池）與裝飾物貼草地上緣，位置全由 `pixel/layout.ts` 依草地上緣計算（`BACK_BASE`、`DECOR_BASE`、`BACK_MARGIN`），不手調座標；樹不縮放；裝飾物腳底與樹同一個 y；寵物活動範圍從草地上緣下 14 像素開始（草地中段也能跑）。建築空位（`buildingSlots`）有 8 個專用標記：走道上 kennel、bowls、catTree（腳底在走道上緣下 `PATH_FOOT` = 24，走道下半部至少留 `PATH_FREE_MIN` = 36 給寵物；狗窩位置見下方 v3.3.1），草地上 picnicMat（塔門正下方、貓跳台上方、貼地，不遮塔門）、playground（洗澡通道右邊）、campfire、flowerbed、sandbox。空位不顯示、不擋寵物；建築購買後才用 `slotBlockers` 加入障礙（購買後走道上會變窄，寵物要繞行）；窄視窗放不下的建築用 `buildingAvailability` 判斷、購買時提示 `SLOT_UNAVAILABLE_MESSAGE`，不要刪建築種類。
 - 拖曳寵物：按住 150 ms 或移動超過 4 px 才算拖曳，沒拖就是點擊；座標一律用 `fromCss`／`toCss`（處理 dpr 與整數縮放，不可有偏移）；放開用 `dropKind` 判斷落地、彈回（`nearestWalkable`）或洗澡。睡覺中被拖起用 `wakeForDrag`（不扣點，規則同叫醒）。
 - 水池洗澡：同一時間只允許一隻（`usesPond`）；數值在 `BALANCE.bath`，扣點走既有的 `runAction('bath')`（跳進水池時才扣）；洗澡中的寵物不能被點、被拖；氣泡選單的洗澡是「走到水池前再跳進去」，途中點擊或拖曳取消。泡澡時寵物用水面橢圓裁切（程式裁切，不旋轉、不縮放）。
 - 新素材 `scene_pond`（2 幀）、`fx_water`、`scene_clocktower_open` 由處理管線產生；開門鐘塔必須與 `clocktower` 同尺寸（123×160）、同錨點；夜晚開門版的門縫暖光要在暗色疊層之後再畫一次，鐘面維持清楚可讀。
@@ -82,8 +82,8 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 賺金幣的規則是 `sim/earning.ts` 的純函式，數值在 `balance.ts`（`BALANCE.earn`、`gameGoals`）：啟動台開啟使用者的程式 +3（每程式每小時一次、合計每天 +10，開啟成功才給、管理清單不給）；遊戲達標 +1（合計每天 5，遊戲結束時判定一次，達標條件見 `gameGoals`）。**冷卻與每日上限的時間一律用遊戲時間來源 `gameNow()`**（`farm/overrides.ts`，測試模式可平移），每日進度以本地日期 00:00 重置；不可直接用 `Date.now()`。純前端、存在瀏覽器，**無法防作弊**（程式註解有寫），帳號與雲端階段再處理，不要為此加複雜機制。遊戲用 `games/shared/hooks.ts` 的 `useRoundReward` 在每局結束時回報成績。
 - **空位專用標記**：8 個建築空位的 id 就是專用標記，也是存檔 `ownedBuildings` 的值與 `config/buildings.ts` 的建築 id：`kennel` 狗窩、`bowls` 食盆水盆、`catTree` 貓跳台（走道上半部）、`picnicMat`、`playground`、`campfire`、`flowerbed`、`sandbox`（草地）。**本版只開放前三種購買**（`PURCHASABLE`、`buyBuilding` 擋掉其他的），其餘 5 種不顯示、不開放，資料與 `buildingAvailability` 保留，v3.3.0 才做。價格在 `BALANCE.buildings.price`（食盆水盆 10、狗窩與貓跳台各 20）。
 - **購買規則**：建築選單列「建築」按鈕進入建築模式（`uiStore.buildMode`，再按一次或 Esc 離開），`ui/BuildLayer.tsx` 在可購買而未購買的空位顯示虛線框與價格，點開小卡片購買；金幣不足停用。窄視窗放不下的建築（`buildingAvailability` 的 `available` 為 false）不顯示空位，建築模式改顯示 `SLOT_UNAVAILABLE_MESSAGE`；已購買但放不下的建築，紀錄保留、畫面與障礙都隱藏（`engine.buildings()` 只回傳已購買且放得下的），放大後自動恢復，不退款不刪除。
-- 購買後建築的腳下佔地才進障礙：`Layout.owned`（引擎在存檔變動時換新的 Set）→ `blockers(L)` 併入 `slotBlockers(slots, owned)`；走道下半部寬度必須維持 ≥ `PATH_FREE_MIN`（36，實際 44），三個建築全買完寵物也要走得過去（`pixel/nav.ts` 的 A* 尋路，測試會檢查連通）。貓跳台的素材外框不可遮到塔門與招牌（測試會檢查）。
-- 建築行為（`pixel/buildingUse.ts`）只決定去哪裡與動作名稱，動作畫面由 `ANIMS` 對應，不旋轉不傾斜。食盆：飽食度 < 60 且沒在睡覺／洗澡／被操作／選單開著，每天 6 份（存檔 `bowl`，本地日期 00:00 補滿）、同時最多 2 隻，用完顯示程式畫的「空」圖示（`pixel/icons.ts`）；狗窩／貓跳台：睡覺時間睡在旁邊、下雨躲在旁邊，各最多 2 隻，睡在旁邊心情回復 ×2.5（`BALANCE.sleepMood`，睡覺的基準回復每小時 +4，只在線上即時結算）；貓跳台之後若有爬台素材再加爬上去的動畫。座位在建築前方、前方走道（lane）接近，避免穿過別的寵物；使用中的寵物位置固定、避讓機制不推牠們（別的寵物離牠們更遠一點）。
+- 購買後建築的腳下佔地才進障礙（v3.3.1 佔地：狗窩 76×22、食盆水盆 48×12、貓跳台 53×22）：`Layout.owned`（引擎在存檔變動時換新的 Set）→ `blockers(L)` 併入 `slotBlockers(slots, owned)`；走道下半部寬度必須維持 ≥ `PATH_FREE_MIN`（36，實際 44），三個建築全買完寵物也要走得過去（`pixel/nav.ts` 的 A* 尋路，測試會檢查連通）。貓跳台的素材外框不可遮到塔門與招牌（測試會檢查）。
+- 建築行為（`pixel/buildingUse.ts`）只決定去哪裡與動作名稱，動作畫面由 `ANIMS` 對應，不旋轉不傾斜。食盆：飽食度 < 60 且沒在睡覺／洗澡／被操作／選單開著，每天 6 份（存檔 `bowl`，本地日期 00:00 補滿）、同時最多 2 隻，用完顯示程式畫的「空」圖示（`pixel/icons.ts`）；狗窩／貓跳台：睡覺時間睡在座位上、下雨躲雨，各最多 2 隻（座位位置見 v3.3.1），睡在真座位心情回復 ×2.5（`BALANCE.sleepMood`，睡覺的基準回復每小時 +4，只在線上即時結算）；走去座位先走到建築前方的走道（lane），再到座位旁（near）；使用中的寵物位置固定、避讓機制不推牠們（別的寵物離牠們更遠一點）；兩隻都在走去建築座位的寵物之間不互相推開（座位旁靠得近，互推會卡住）。
 - 測試模式面板有「加金幣」按鈕；時間快轉（+1 小時、+1 天）要連同 `earning`、`bowl` 的時間一起往前推（`dev/DevPanel.tsx` 的 `shiftTime`）。
 
 ## 存檔匯出／匯入與備份提醒（v3.3.0）
@@ -94,6 +94,16 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 匯入舊備份時：離線補算照舊（`lastSeen` 是備份當時，所以重新整理時一次補算到現在，數值最低掉到 `offlineFloor` 20，原本就更低的維持）；每日 +5 依 `lastDailyClaim`（備份的日期早於今天就領一次，只領一次不會補領每一天）；程式與遊戲的今日進度、食盆份量、禮物次數依日期歸零重算；各程式的冷卻以備份當時的時間計。
 - 備份提醒（`components/BackupReminder.tsx`、`lib/backupReminder.ts`）：從未匯出且有寵物領養滿 3 天，或距上次匯出超過 14 天，顯示不擋操作的小提示（匯出／不再提醒），每天最多一次。上次匯出時間、「不再提醒」、上次提醒日期存在獨立的設定鍵 `aemc-desktop:settings`（`lib/settings.ts`），**不寫進養殖場存檔，也不放進匯出檔**。
 - 狗窩／貓跳台座位（2 個）坐滿時，多出來的寵物睡覺、躲雨改站在建築「前方」的前方位置（腳底比建築低 28、離洗澡通道遠，`seatsOf` 的 index ≥ capacity），不會被屋頂遮住；真座位空出來就換過去。這些位置沒有睡覺心情加成。
+
+## 建築尺寸、位置與睡覺座位（v3.3.1）
+
+- **尺寸**：狗窩 99×83、貓跳台 72×90、食盆水盆 57×26（`layout.ts` 的 `KENNEL_W/H`、`CAT_TREE_W/H`、`BOWLS_W/H` 必須和 manifest 一致，測試會比對；`KENNEL_AX = 50`、`LAMP_AX = 26`、`LAMP_POLE_X1 = 27` 也要和素材一致）。食盆水盆縮到 0.7 倍後食物與水的細節仍看得清楚；0.75 倍是候選（`BOWL_SCALE=0.75 node scripts/process-assets.mjs …` 可重產比較）。
+- **狗窩在路燈後面**：位置固定由路燈決定（`kennelX()`，與視窗大小無關）：牆面外緣（素材第 `KENNEL_WALL_X`=12 欄，第 11 欄是外框線）被燈桿蓋住 `KENNEL_TUCK`=4 像素，路燈在前（腳底 y 較大）。驗收看畫面：1920×1080 截圖裡燈桿與狗窩之間不可看到草地縫。狗窩的佔地左緣在 `petMinX()`（= `lampX()+42`，寵物活動範圍左緣）之外，所以窩前的座位旁只能站在 `petMinX()` 右邊；燈與窩之間、路燈本身都在可走範圍之外（測試逐點探測）。食盆水盆與狗窩素材外框間隔 `BOWLS_GAP`=12；貓跳台中心在鐘樓中心左 6 像素，右緣離畫面右緣 > 40（`CAT_TREE_RIGHT_MARGIN`），頂端要在塔門下緣之下，再往上 `CAT_TREE_HEADROOM`=12（頂層的貓）也不蓋塔門，放不下就隱藏。狗窩屋頂的上緣伸進洗澡通道的下緣，所以狗窩買了之後 `pondStand()` 的站位移到狗窩頂端之上（站在屋頂後面寵物會被蓋住）。
+- **座位模型**（`pixel/buildingUse.ts` 的 `seatsOf()`，`Seat` 有 `kind: 'ground' | 'inside' | 'platform'` 與 `near`）：寵物走到 `near`（座位旁邊的地面，一定在可走範圍內），之後**直接出現**在座位上（沒有跳上去、走進去的過場）。`BuildingUse.near` 記下座位旁位置，座位被放掉（叫醒、建築被隱藏）時寵物回到那裡；拖曳開始時 `releaseUse(a, false)`、從畫面上的位置開始拖。
+  - 狗窩（睡覺、躲雨）：座位 0 = **窩裡**（`inside`：畫在狗窩素材之後，用 `KENNEL_DOOR_CLIP`（門洞的階梯形矩形，素材座標）裁切，吻部對齊門洞右緣 `KENNEL_INSIDE_RIGHT`、底邊貼墊子前緣 `KENNEL_INSIDE_BOTTOM`，只露出頭，ZZZ 畫在門洞拱頂上方；身體被門框擋住；躲雨時醒著也用睡姿幀 `*_sleep`、沒有 ZZZ，因為站姿與坐姿比門洞高）、座位 1 = **窩門口**（地面座位，面向左、頭朝窩，身體中心離門洞中心約半個身體 `KENNEL_FRONT_DX`，躲雨時坐著）。
+  - 貓跳台（睡覺）：座位 0 = **頂層圓平台**（`CAT_TREE_TOP_SEAT`，素材座標）、座位 1 = **中層平台**（`CAT_TREE_MID_SEAT`），用現有睡姿、腳底貼平台表面；ZZZ 畫在平台外側（左邊、貓頭高度），不往上伸。貓跳台躲雨沒有爬台素材，醒著的貓用建築前方的地面座位（左右各一）。
+  - 座位坐滿多出來的寵物：沿用 v3.3.0 的前方位置（index ≥ capacity，腳底比建築低 `OVERFLOW_DY`=28，沒有心情加成）。窩裡、門口、兩層平台都算真座位（睡覺心情 ×2.5）。躲雨躲到睡覺時間：放掉躲雨座位、重新分配成睡覺座位。
+  - 引擎（`engine.ts` 的 `seatView()`）：窩裡與平台上的寵物用 `sortY = slot.y + 0.5` 排前後（在建築之後、建築前方的寵物之前）；點擊判定只算露出來的部分（窩裡的狗 = 門洞內）；氣泡選單錨點在露出來的頭上方。座位資訊不進存檔。
 
 ## 其他約定
 

@@ -413,6 +413,8 @@ const P_GUESS = 6.1
 const CAT_EXTRA_RATIO = 0.56
 
 const pCache = {}
+/** 建築素材的縮放係數（v3.3.1）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
+const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7) }
 let clockClosedSpr = null
 /** 水池的目標寬度（邏輯像素） */
 const POND_W = 110
@@ -425,7 +427,7 @@ const POND_W = 110
  *    沒有 solveFrom 時，targets 裡的每一幀各自求自己的 p（例如裝飾物、特效圖示）
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, solveFrom, pScale = 1, solveDim = 'h' }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h' }) {
   const img = await load(file)
   const mask = fgMask(img)
   const { lab, comps: all } = label(mask, img.W, img.H)
@@ -488,7 +490,8 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
       warn(file + ' 第 ' + (i + 1) + ' 格（' + name + '）找不到內容')
       continue
     }
-    const pp = solveFrom || !targets[name] ? animalP : solve(cell, targets[name], base)
+    // scales[名稱] = 縮放係數（> 1 放大）：像素格 p 除以係數重新取樣（最近鄰、仍是整數像素，不是事後縮放）
+    const pp = solveFrom || !targets[name] ? animalP / (scales[name] ?? 1) : solve(cell, targets[name], base)
     const spr = render(cell, pp)
     if (!spr) {
       warn(file + ' ' + name + '：處理後是空的')
@@ -603,7 +606,8 @@ async function main() {
       }
       info('開門鐘樓：處理後 ' + f.spr.w + '×' + f.spr.h + '，貼到 ' + W + '×' + H + '（偏移 ' + ox + ',' + oy + '）；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
     }
-    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'] })
+    // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
+    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'], scales: BUILDING_SCALES })
     for (const f of small.frames) addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
     const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
     for (const f of bn.frames) addFrame('scene', f.name, f.spr)

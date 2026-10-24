@@ -8,12 +8,12 @@ import { assets, drawSprite, type Sprite } from './assets'
 import { drawClock } from './clock'
 import { drawEmptyIcon } from './icons'
 import {
-  DOOR, HOUSE_H, HOUSE_W, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
+  DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
   toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
 } from './layout'
-import { isOverflowSeat, releaseUse } from './buildingUse'
+import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
 import {
-  beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, isBathing, triggerAnim,
+  assetPrefix, beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
 } from './pets'
 import {
@@ -52,6 +52,21 @@ interface Anim {
   y: number
   t: number
   dur: number
+}
+
+/**
+ * 座位上的寵物的畫法（窩裡、平台上；地面座位和一般寵物一樣畫）：
+ * x、y = 畫出來的腳底位置；clip = 只畫這些矩形裡的部分（窩裡的狗被門洞裁切，身體被窩的前緣與門框擋住）；
+ * sortY = 前後排序用的 y（排在建築之後、建築前方的寵物之前）；iconBottom = 頭上圖示（ZZZ）的底邊。
+ */
+interface SeatView {
+  x: number
+  y: number
+  clip: { x0: number; y0: number; x1: number; y1: number }[] | null
+  sortY: number
+  /** 頭上圖示（ZZZ）的水平中心與底邊 */
+  iconX: number
+  iconBottom: number
 }
 
 interface Particle {
@@ -286,7 +301,7 @@ export class PixelEngine {
     for (const a of this.actors.values()) {
       if (a.bath?.phase === 'soak') continue // 由水池一起畫
       // 跳進水池、爬出水池的過程要畫在水池前面；被拖著的畫在最上層
-      const y = a.drag ? 1e6 : a.bath && (a.bath.phase === 'jump' || a.bath.phase === 'climb') ? Math.max(a.y, pond.y + 0.5) : a.y
+      const y = a.drag ? 1e6 : a.bath && (a.bath.phase === 'jump' || a.bath.phase === 'climb') ? Math.max(a.y, pond.y + 0.5) : this.seatView(a)?.sortY ?? a.y
       items.push({ y, draw: () => this.drawActor(ctx, a, f) })
     }
     items.sort((p, q) => p.y - q.y)
@@ -413,7 +428,35 @@ export class PixelEngine {
   }
 
   private actorSprite(a: Actor): Sprite | null {
-    return assets.get(frameKeyOf(a)) ?? assets.get(`${a.pet.species === 'dog' ? 'dog_shiba' : 'cat_orange'}_stand`)
+    // 窩裡的狗一律躺著（躲雨時醒著也是躺姿，只是沒有 ZZZ）：站姿、坐姿比門洞還高
+    const key = a.bld?.phase === 'at' && a.bld.id === 'kennel' && a.bld.seat === 0 && a.bld.purpose !== 'eat' ? `${assetPrefix(a.pet)}_sleep` : frameKeyOf(a)
+    return assets.get(key) ?? assets.get(`${a.pet.species === 'dog' ? 'dog_shiba' : 'cat_orange'}_stand`)
+  }
+
+  /** 這隻寵物在窩裡或貓跳台平台上時的畫法；其他情況（含地面座位）回傳 null */
+  private seatView(a: Actor): SeatView | null {
+    const u = a.bld
+    if (!u || u.phase !== 'at' || u.purpose === 'eat') return null
+    const slot = this.buildings().get(u.id)
+    if (!slot) return null
+    const seat = seatsOf(u.id, slot, u.purpose)[u.seat]
+    if (!seat || seat.kind === 'ground') return null
+    if (seat.kind === 'platform') {
+      // 平台上的貓：ZZZ 畫在平台外側（左邊、貓頭的高度），不往上伸（才不會蓋到鐘樓的門），上下兩層的 ZZZ 也不會疊在一起
+      return { x: seat.x, y: seat.y, clip: null, sortY: slot.y + 0.5, iconX: seat.x - 22, iconBottom: seat.y - 4 }
+    }
+    // 窩裡：吻部（素材朝右時的右緣）對齊門洞右緣，底邊貼在墊子前緣；只畫門洞裡的部分
+    const spr = this.actorSprite(a)
+    const left = slot.x - KENNEL_AX
+    const top = slot.y - KENNEL_H
+    return {
+      x: left + KENNEL_INSIDE_RIGHT - (spr ? spr.w - spr.ax : 24),
+      y: top + KENNEL_INSIDE_BOTTOM,
+      clip: KENNEL_DOOR_CLIP.map((r) => ({ x0: left + r.x0, x1: left + r.x1, y0: top + r.y0, y1: top + r.y1 })),
+      sortY: slot.y + 0.5,
+      iconX: left + KENNEL_DOOR_CX,
+      iconBottom: top + KENNEL_DOOR_CLIP[0].y0 - 2,
+    }
   }
 
   private hopOffset(a: Actor): number {
@@ -444,22 +487,34 @@ export class PixelEngine {
     const s = this.actorSprite(a)
     if (!s) return
     const hop = this.hopOffset(a)
-    // 腳下小陰影（抬高時影子留在地面、變小一點）
-    ctx.fillStyle = 'rgba(0,0,0,0.22)'
-    const sw = Math.max(4, Math.round(s.w * 0.55 * (1 - Math.min(0.3, a.lift / 40))))
-    ctx.fillRect(Math.round(a.x) - Math.round(sw / 2), Math.round(a.y) - 1, sw, 2)
-    drawSprite(ctx, s, a.x + a.shakeX, a.y - hop, a.facing === -1)
+    const v = this.seatView(a)
+    const px = v ? v.x : a.x
+    const py = v ? v.y : a.y
+    // 腳下小陰影（抬高時影子留在地面、變小一點）；窩裡的狗被裁切，不畫
+    if (!v?.clip) {
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'
+      const sw = Math.max(4, Math.round(s.w * 0.55 * (1 - Math.min(0.3, a.lift / 40))))
+      ctx.fillRect(Math.round(px) - Math.round(sw / 2), Math.round(py) - 1, sw, 2)
+    }
+    if (v?.clip) {
+      ctx.save()
+      ctx.beginPath()
+      for (const r of v.clip) ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0)
+      ctx.clip()
+    }
+    drawSprite(ctx, s, px + a.shakeX, py - hop, a.facing === -1)
+    if (v?.clip) ctx.restore()
     // 頭上的狀態圖示（餓＝驚嘆號、心情低＝汗滴、髒＝泡泡、睡覺＝ZZZ、開心＝愛心）
     const key = this.statusIcon(a, f)
     if (key) {
       const ic = assets.get(key)
-      if (ic) drawSprite(ctx, ic, a.x, a.y - s.h - 3 - hop + Math.round(Math.sin(this.time * 3 + a.animT) * 1))
+      if (ic) drawSprite(ctx, ic, v ? v.iconX : px, (v ? v.iconBottom : a.y - s.h - 3) - hop + Math.round(Math.sin(this.time * 3 + a.animT) * 1))
     }
     // 選取中：腳下一圈小標記
     if (this.selectedId === a.id) {
       ctx.fillStyle = 'rgba(255,255,255,0.85)'
       const w = Math.round(s.w * 0.7)
-      ctx.fillRect(Math.round(a.x) - Math.round(w / 2), Math.round(a.y) + 2, w, 1)
+      ctx.fillRect(Math.round(px) - Math.round(w / 2), Math.round(py) + 2, w, 1)
     }
   }
 
@@ -486,6 +541,9 @@ export class PixelEngine {
     const a = this.actors.get(id)
     if (!a) return null
     const s = this.actorSprite(a)
+    const v = this.seatView(a)
+    // 窩裡的狗：選單的錨點是露出來的頭（門洞中央），不是被裁掉的身體中心
+    if (v) return { x: v.clip ? (v.clip[3].x0 + v.clip[3].x1) / 2 : v.x, y: Math.max(v.y - (s?.h ?? 40), v.clip ? v.clip[0].y0 : -1e9) - this.hopOffset(a) }
     return { x: a.x, y: a.y - (s?.h ?? 40) - this.hopOffset(a) }
   }
 
@@ -499,14 +557,19 @@ export class PixelEngine {
 
   petAt(lx: number, ly: number): Actor | null {
     // 後畫的在上層（y 大的在前）。洗澡中（跳進去、泡澡、爬出來、甩水）的不能操作
-    const list = [...this.actors.values()].filter((a) => !isBathing(a)).sort((p, q) => q.y - p.y)
+    const sy = (a: Actor): number => (a.drag ? 1e6 : this.seatView(a)?.sortY ?? a.y)
+    const list = [...this.actors.values()].filter((a) => !isBathing(a)).sort((p, q) => sy(q) - sy(p))
     for (const a of list) {
       const s = this.actorSprite(a)
       if (!s) continue
       const hop = this.hopOffset(a)
-      const x0 = a.x - s.ax
-      const y0 = a.y - hop - s.ay
-      if (lx >= x0 && lx < x0 + s.w && ly >= y0 && ly < y0 + s.h) return a
+      const v = this.seatView(a)
+      const x0 = (v ? v.x : a.x) - s.ax
+      const y0 = (v ? v.y : a.y) - hop - s.ay
+      if (!(lx >= x0 && lx < x0 + s.w && ly >= y0 && ly < y0 + s.h)) continue
+      // 窩裡的狗只有門洞裡露出來的部分算點得到
+      if (v?.clip && !v.clip.some((r) => lx >= r.x0 && lx < r.x1 && ly >= r.y0 && ly < r.y1)) continue
+      return a
     }
     return null
   }
@@ -565,7 +628,13 @@ export class PixelEngine {
     const a = this.actors.get(id)
     if (!a || isBathing(a)) return false
     cancelBath(a)
-    releaseUse(a)
+    // 座位上的寵物（窩裡、平台上）被拖起來：從畫面上的位置開始拖，座位釋放（不回到座位旁）
+    const v = this.seatView(a)
+    if (v) {
+      a.x = v.x
+      a.y = v.y
+    }
+    releaseUse(a, false)
     if (isSleeping(a.pet, this.lastFrame.hour, this.lastFrame.nowMs)) this.hooks.wake(id)
     const p = fromCss(this.layout, cssX, cssY)
     this.dragOff = { dx: a.x - p.x, dy: a.y - p.y }
