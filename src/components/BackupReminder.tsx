@@ -30,7 +30,7 @@ export function BackupReminder() {
 
   if (!show) return null
   return (
-    <div role="status" data-testid="backup-reminder" className="fixed bottom-4 left-4 z-[9400] max-w-[260px] rounded-xl border border-white/20 bg-neutral-900/90 p-3 text-xs text-white shadow-xl backdrop-blur-xl">
+    <div role="region" aria-label="備份提醒" data-testid="backup-reminder" className="fixed bottom-4 left-4 z-[9400] max-w-[260px] rounded-xl border border-white/20 bg-neutral-900/90 p-3 text-xs text-white shadow-xl backdrop-blur-xl">
       <div className="leading-relaxed">存檔只存在這個瀏覽器裡，建議匯出一份備份。</div>
       <div className="mt-2 flex gap-2">
         <button

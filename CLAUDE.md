@@ -39,6 +39,14 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 3. 推送前先執行 `gh auth status`，確認已登入且帳號是 `T22016AEMC`。若未安裝 gh、未登入或帳號不符，停下來告訴使用者該怎麼做，不要改用其他方式。
 4. 首次推送：建立公開 repo `T22016AEMC/AEMC-lab-desktop`，推送 main 與 tag，並用 `gh api` 將 Pages 來源設為 GitHub Actions。之後的版本直接 `git push origin main --follow-tags`。
 5. 確認 Actions 部署成功後，告訴使用者正式網址。
+6. **打 tag 之後要單獨執行 `git push origin vX.Y.Z`**：`--follow-tags` 只推送附註 tag（annotated），推不到我們用的輕量 tag（v3.2.0 就發生過）。推完用 `git ls-remote --tags origin` 確認遠端真的有該 tag。tag 不會觸發 workflow（只有 push main 會），所以不會重複部署。
+
+### 上線測試規則
+
+- 只用介面操作（正式版沒有測試模式、沒有 `__farm` 等全域物件）；時間與天氣用 Playwright 的假時鐘（`page.clock`），假時鐘的日期要和存檔裡的日期一致（存檔的 `lastDailyClaim`、`earning.date`、`bowl.date` 等要設成假時鐘當天，否則每日獎勵會多給、數字對不上）。
+- **每個測試都要有逾時**：單項 60 秒（`page.setDefaultTimeout(60000)`，或自己包 `Promise.race`），整個上線測試上限 9 分鐘（用 `timeout 540 node …` 包起來）；不要寫沒有上限的迴圈。
+- **遊戲自動遊玩類測試（例如用鍵盤自動玩 2048 到 512）只在本機跑，不在上線站跑**（耗時長又不穩，v3.2.0 上線測試曾因此跑 18 分鐘被中止）。上線站只確認遊戲館的進度顯示。
+- 測試一開始要等開機畫面真的消失（`getByRole('button', { name: '點擊以開始' })` 的 `waitFor({ state: 'detached' })`），不要用固定毫秒等待。開機畫面（z-10000）會擋住所有指標事件，機器忙碌時淡出動畫來不及結束，下一步的點擊與拖曳就點到開機畫面——這就是 t310「貓拖曳」偶發失敗的根因（不是隨機行為，也不是等待不夠長，而是沒有等「狀態」）。
 
 ### 階段流程
 
@@ -77,6 +85,15 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - 購買後建築的腳下佔地才進障礙：`Layout.owned`（引擎在存檔變動時換新的 Set）→ `blockers(L)` 併入 `slotBlockers(slots, owned)`；走道下半部寬度必須維持 ≥ `PATH_FREE_MIN`（36，實際 44），三個建築全買完寵物也要走得過去（`pixel/nav.ts` 的 A* 尋路，測試會檢查連通）。貓跳台的素材外框不可遮到塔門與招牌（測試會檢查）。
 - 建築行為（`pixel/buildingUse.ts`）只決定去哪裡與動作名稱，動作畫面由 `ANIMS` 對應，不旋轉不傾斜。食盆：飽食度 < 60 且沒在睡覺／洗澡／被操作／選單開著，每天 6 份（存檔 `bowl`，本地日期 00:00 補滿）、同時最多 2 隻，用完顯示程式畫的「空」圖示（`pixel/icons.ts`）；狗窩／貓跳台：睡覺時間睡在旁邊、下雨躲在旁邊，各最多 2 隻，睡在旁邊心情回復 ×2.5（`BALANCE.sleepMood`，睡覺的基準回復每小時 +4，只在線上即時結算）；貓跳台之後若有爬台素材再加爬上去的動畫。座位在建築前方、前方走道（lane）接近，避免穿過別的寵物；使用中的寵物位置固定、避讓機制不推牠們（別的寵物離牠們更遠一點）。
 - 測試模式面板有「加金幣」按鈕；時間快轉（+1 小時、+1 天）要連同 `earning`、`bowl` 的時間一起往前推（`dev/DevPanel.tsx` 的 `shiftTime`）。
+
+## 存檔匯出／匯入與備份提醒（v3.3.0）
+
+- Logo 選單（`components/LogoMenu.tsx`）：關於這個桌面、匯出存檔…、匯入存檔…、持久儲存狀態。啟動時呼叫 `navigator.storage.persist()`（失敗不顯示錯誤），結果在 Logo 選單與「關於這個桌面」顯示。
+- 匯出檔格式（`lib/backup.ts`）：`{ format: "aemc-desktop-backup", formatVersion: 1, exportedAt, appVersion, data: { farm, appList } }`，檔名 `aemc-desktop-backup-YYYYMMDD-HHmm.json`（本地時間）。**讀取一律走 `SaveStorage`／`DocumentStorage`（`getSaveStorage()`、`getAppListStorage()`），不要在別處直接讀 localStorage**，之後換雲端時才能整體替換。`DocumentStorage` 因此多了 `saveStrict`（失敗丟例外）、`snapshot`、`restore`，換雲端時整組一起實作。
+- 匯入檢查順序：大小（5 MB）→ JSON → format → formatVersion／schema 不高於目前（較新的拒絕，訊息「這個存檔來自較新版本，請重新整理網頁更新後再試」）→ `migrate()` 升級流程 → 啟動台清單 `parseAppList`。`parseBackup` 不寫入；按「匯入」才 `applyBackup`：先 snapshot 兩份資料、依序 saveStrict，任何一份失敗就全部還原（整批成功或整批不寫）。成功後 `suspendSaves()`（否則離開頁面時自動存檔會把記憶體裡的舊存檔寫回去）再重新整理。不做防竄改。
+- 匯入舊備份時：離線補算照舊（`lastSeen` 是備份當時，所以重新整理時一次補算到現在，數值最低掉到 `offlineFloor` 20，原本就更低的維持）；每日 +5 依 `lastDailyClaim`（備份的日期早於今天就領一次，只領一次不會補領每一天）；程式與遊戲的今日進度、食盆份量、禮物次數依日期歸零重算；各程式的冷卻以備份當時的時間計。
+- 備份提醒（`components/BackupReminder.tsx`、`lib/backupReminder.ts`）：從未匯出且有寵物領養滿 3 天，或距上次匯出超過 14 天，顯示不擋操作的小提示（匯出／不再提醒），每天最多一次。上次匯出時間、「不再提醒」、上次提醒日期存在獨立的設定鍵 `aemc-desktop:settings`（`lib/settings.ts`），**不寫進養殖場存檔，也不放進匯出檔**。
+- 狗窩／貓跳台座位（2 個）坐滿時，多出來的寵物睡覺、躲雨改站在建築「前方」的前方位置（腳底比建築低 28、離洗澡通道遠，`seatsOf` 的 index ≥ capacity），不會被屋頂遮住；真座位空出來就換過去。這些位置沒有睡覺心情加成。
 
 ## 其他約定
 
