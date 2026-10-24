@@ -221,28 +221,34 @@ export function inWater(L: Layout, x: number, y: number, pad = 1): boolean {
   return ((x - w.cx) / (w.rx * pad)) ** 2 + ((y - w.cy) / (w.ry * pad)) ** 2 <= 1
 }
 
+/** 洗澡站位離水池素材右緣的水平距離：寵物半身寬（大型犬約 28）；站位的寵物不被水池的石頭蓋住（水池腳底較低、排在寵物之前） */
+export const POND_STAND_DX = 28
+
 /**
- * 水池右前方的一條可走帶（腳底座標）：水池在住家正上方，離寵物主要的活動範圍有一段距離，
- * 所以在水池右邊、路燈上方開一條窄的可走區，讓寵物走到水池旁邊再跳進去。
- * x 從水池右緣再過去一點開始（避開煙囪與屋頂的遮擋），y 在水池底邊以下、路燈頂端以上。太矮的視窗沒有這一條（回傳 null）。
+ * 水池右邊緊貼水池的一條可走帶（腳底座標）：水池在住家正上方，離寵物主要的活動範圍有一段距離，
+ * 所以在水池右緣旁邊、住家屋頂與煙囪的上面開一條窄的可走區，一路接到主要活動範圍，讓寵物走到水池旁邊再跳進去。
+ * y 的下緣 = 住家屋頂頂端往上 4（站在這裡的寵物整個身體都在屋頂之上，不會被住家蓋住），上緣 = 草地上緣下 BACK_MARGIN。
+ * 太矮的視窗上下放不下（< 6）才回傳 null。
  */
 export function pondStrip(L: Layout): Rect | null {
-  const p = pondPos(L)
+  const pd = pondPos(L)
   const b = petBounds(L)
-  // x0 = 160：離住家屋頂右緣（約 x=144）夠遠，站在這裡的寵物不會被屋頂遮住；y 從草地上緣下方一路到路燈頂端以上
-  const r = { x0: 160, x1: b.x0 + 4, y0: L.farBottom + BACK_MARGIN, y1: L.H - LAMP_H - 12 - 4 }
-  return r.y1 - r.y0 >= 6 && r.x1 - r.x0 >= 10 && p.y + 10 <= r.y1 ? r : null
+  const r = { x0: pd.x - POND_AX + POND_W + 8, x1: b.x0 + 4, y0: L.farBottom + BACK_MARGIN, y1: L.house.baseY - HOUSE_H - 4 }
+  return r.y1 - r.y0 >= 6 && r.x1 - r.x0 >= 10 ? r : null
 }
 
-/** 水池旁邊走去洗澡、洗完爬出來的站位（腳底座標）：在上面那條可走帶裡，沒被住家與路燈遮住 */
+/**
+ * 洗澡的站位（腳底座標）：走去洗澡的終點、洗完爬出來的落點，三種洗澡入口（氣泡選單、拖曳到水池、洗完爬出甩水）共用同一個點。
+ * 緊貼水池右緣（POND_STAND_DX），高度在水面中心偏下（但不低於通道下緣）；和有沒有買建築無關。
+ */
 export function pondStand(L: Layout): { x: number; y: number } {
+  const pd = pondPos(L)
   const st = pondStrip(L)
-  const b = petBounds(L)
-  if (!st) return { x: b.x0 + 6, y: Math.min(b.y1, pondPos(L).y + 12) }
-  // 狗窩（在路燈後面、屋頂伸進這條可走帶的下緣）買了之後，站位移到狗窩頂端之上：寵物站在屋頂後面會被蓋住
-  const kennel = ownedSlots(L).find((q) => q.id === 'kennel')
-  const yMax = kennel ? Math.min(st.y1, slotBox(kennel).y0 - 4) : st.y1
-  return { x: st.x0 + 26, y: Math.max(st.y0 + 2, Math.min(yMax, pondPos(L).y + 10)) }
+  const w = waterEllipse(L)
+  const x = pd.x - POND_AX + POND_W + POND_STAND_DX
+  const y0 = st ? st.y0 + 2 : L.farBottom + BACK_MARGIN
+  const y1 = st ? st.y1 : L.house.baseY - HOUSE_H - 4
+  return { x, y: Math.max(y0, Math.min(y1, w.cy + 16)) }
 }
 
 /** 所有可走的區域：主要活動範圍＋水池旁那條可走帶 */
