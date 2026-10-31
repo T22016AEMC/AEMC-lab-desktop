@@ -419,6 +419,8 @@ const CAT_EXTRA_RATIO = 0.56
 
 const pCache = {}
 /** 建築素材的縮放係數（v3.3.1）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
+/** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
+const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
 const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7) }
 let clockClosedSpr = null
 /** 水池的目標寬度（邏輯像素） */
@@ -664,6 +666,13 @@ async function main() {
     }
     const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120 })
     for (const f of td.frames) addFrame('toys', f.name, f.spr)
+    // v3.5.0：場景裡的球（飛行、落地、叼著）用同一張原圖的球依目標高度重新取樣的小尺寸版（toy_ball_s），不改其他玩具；
+    // 目標高度 BALL_S_H（預設見下方）。不是縮放：像素格 p 反推，一樣是整數像素。
+    const bs = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_ball: BALL_S_H } })
+    const ballS = bs.frames.find((f) => f.name === 'toy_ball')
+    if (!ballS) throw new Error('找不到小球')
+    addFrame('toys', 'toy_ball_s', ballS.spr)
+    info('小球 toy_ball_s：' + ballS.spr.w + '×' + ballS.spr.h + '（目標高度 ' + BALL_S_H + '）')
     const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120 })
     for (const f of tc.frames) addFrame('toys', f.name, f.spr)
   }

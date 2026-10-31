@@ -5,12 +5,24 @@ import { clamp100 } from './stats'
 import { adoptCheck, isSleeping } from './rules'
 
 /** 寵物操作（點寵物彈出的氣泡選單）。之後的「玩耍」等動作只要在這裡新增名稱 */
-export type ActionId = 'feed' | 'pet' | 'bath' | 'walk' | 'groom' | 'wake'
+export type ActionId = 'feed' | 'pet' | 'bath' | 'walk' | 'groom' | 'wake' | 'play'
 
 export interface Ctx {
   nowMs: number
   /** 世界時刻（小時，可能被測試模式覆寫），判斷夜晚與睡覺 */
   hour: number
+  /** 場景現在不能玩耍的原因（別隻在玩、洗澡中、被拖曳中；由引擎算出）。沒有 = 可以 */
+  playBlock?: string | null
+}
+
+/** 玩耍的玩具。只有列在這裡的物種才顯示「玩耍」（貓的玩具 v3.6.0 才加：在 PLAY_TOYS.cat 新增即可） */
+export type PlayToyId = 'ball'
+export interface PlayToy {
+  id: PlayToyId
+  label: string
+}
+export const PLAY_TOYS: Partial<Record<SpeciesId, readonly PlayToy[]>> = {
+  dog: [{ id: 'ball', label: '丟球' }],
 }
 
 /** 指令執行後給畫面層的效果：浮字、寵物動畫 */
@@ -35,9 +47,10 @@ export const ACTION_LABELS: Record<ActionId, string> = {
   walk: '散步',
   groom: '梳毛',
   wake: '叫醒',
+  play: '玩耍',
 }
 
-const ACTION_ORDER: ActionId[] = ['feed', 'pet', 'bath', 'walk', 'groom', 'wake']
+const ACTION_ORDER: ActionId[] = ['feed', 'pet', 'bath', 'walk', 'play', 'groom', 'wake']
 
 /** 這個動作適用這隻寵物嗎（還沒考慮睡覺等暫時狀態） */
 function applicable(action: ActionId, pet: Pet): boolean {
@@ -46,6 +59,8 @@ function applicable(action: ActionId, pet: Pet): boolean {
       return pet.species === 'dog'
     case 'groom':
       return pet.species === 'cat'
+    case 'play':
+      return (PLAY_TOYS[pet.species]?.length ?? 0) > 0
     default:
       return true
   }
@@ -59,9 +74,11 @@ export function petActions(save: SaveData, pet: Pet, ctx: Ctx): ActionOption[] {
     if (!applicable(id, pet)) continue
     if (id === 'wake' && !sleeping) continue
     let disabledReason: string | undefined
+    const cost = id === 'play' ? BALANCE.play.cost : DAILY_COST
     if (id !== 'pet' && id !== 'wake' && sleeping) disabledReason = `${pet.name}正在睡覺，可以先叫醒`
-    else if (save.points < DAILY_COST) disabledReason = `金幣不足（需要 ${DAILY_COST} 金幣，目前 ${save.points} 金幣）`
-    out.push({ id, label: ACTION_LABELS[id], cost: DAILY_COST, disabledReason })
+    else if (save.points < cost) disabledReason = `金幣不足（需要 ${cost} 金幣，目前 ${save.points} 金幣）`
+    else if (id === 'play' && ctx.playBlock) disabledReason = ctx.playBlock
+    out.push({ id, label: ACTION_LABELS[id], cost, disabledReason })
   }
   return out
 }
@@ -108,6 +125,7 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
   const fail = (error: string): ExecResult => ({ save, effects: [], error })
   const pet = save.pets.find((p) => p.id === petId)
   if (!pet) return fail('找不到這隻寵物')
+  if (action === 'play') return fail('請從玩耍選單選一個玩具')
   const opt = petActions(save, pet, ctx).find((a) => a.id === action)
   if (!opt) return fail('現在不能這麼做')
   if (opt.disabledReason) return fail(opt.disabledReason)
@@ -149,6 +167,41 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
   const r = applyDelta({ ...pet, awakeUntil }, delta)
   next = replacePet(next, r.pet)
   return { save: next, effects: [{ kind: 'anim', petId: pet.id, anim }, ...r.floats] }
+}
+
+/** 玩耍開始：選了玩具之後扣金幣（BALANCE.play.cost）、保持清醒。條件不符時回傳 error，存檔不變 */
+export function startPlay(save: SaveData, ctx: Ctx, petId: string, toy: PlayToyId): ExecResult {
+  const fail = (error: string): ExecResult => ({ save, effects: [], error })
+  const pet = save.pets.find((p) => p.id === petId)
+  if (!pet) return fail('找不到這隻寵物')
+  if (!PLAY_TOYS[pet.species]?.some((t) => t.id === toy)) return fail('現在不能這麼做')
+  const opt = petActions(save, pet, ctx).find((a) => a.id === 'play')
+  if (!opt) return fail('現在不能這麼做')
+  if (opt.disabledReason) return fail(opt.disabledReason)
+  const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
+  return { save: replacePet({ ...save, points: save.points - BALANCE.play.cost }, { ...pet, awakeUntil }), effects: [] }
+}
+
+/** 撿回 n 次的結算數值（0 次 = 空；次數夾在 0～maxCatches） */
+export function playDelta(catches: number): Delta {
+  const b = BALANCE.play
+  const n = Math.max(0, Math.min(b.maxCatches, Math.floor(Number.isFinite(catches) ? catches : 0)))
+  if (n === 0) return {}
+  return {
+    mood: Math.min(b.mood.max, b.mood.base + b.mood.perCatch * n),
+    weight: Math.max(b.weight.min, b.weight.perCatch * n),
+    satiety: Math.max(b.satiety.min, b.satiety.perCatch * n),
+  }
+}
+
+/** 玩耍結算（時間到或提前結束）：撿回 0 次完全不加；不扣金幣。數值夾在 0～100 */
+export function settlePlay(save: SaveData, ctx: Ctx, petId: string, catches: number): ExecResult {
+  const pet = save.pets.find((p) => p.id === petId)
+  const delta = playDelta(catches)
+  if (!pet || Object.keys(delta).length === 0) return { save, effects: [] }
+  const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
+  const r = applyDelta({ ...pet, awakeUntil: Math.max(pet.awakeUntil ?? 0, awakeUntil) }, delta)
+  return { save: replacePet(save, r.pet), effects: r.floats }
 }
 
 /**

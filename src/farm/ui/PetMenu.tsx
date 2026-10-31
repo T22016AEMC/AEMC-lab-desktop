@@ -2,7 +2,8 @@ import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { SPECIES, variantOf } from '../config/species'
 import { worldHour } from '../overrides'
-import { petActions } from '../sim/commands'
+import { PLAY_TOYS, petActions, type PlayToyId } from '../sim/commands'
+import { BALANCE } from '../config/balance'
 import { isSleeping } from '../sim/rules'
 import { stageOf, weightLabel, heightCm } from '../sim/stats'
 import { useFarmStore } from '../store/farmStore'
@@ -27,10 +28,15 @@ function Bar({ label, value, color }: { label: string; value: number; color: str
  * 點寵物彈出的氣泡選單：名字、三條像素風小條（飽食、心情、清潔）、所有寵物操作。
  * 位置由 Farm 每個影格直接改 style（跟著寵物走），這裡只負責內容。
  */
-export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (petId: string) => void }>(function PetMenu({ petId, onBath }, ref) {
+export const PetMenu = forwardRef<
+  HTMLDivElement,
+  { petId: string; onBath?: (petId: string) => void; onPlay?: (petId: string, toy: PlayToyId) => void; playBlock?: string | null }
+>(function PetMenu({ petId, onBath, onPlay, playBlock }, ref) {
   const save = useFarmStore((s) => s.save)
   const runAction = useFarmStore((s) => s.runAction)
   const [tick, setTick] = useState(0)
+  /** main = 一般操作；toys = 玩耍之後挑玩具 */
+  const [view, setView] = useState<'main' | 'toys'>('main')
   // 睡覺狀態依時間而定：每 5 秒重算一次可用的操作
   useEffect(() => {
     const t = window.setInterval(() => setTick((n) => n + 1), 5000)
@@ -39,7 +45,7 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (pet
   const pet = save?.pets.find((p) => p.id === petId)
   const nowMs = Date.now()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const actions = useMemo(() => (save && pet ? petActions(save, pet, { nowMs, hour: worldHour(nowMs) }) : []), [save, pet, tick])
+  const actions = useMemo(() => (save && pet ? petActions(save, pet, { nowMs, hour: worldHour(nowMs), playBlock }) : []), [save, pet, tick, playBlock])
   if (!save || !pet) return null
   const sp = SPECIES[pet.species]
   const v = variantOf(pet.species, pet.variant)
@@ -47,6 +53,11 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (pet
   const stage = stageOf(pet, nowMs) === 'young' ? '幼年' : '成年'
 
   const run = (id: (typeof actions)[number]['id']) => {
+    // 玩耍：先挑玩具（扣金幣在挑了玩具之後）
+    if (id === 'play') {
+      setView('toys')
+      return
+    }
     // 洗澡：寵物自己走到水池前再跳進去（扣金幣在跳進水池時才扣）
     if (id === 'bath' && onBath) {
       onBath(pet.id)
@@ -84,21 +95,50 @@ export const PetMenu = forwardRef<HTMLDivElement, { petId: string; onBath?: (pet
       <div className="mt-1 text-[10px] text-[#8a5a2b]">
         身高 {heightCm(pet, v.baseCm, nowMs)} 公分・體重 {Math.round(pet.weight)}（{weightLabel(pet.weight)}）
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
-        {actions.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            disabled={Boolean(a.disabledReason)}
-            title={a.disabledReason ?? `${a.label}（${a.cost} 金幣）`}
-            onClick={() => run(a.id)}
-            className="px-btn px-1 py-1 text-xs"
-          >
-            {a.label}
-            <span className="block text-[9px] font-normal opacity-70">{a.cost} 金幣</span>
+      {view === 'toys' ? (
+        <div className="mt-2 grid grid-cols-3 gap-1.5" data-testid="toy-list">
+          {(PLAY_TOYS[pet.species] ?? []).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              title={`${t.label}（${BALANCE.play.cost} 金幣，${BALANCE.play.seconds} 秒）`}
+              onClick={() => onPlay?.(pet.id, t.id)}
+              className="px-btn px-1 py-1 text-xs"
+              data-testid={`toy-${t.id}`}
+            >
+              {t.label}
+              <span className="block text-[9px] font-normal opacity-70">{BALANCE.play.cost} 金幣</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setView('main')} className="px-btn px-1 py-1 text-xs" data-testid="toy-back">
+            返回
           </button>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {actions.map((a) => {
+            const blocked = Boolean(a.disabledReason)
+            // 「玩耍」被停用時仍可點：點了用提示訊息說明原因（原生 title 在觸控與部分環境看不到）；其他按鈕維持原本的 disabled
+            const softDisabled = a.id === 'play' && blocked
+            return (
+              <button
+                key={a.id}
+                type="button"
+                disabled={blocked && !softDisabled}
+                aria-disabled={softDisabled || undefined}
+                title={a.disabledReason ?? (a.id === 'play' ? '玩耍：選一個玩具' : `${a.label}（${a.cost} 金幣）`)}
+                onClick={() => (softDisabled ? useUIStore.getState().showToast(a.disabledReason!) : run(a.id))}
+                className={`px-btn px-1 py-1 text-xs ${softDisabled ? 'opacity-60' : ''}`}
+                style={softDisabled ? { background: '#cfc3a8', color: '#8a7d66', boxShadow: 'none', cursor: 'not-allowed' } : undefined}
+                data-testid={`action-${a.id}`}
+              >
+                {a.label}
+                <span className="block text-[9px] font-normal opacity-70">{a.id === 'play' ? '選玩具' : `${a.cost} 金幣`}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       {/* 氣泡的小尾巴 */}
       <span className="absolute left-1/2 top-full -ml-2 block h-0 w-0 border-x-8 border-t-8 border-x-transparent border-t-[#3b2a1c]" />
       <span className="absolute left-1/2 top-full -ml-[5px] -mt-[3px] block h-0 w-0 border-x-[5px] border-t-[5px] border-x-transparent border-t-[#fff6df]" />

@@ -130,6 +130,16 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **食盆份量** = 寵物數 × `portionsPerPet`(2)：`sim/buildings.ts` 的 `bowlCapacity(save)`；`bowlLeft` = 上限 − 今天已用（`bowl.used`）。跨日補滿用當時的寵物數；當天領養新寵物，上限立刻多 2（`used` 不變）。存檔格式 `{ date, used }` 不變、不升 schema。
 - 洗澡通道 `pondStrip` 在邏輯高度 H<287 時不存在（例如 1920×930 搭配 dpr 1.25），洗澡相關程式本版沒有動，見 CHANGELOG 的已知問題。
 
+## v3.5.0：玩耍框架與狗的丟球
+
+- **框架**：`sim/commands.ts` 的 `PLAY_TOYS[物種]` 決定誰有「玩耍」與玩具清單（目前只有 `dog: [丟球]`；貓 v3.6.0 才加，加一筆即可，貓的選單在加之前必須和 v3.4.3 完全一樣，有測試）。`ActionId` 多了 `'play'`（`execute` 不處理它）；扣金幣走 `startPlay`（`farmStore.startPlay`，選了玩具才扣 `BALANCE.play.cost`），結算走 `settlePlay`（`farmStore.settlePlay`，0 次完全不動）。`petActions` 的 `ctx.playBlock`（引擎算的「別隻在玩、洗澡中、被拖曳中」）決定停用原因；「玩耍」被停用時按鈕仍可點、點了 toast 顯示原因（`PetMenu`，只有這個按鈕這樣，其他維持原生 disabled）。數值全部在 `BALANCE.play`（含各階段時間、追球速度倍率、卡住保險秒數）；改數值要同步 CHANGELOG 與邏輯測試。
+- **狀態機**在 `pixel/play.ts`，狀態是 `Actor.play`（單一欄位，和 `a.bath` 同一種做法）：`ready → flight → chase → grab → return → drop → ready`，`cheer` 是結算演出；所有階段轉換、提前結算（`endPlay(reason)`）都在這個檔案，不要在別處加玩耍的旗標。`updateActor` 在 `bath` 之後、`updateBuildingUse` 之前呼叫 `updatePlay`，所以玩耍中不去食盆、營火、狗窩、不躲雨（`beginPlay` 會 `releaseUse`、清 `rainIn`）。多幀動作沒完成就維持階段（用 `p.t` 累計）；路徑只在目標改變時算（`moveToward`）；追球與叼回超過 `stuckSeconds` 還沒到就傳送到目標（保險）。不旋轉、不縮放；球的軌跡是位移（ease-out＋落地彈跳）。
+- **結束原因**（`PlayEnd`）：`time`、`user`（Esc／右鍵）演 `cheer`（結算在進入 cheer 時、只做一次）；`drag`、`window`、`sleep`、`resize` 直接結算、不演。時間到時已叼起的那一次最多再給 `graceSeconds` 秒。睡覺時間：`isSleepTime(hour)` 且不是夜間才被叫醒開始玩的（`nightStart`），或狗變成 `isSleeping`。Farm 層在開遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框、視窗最大化時呼叫 `engine.endPlay('window')`；`setSize` 在版面真的變了才 `endPlay('resize')`；`beginDrag` 對玩耍中的狗先 `endPlay('drag')`。Esc／右鍵只在 `engine.isPlaying()` 時處理（右鍵 `preventDefault` 也是）。
+- **落點**（`checkThrow`）：`petBounds` 內（不含洗澡通道，所以洗澡通道不存在的低視窗不影響）、`isClear`（離障礙 ≥ 3）、`isWalkable`、離狗 ≥ `minThrow`、不壓在睡著或座位上的寵物；只有 `ready` 且時間沒到才接受丟球。點擊座標一律 `fromCss`。玩耍中點到其他寵物與禮物照常；點到玩耍中的狗：不開選單、不丟球，按住 150 ms 或移動 4 px 仍是拖曳（提前結算）。
+- **素材**：場景裡的球是 `toy_ball_s`（11×12）：處理管線對同一張 `toys_dog.png` 的球再取樣一次（`BALL_S_H` 預設 12，環境變數可覆寫來比較；柯基站姿高 31、黃金 46，13 以上在柯基嘴邊偏大、11 的細節變少），其他玩具與 `toy_ball` 不動。叼球位置 `MOUTH`（`play.ts`，品種 assetKey → 幀名 → 相對腳底錨點的球心，面向右）逐品種逐幀量過，往左走時 x 反號；改狗素材要重量（測試檢查 6 品種 × `stand`／`walk_a`／`walk_b` 都有）。狗的 `jump` 已畫入飛盤、`tug` 已畫入繩子、`dig` 已畫入土堆，這些姿勢不可再疊同一個道具；`happy`＋`hop` 位移是「開心跳一下」，新增的 `bark` 動作用現有的 `bark` 幀（貓對應 `sit_a`）。
+- **游標與 HUD**：`ui/ballCursor.ts` 用 `toy_ball_s` 畫成 CSS 游標（整數倍，每個邏輯像素至少 3 個 CSS 像素，熱點在球心，失敗退回 crosshair），只套在畫布上；`index.tsx` 的主迴圈依 `engine.playHud()` 同步游標與 HUD（選單列下方正中央，`pointer-events: none`，固定底色邊框）。
+- **已知行為**：玩耍進度不存檔（關掉網頁已扣的金幣不退）；分頁在背景時計時暫停（用 dt 累加）。
+
 ## 其他約定
 
 - 「關於這個桌面」顯示的版本號必須從 `package.json` 讀取，不可寫死。

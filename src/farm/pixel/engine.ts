@@ -1,6 +1,7 @@
 import type { Pet } from '../save/types'
 import type { FarmEffect } from '../sim/commands'
 import { buildingDef } from '../config/buildings'
+import { variantOf } from '../config/species'
 import { isSleeping } from '../sim/rules'
 import { lowStatNotices } from '../sim/stats'
 import type { Weather } from '../sim/worldTime'
@@ -14,9 +15,10 @@ import {
 } from './layout'
 import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
 import {
-  assetPrefix, beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, isBathing, triggerAnim,
+  PLAY_OPS, assetPrefix, beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, frameNameOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
 } from './pets'
+import { ballPos, beginPlay, checkThrow, endPlay, isCarrying, mouthOffset, throwBall, type PlayBall, type PlayEnd, type PlayEnv, type PlayToyId, type ThrowCheck } from './play'
 import {
   drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
   makeDrops, updateDrops, type Drop,
@@ -41,6 +43,8 @@ export interface EngineHooks {
   notify: (message: string) => void
   /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）；回傳 null 成功，否則失敗原因 */
   eatAtBowl: (petId: string) => string | null
+  /** 玩耍結算（撿回次數）：心情、體重、飽食度 */
+  settlePlay: (petId: string, catches: number) => void
 }
 
 /** 放開拖曳的結果 */
@@ -99,7 +103,7 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
-  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null }
+  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {} }
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
   private ownedIds: ReadonlySet<string> = new Set()
   bowlLeft = 0
@@ -110,6 +114,8 @@ export class PixelEngine {
   time = 0
   private particles: Particle[] = []
   private floats: Float[] = []
+  /** 丟球點到不合法的位置：小小的叉叉（0.45 秒） */
+  private marks: { x: number; y: number; t: number; color: string }[] = []
   private drops: Drop[] = []
   private giftT = 0
   private lastFrame: FrameInfo = { nowMs: Date.now(), hour: 12, weather: 'sunny', gifts: [] }
@@ -117,9 +123,12 @@ export class PixelEngine {
 
   /** 設定畫布大小（裝置像素）；既有寵物依新範圍夾回 */
   setSize(backW: number, backH: number, dpr: number): void {
+    const old = this.layout
     this.layout = computeLayout(Math.max(1, backW), Math.max(1, backH), dpr)
     this.layout.owned = this.ownedIds
     for (const a of this.actors.values()) clampActor(a, this.layout)
+    // 版面真的變了（球與 home 的位置可能失效）：玩耍提前結算
+    if (old.backW !== this.layout.backW || old.backH !== this.layout.backH || old.dpr !== this.layout.dpr) this.endPlay('resize')
   }
 
   /** 讓場景上的寵物與存檔裡的寵物一致（新增、移除、資料更新） */
@@ -220,7 +229,7 @@ export class PixelEngine {
     const env: BehaviorEnv = {
       layout: this.layout, nowMs: f.nowMs, hour: f.hour, rand: this.rand, selectedId: this.selectedId, others: list, emit: this.emit,
       fx: this.fx, requestBath: this.requestBath, notify: (m) => this.hooks.notify(m),
-      weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id),
+      weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id), settlePlay: (id, n) => this.hooks.settlePlay(id, n),
       fixed: list.filter((a) => !a.drag && !a.fly && !a.bath && (a.action === 'sleep' || a.bld?.phase === 'at')).map((a) => ({ id: a.id, x: a.x, y: a.y })),
     }
     for (const a of list) updateActor(a, dt, env)
@@ -234,6 +243,8 @@ export class PixelEngine {
       p.y += p.vy * dt
     }
     this.particles = this.particles.filter((p) => p.life < p.max)
+    for (const m of this.marks) m.t += dt
+    this.marks = this.marks.filter((m) => m.t < 0.45)
     for (const fl of this.floats) fl.t += dt
     this.floats = this.floats.filter((fl) => fl.t < 1.9)
     // 天氣粒子
@@ -308,6 +319,11 @@ export class PixelEngine {
       const y = a.drag ? 1e6 : a.bath && (a.bath.phase === 'jump' || a.bath.phase === 'climb') ? Math.max(a.y, pond.y + 0.5) : this.seatView(a)?.sortY ?? a.y
       items.push({ y, draw: () => this.drawActor(ctx, a, f) })
     }
+    // 玩耍中的球（飛行、落地彈跳、放在腳邊）；叼著的球畫在狗的嘴邊（drawActor）
+    for (const a of this.actors.values()) {
+      const b = a.play?.ball
+      if (b) items.push({ y: ballPos(b).y, draw: () => this.drawBall(ctx, b) })
+    }
     items.sort((p, q) => p.y - q.y)
     for (const it of items) it.draw()
 
@@ -377,6 +393,23 @@ export class PixelEngine {
       const p = this.giftPos(a)
       this.drawGift(ctx, p.x, p.y)
     }
+    // 丟球點到不合法位置的叉叉
+    for (const m of this.marks) {
+      ctx.globalAlpha = 1 - m.t / 0.45
+      ctx.fillStyle = '#000'
+      const mx = Math.round(m.x)
+      const my = Math.round(m.y) - Math.round(m.t * 6)
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillRect(mx + i - 1, my + i - 1, 3, 3)
+        ctx.fillRect(mx + i - 1, my - i - 1, 3, 3)
+      }
+      ctx.fillStyle = m.color
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillRect(mx + i, my + i, 1, 1)
+        ctx.fillRect(mx + i, my - i, 1, 1)
+      }
+    }
+    ctx.globalAlpha = 1
     for (const fl of this.floats) {
       ctx.font = 'bold 9px "Courier New", monospace'
       ctx.textAlign = 'center'
@@ -487,6 +520,17 @@ export class PixelEngine {
     return { x: a.x, y: a.y - (s?.h ?? 40) - 16 + Math.round(Math.sin(this.giftT * 4) * 1.5) }
   }
 
+  /** 球（飛行中離地 z、落地彈跳）：腳下一個小陰影，不旋轉 */
+  private drawBall(ctx: CanvasRenderingContext2D, b: PlayBall): void {
+    const s = assets.get('toy_ball_s')
+    if (!s) return
+    const p = ballPos(b)
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'
+    const sw = Math.max(3, Math.round(s.w * 0.6 * (1 - Math.min(0.4, p.z / 90))))
+    ctx.fillRect(Math.round(p.x) - Math.round(sw / 2), Math.round(p.y) - 1, sw, 2)
+    drawSprite(ctx, s, p.x, p.y - p.z)
+  }
+
   private drawGift(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const px = Math.round(x) - 5
     const py = Math.round(y) - 5
@@ -522,6 +566,12 @@ export class PixelEngine {
     }
     drawSprite(ctx, s, px + a.shakeX, py - hop, a.facing === -1)
     if (v?.clip) ctx.restore()
+    // 叼著球：球掛在嘴邊（各品種、各幀的位置在 play.ts 的 MOUTH，往左走時水平翻轉）
+    if (a.play && isCarrying(a.play)) {
+      const m = mouthOffset(variantOf(a.pet.species, a.pet.variant).assetKey, frameNameOf(a), a.facing)
+      const ball = assets.get('toy_ball_s')
+      if (m && ball) drawSprite(ctx, ball, px + a.shakeX + m.x, py - hop + m.y + Math.round(ball.h / 2))
+    }
     // 頭上的狀態圖示（餓＝驚嘆號、心情低＝汗滴、髒＝泡泡、睡覺＝ZZZ、開心＝愛心）
     const key = this.statusIcon(a, f)
     if (key) {
@@ -608,7 +658,8 @@ export class PixelEngine {
   /** 滑鼠移動：寵物稍微看向滑鼠並輕輕跳一下；回傳目前在哪隻寵物上 */
   pointerMove(cssX: number, cssY: number): string | null {
     const { x, y } = fromCss(this.layout, cssX, cssY)
-    const a = this.petAt(x, y)
+    const hit = this.petAt(x, y)
+    const a = hit?.play ? null : hit // 玩耍中的狗不會因為滑鼠經過而跳一下
     for (const o of this.actors.values()) {
       if (o.hovered && o !== a) o.hovered = false
     }
@@ -646,6 +697,8 @@ export class PixelEngine {
     const a = this.actors.get(id)
     if (!a || isBathing(a)) return false
     cancelBath(a)
+    // 玩耍中的狗被拖走：提前結算（不演開心跳）
+    if (a.play) endPlay(a, 'drag', this.playEnv(), PLAY_OPS)
     // 座位上的寵物（窩裡、平台上）被拖起來：從畫面上的位置開始拖，座位釋放（不回到座位旁）
     const v = this.seatView(a)
     if (v) {
@@ -731,6 +784,71 @@ export class PixelEngine {
   cancelBathWalk(id: string): void {
     const a = this.actors.get(id)
     if (a) cancelBath(a)
+  }
+
+  // ---------------------------------------------------------------------
+  // 玩耍（丟球）
+  // ---------------------------------------------------------------------
+
+  /** 目前正在玩耍的狗（一次只有一隻） */
+  playingActor(): Actor | null {
+    for (const a of this.actors.values()) if (a.play) return a
+    return null
+  }
+
+  isPlaying(): boolean {
+    return this.playingActor() !== null
+  }
+
+  private playEnv(): PlayEnv {
+    return {
+      layout: this.layout, rand: this.rand, emit: this.emit, settlePlay: (id, n) => this.hooks.settlePlay(id, n),
+      others: [...this.actors.values()], nowMs: this.lastFrame.nowMs, hour: this.lastFrame.hour,
+    }
+  }
+
+  /** 現在不能玩耍的原因（別隻在玩、洗澡中、被拖曳中）；可以玩 = null。金幣與睡覺由 petActions 判斷 */
+  playBlock(id: string): string | null {
+    const a = this.actors.get(id)
+    if (!a) return '找不到這隻寵物'
+    const other = this.playingActor()
+    if (other) return other.id === id ? `${a.pet.name}正在玩耍` : `${other.pet.name}正在玩耍，一次只能玩一隻`
+    if (a.bath) return `${a.pet.name}正在洗澡`
+    if (a.drag || a.fly) return `${a.pet.name}正在被拖曳`
+    return null
+  }
+
+  /** 開始玩耍（金幣已扣）。回傳 null 成功，否則原因 */
+  beginPlay(id: string, toy: PlayToyId = 'ball'): string | null {
+    const why = this.playBlock(id)
+    if (why) return why
+    const a = this.actors.get(id)
+    if (!a) return '找不到這隻寵物'
+    beginPlay(a, this.layout, PLAY_OPS.setAction, this.lastFrame.hour, toy)
+    return null
+  }
+
+  /** 提前結束玩耍（沒在玩就什麼都不做）。user／time 演開心跳，其他原因只結算數值 */
+  endPlay(reason: PlayEnd): void {
+    const a = this.playingActor()
+    if (a) endPlay(a, reason, this.playEnv(), PLAY_OPS)
+  }
+
+  /** 玩耍中點了畫布上的一個位置（CSS 座標）：合法就丟球，不合法在那裡冒一個叉叉。回傳判斷結果給畫面層決定要不要提示 */
+  throwAtCss(cssX: number, cssY: number): ThrowCheck {
+    const a = this.playingActor()
+    if (!a) return { ok: false, reason: 'busy' }
+    const { x, y } = fromCss(this.layout, cssX, cssY)
+    const r = checkThrow(this.layout, a, [...this.actors.values()], x, y)
+    if (r.ok) throwBall(a, r.x, r.y, PLAY_OPS.setAction)
+    else this.marks.push({ x, y, t: 0, color: r.reason === 'busy' ? '#ffffff' : '#ff5a4a' })
+    return r
+  }
+
+  /** 玩耍的 HUD 資料：剩餘秒數（無條件進位）與撿回次數；沒在玩 = null */
+  playHud(): { left: number; catches: number } | null {
+    const p = this.playingActor()?.play
+    return p ? { left: Math.max(0, Math.ceil(p.left)), catches: p.catches } : null
   }
 
   houseSize(): { w: number; h: number } {

@@ -6,6 +6,7 @@ import { releaseUse, updateBuildingUse, type BuildingUse } from './buildingUse'
 import type { BuildingSlot, Layout } from './layout'
 import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
 import { findPath, lineClear, type FixedPet, type Pt } from './nav'
+import { updatePlay, type PlayState } from './play'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -14,7 +15,7 @@ import { findPath, lineClear, type FixedPet, type Pt } from './nav'
  * 不做旋轉、傾斜、縮放；往左走用水平翻轉。
  */
 
-export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom'
+export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom' | 'bark'
 
 export interface Anim {
   /** 幀名稱（manifest 裡 dog_<品種>_<名稱> 的名稱） */
@@ -33,6 +34,7 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     eat: { frames: ['eat'], fps: 1 },
     happy: { frames: ['happy', 'stand'], fps: 3 },
     groom: { frames: ['sit_a'], fps: 1 },
+    bark: { frames: ['bark'], fps: 1 },
   },
   cat: {
     idle: { frames: ['stand'], fps: 1 },
@@ -42,6 +44,7 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     eat: { frames: ['eat'], fps: 1 },
     happy: { frames: ['sit_a', 'stand'], fps: 2 },
     groom: { frames: ['groom'], fps: 1 },
+    bark: { frames: ['sit_a'], fps: 1 },
   },
 }
 
@@ -113,6 +116,8 @@ export interface Actor {
   path: Pt[]
   pathKey: string
   pathAge: number
+  /** 玩耍的狀態（目前只有狗的丟球）；null = 沒在玩。所有玩耍的階段轉換都在 play.ts 的狀態機裡，這裡只是一個欄位（和 bath 一樣） */
+  play: PlayState | null
   /** 睡覺時間到了、但周圍太擠，正在找個不擠的地方睡（已經找了幾秒）；null = 沒在找 */
   seek: number | null
 }
@@ -140,6 +145,8 @@ export interface BehaviorEnv {
   bowlLeft: number
   /** 在食盆吃一份（用掉份量、回復飽食度）；回傳 null 表示成功，否則是失敗原因 */
   eatAtBowl: (a: Actor) => string | null
+  /** 玩耍結算：撿回次數（引擎接到存檔：心情、體重、飽食度） */
+  settlePlay: (petId: string, catches: number) => void
   /** 睡著或坐在座位上、不會動的寵物（尋路時繞開） */
   fixed: readonly FixedPet[]
 }
@@ -155,7 +162,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
-    bld: null, bowlCool: 0, gatherCool: 0, moodGain: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null,
+    bld: null, bowlCool: 0, gatherCool: 0, moodGain: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -338,6 +345,11 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
   }
   if (a.bath) {
     updateBath(a, dt, env)
+    return
+  }
+  // 玩耍中（丟球）：整個行為交給 play.ts 的狀態機；不去食盆、營火、狗窩，也不躲雨
+  if (a.play) {
+    updatePlay(a, dt, env, PLAY_OPS)
     return
   }
 
@@ -620,6 +632,7 @@ function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
   }
 }
 
+export const PLAY_OPS = { setAction, moveToward: (a: Actor, dt: number, speed: number, env: BehaviorEnv) => moveToward(a, dt, speed, env), clampActor }
 const BUILDING_OPS = { setAction, moveToward: (a: Actor, dt: number, speed: number, env: BehaviorEnv) => moveToward(a, dt, speed, env) }
 
 /** 朝目標走。目標前面有障礙（購買後的建築形成的牆）就先規劃繞行路線，一個路徑點一個路徑點走 */
@@ -707,10 +720,14 @@ export function assetPrefix(pet: Pet): string {
   return `${pet.species}_${variantOf(pet.species, pet.variant).assetKey}`
 }
 
-/** 目前這個動作該畫哪一幀的鍵名 */
-export function frameKeyOf(a: Actor): string {
-  const prefix = assetPrefix(a.pet)
+/** 目前這個動作該畫哪一幀的名稱（stand、walk_a…） */
+export function frameNameOf(a: Actor): string {
   const anim = ANIMS[a.pet.species][a.action]
   const i = anim.frames.length > 1 ? Math.floor(a.animT * anim.fps) % anim.frames.length : 0
-  return `${prefix}_${anim.frames[i]}`
+  return anim.frames[i]
+}
+
+/** 目前這個動作該畫哪一幀的鍵名 */
+export function frameKeyOf(a: Actor): string {
+  return `${assetPrefix(a.pet)}_${frameNameOf(a)}`
 }

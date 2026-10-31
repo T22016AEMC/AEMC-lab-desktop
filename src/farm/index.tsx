@@ -13,6 +13,8 @@ import { AdoptDialog } from './ui/AdoptDialog'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
+import { ballCursor } from './ui/ballCursor'
+import type { PlayToyId } from './sim/commands'
 
 // 測試模式面板：只在開發環境載入。正式 build 時 import.meta.env.DEV 會被替換成 false，
 // 這個分支連同動態 import 的內容都會被整段移除。
@@ -25,6 +27,10 @@ export function Farm() {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const doorRef = useRef<HTMLButtonElement | null>(null)
   const signRef = useRef<HTMLDivElement | null>(null)
+  const hudRef = useRef<HTMLDivElement | null>(null)
+  /** 玩耍中（丟球）：游標換成球、顯示 HUD。由主迴圈每個影格同步（引擎是唯一的真相） */
+  const playingRef = useRef(false)
+  const lastInvalidToast = useRef(0)
   const towerDoorRef = useRef<HTMLButtonElement | null>(null)
   const towerSignRef = useRef<HTMLDivElement | null>(null)
   /** 按住寵物的過程：按住約 150 ms 或移動超過 4 px 就開始拖曳；沒拖就是點擊（開氣泡選單） */
@@ -46,6 +52,8 @@ export function Farm() {
   const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed)
   const adoptOpen = useUIStore((s) => s.adoptOpen)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
+  const aboutOpen = useUIStore((s) => s.aboutOpen)
+  const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
   /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
   const [layoutVersion, setLayoutVersion] = useState(0)
@@ -74,6 +82,7 @@ export function Farm() {
       wake: (id) => useFarmStore.getState().wakeForDrag(id),
       notify: (m) => useUIStore.getState().showToast(m),
       eatAtBowl: (id) => useFarmStore.getState().eatAtBowl(id),
+      settlePlay: (id, n) => useFarmStore.getState().settlePlay(id, n),
     }
   }, [engine])
 
@@ -161,6 +170,22 @@ export function Farm() {
       engine.update(dt, frame)
       engine.render(ctx)
 
+      // 玩耍：游標換成球、HUD 顯示剩餘秒數與撿回次數（不擋輸入）
+      const hud = engine.playHud()
+      const playing = hud !== null
+      if (playing !== playingRef.current) {
+        playingRef.current = playing
+        if (canvas) canvas.style.cursor = playing ? ballCursor(engine.layout) : 'default'
+      }
+      const hudEl = hudRef.current
+      if (hudEl) {
+        if (hud) {
+          const text = `丟球 ${hud.left} 秒・撿回 ${hud.catches}`
+          if (hudEl.textContent !== text) hudEl.textContent = text
+          hudEl.style.visibility = 'visible'
+        } else hudEl.style.visibility = 'hidden'
+      }
+
       // 疊在畫布上的 DOM（氣泡選單、門牌）跟著場景走
       const menu = menuRef.current
       if (menu && engine.selectedId) {
@@ -223,6 +248,31 @@ export function Farm() {
   useEffect(() => {
     if (selected && !useFarmStore.getState().save?.pets.some((p) => p.id === selected)) setSelected(null)
   }, [petCount, selected])
+  // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
+  useEffect(() => {
+    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || importState) engine.endPlay('window')
+  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, importState])
+  useEffect(() => {
+    if (covered) engine.endPlay('window')
+  }, [engine, covered])
+  useEffect(
+    () =>
+      useWindowStore.subscribe((s, prev) => {
+        if (Object.keys(s.windows).length > Object.keys(prev.windows).length) engine.endPlay('window')
+      }),
+    [engine],
+  )
+  // Esc 提前結束玩耍：只在玩耍中才處理（不影響建築模式等其他地方的 Esc）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && engine.isPlaying()) {
+        e.preventDefault()
+        engine.endPlay('user')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [engine])
   // 領養視窗或啟動台開著時，關掉氣泡選單
   useEffect(() => {
     if (adoptOpen || launchpadOpen) {
@@ -268,7 +318,9 @@ export function Farm() {
       }
     }
     const id = engine.pointerMove(p.x, p.y)
-    e.currentTarget.style.cursor = id || engine.hitTest(p.x, p.y)?.kind === 'gift' ? 'pointer' : 'default'
+    const over = id || engine.hitTest(p.x, p.y)?.kind === 'gift'
+    // 玩耍中：除了別的寵物與禮物，整個畫布都是球游標
+    e.currentTarget.style.cursor = over ? 'pointer' : playingRef.current ? ballCursor(engine.layout) : 'default'
   }
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -286,7 +338,19 @@ export function Farm() {
       } catch {
         /* 部分環境不支援，忽略 */
       }
-    } else setSelected(null) // 點空白處關閉
+    } else {
+      setSelected(null) // 點空白處關閉
+      // 玩耍中：點哪裡就把球丟到哪裡（不合法的位置不丟，冒一個叉叉並提示）
+      if (engine.isPlaying()) throwBall(p.x, p.y)
+    }
+  }
+
+  const throwBall = (cssX: number, cssY: number): void => {
+    const r = engine.throwAtCss(cssX, cssY)
+    if (!r.ok && r.message && performance.now() - lastInvalidToast.current > BALANCE.play.invalidToastGapMs) {
+      lastInvalidToast.current = performance.now()
+      useUIStore.getState().showToast(r.message, 1600)
+    }
   }
 
   const endGesture = (e: React.PointerEvent<HTMLCanvasElement>, cancelled: boolean): void => {
@@ -302,7 +366,7 @@ export function Farm() {
     if (g.dragging) {
       engine.endDrag()
       e.currentTarget.style.cursor = 'default'
-    } else if (!cancelled) setSelected(g.id) // 沒拖：單純點擊 → 氣泡選單
+    } else if (!cancelled && !engine.actors.get(g.id)?.play) setSelected(g.id) // 沒拖：單純點擊 → 氣泡選單（玩耍中的狗不開選單）
   }
 
   const onBath = (id: string): void => {
@@ -312,6 +376,28 @@ export function Farm() {
       useUIStore.getState().hideToast()
       setSelected(null)
     }
+  }
+
+  /** 氣泡選單選了玩具：先確認引擎現在能玩，再扣金幣，最後開始 */
+  const onPlay = (id: string, toy: PlayToyId): void => {
+    const ui = useUIStore.getState()
+    const why = engine.playBlock(id)
+    if (why) {
+      ui.showToast(why)
+      return
+    }
+    const err = useFarmStore.getState().startPlay(id, toy, why)
+    if (err) {
+      ui.showToast(err)
+      return
+    }
+    const bad = engine.beginPlay(id, toy)
+    if (bad) {
+      ui.showToast(bad)
+      return
+    }
+    setSelected(null)
+    ui.showToast(`點草地或走道把球丟出去・${BALANCE.play.seconds} 秒・Esc 或右鍵結束`, 3200)
   }
 
   const openHall = (): void => {
@@ -331,6 +417,22 @@ export function Farm() {
         onPointerMove={onPointerMove}
         onPointerUp={(e) => endGesture(e, false)}
         onPointerCancel={(e) => endGesture(e, true)}
+        onContextMenu={(e) => {
+          // 玩耍中右鍵 = 提前結束（只有玩耍中才攔截，其他時候維持瀏覽器原本的行為）
+          if (engine.isPlaying()) {
+            e.preventDefault()
+            engine.endPlay('user')
+          }
+        }}
+      />
+
+      {/* 玩耍的 HUD：選單列的下面、場景上方正中央，不擋輸入；底色與邊框固定，日夜都看得清楚 */}
+      <div
+        ref={hudRef}
+        aria-hidden
+        data-testid="play-hud"
+        className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 whitespace-nowrap border-2 border-[#3b2a1c] bg-[#fff6df] px-2.5 py-0.5 text-xs font-bold tabular-nums text-[#3b2a1c]"
+        style={{ visibility: 'hidden', boxShadow: '2px 2px 0 rgba(0,0,0,0.4)', fontFamily: "'Microsoft JhengHei','PingFang TC',monospace" }}
       />
 
       {/* 住家的門：滑鼠移上去開門、門牌發亮，點擊開啟啟動台（夜晚維持亮燈版，只有門牌發亮） */}
@@ -457,7 +559,7 @@ export function Farm() {
 
       {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
-      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} />}
+      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} />}
 
       {status === 'ready' && assetsReady && needFirst && <AdoptDialog first />}
       {status === 'ready' && assetsReady && <ResetNotice />}

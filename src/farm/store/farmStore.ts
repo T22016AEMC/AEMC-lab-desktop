@@ -4,7 +4,7 @@ import { gameNow, worldHour } from '../overrides'
 import { LocalStorageAdapter } from '../save/storage'
 import type { SaveData, SaveStorage } from '../save/types'
 import { applyMoodGains, applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
-import { adopt, execute, wakeForDrag, type ActionId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
+import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
 import { advanceSave } from '../sim/stats'
@@ -36,6 +36,10 @@ interface FarmState {
   /** 領養（沒有存檔時建立新存檔，第一隻免費）。回傳錯誤訊息或 null */
   adoptPet: (req: Omit<AdoptRequest, 'free'>) => string | null
   runAction: (action: ActionId, petId: string) => string | null
+  /** 玩耍開始（選了玩具）：扣金幣。playBlock = 引擎說現在不能玩的原因。回傳錯誤訊息或 null */
+  startPlay: (petId: string, toy: PlayToyId, playBlock?: string | null) => string | null
+  /** 玩耍結算（撿回次數）：心情、體重、飽食度；0 次不動 */
+  settlePlay: (petId: string, catches: number) => void
   /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
   wakeForDrag: (petId: string) => void
   /** 週期性結算：數值下降、跨日的每日獎勵、睡覺的心情回復（atBuilding = 睡在建築旁的寵物 id） */
@@ -122,6 +126,22 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
     return null
+  },
+
+  startPlay: (petId, toy, playBlock) => {
+    const save = get().save
+    if (!save) return '尚未開始'
+    const r = startPlay(save, { ...ctxNow(), playBlock }, petId, toy)
+    if (r.error) return r.error
+    set({ save: r.save })
+    return null
+  },
+
+  settlePlay: (petId, catches) => {
+    const save = get().save
+    if (!save) return
+    const r = settlePlay(save, ctxNow(), petId, catches)
+    if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
   },
 
   wakeForDrag: (petId) => {

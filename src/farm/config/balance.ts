@@ -22,6 +22,30 @@ export const BALANCE = {
   bath: { cleanliness: 40, moodDog: 6, moodCat: -3 },
   walk: { weight: -5, mood: 12, satiety: -8, cleanliness: -10 },
   groom: { cleanliness: 20, mood: 10 },
+  /**
+   * 玩耍（v3.5.0，目前只有狗的丟球）。撿回 n 次（完整叼回放下才算）的結算，0 次完全不加（金幣也不退）：
+   *  心情 = min(mood.max, mood.base + mood.perCatch × n)；體重 = max(weight.min, weight.perCatch × n)；飽食度 = max(satiety.min, satiety.perCatch × n)；清潔度不動。
+   * 比散步（心情 +12、體重 −5、飽食 −8、清潔 −10）輕：30 秒內約撿回 4～5 次，心情約 +8～9.5。
+   * seconds：玩耍時間（引擎的 dt 累加，分頁在背景時暫停）；graceSeconds：時間到時已經叼起的那一次最多再給幾秒做完；
+   * minThrow：最短丟球距離（邏輯像素）；maxCatches：撿回次數上限。timing 是各階段時間（秒），球飛行時間 = clamp(flightBase + 距離 × flightPerPx)。
+   */
+  play: {
+    cost: 1,
+    seconds: 30,
+    graceSeconds: 5,
+    maxCatches: 10,
+    minThrow: 30,
+    mood: { base: 2, perCatch: 1.5, max: 10 },
+    weight: { perCatch: -0.4, min: -3 },
+    satiety: { perCatch: -0.8, min: -5 },
+    timing: { reaction: 0.2, grab: 0.3, drop: 0.4, cheer: 1.2, flightBase: 0.45, flightPerPx: 1 / 400, flightMin: 0.5, flightMax: 0.95, bounce: 0.4 },
+    /** 追球、叼回的速度（乘上狗的基本速度）；追球或叼回超過 stuckSeconds 還沒到就直接傳送到目標（保險，避免卡住） */
+    chaseSpeedMul: 2.4,
+    returnSpeedMul: 1.6,
+    stuckSeconds: 10,
+    /** 不合法的點擊：提示訊息最短間隔（毫秒） */
+    invalidToastGapMs: 1500,
+  },
   /** 叫醒：貓醒來不開心（心情下降），狗醒來很開心（心情不變） */
   wake: { moodCat: -15, moodDog: 0 },
   /**
