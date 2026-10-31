@@ -77,6 +77,35 @@ export const CAMPFIRE_SIDE_SEAT_DX = 54
 export const CAMPFIRE_BELOW_TREE = [40, 60] as const
 /** 貓跳台頂端再往上這麼多（睡在頂層平台的貓比平台高約 10 像素；頂層貓的 ZZZ 畫在頭旁邊，不再往上）要在塔門下緣之下 */
 export const CAT_TREE_HEADROOM = 12
+/**
+ * v3.4.2：貓跳台放不下時（頂端含睡在頂層平台的貓會碰到塔門或招牌）往左挪，最多挪這麼多（實際只挪到剛好不碰）。
+ * 判斷用「貓跳台＋頂層貓」的逐列不透明像素輪廓，不是外框：CAT_TREE_ENVELOPE[i] = 第 (CAT_TREE_ENVELOPE_ROW0 + i) 列
+ * （相對貓跳台素材頂端）的 [左緣, 右緣)，相對貓跳台水平中心；是貓跳台與 6 種貓睡姿圖（面向左、座位在 CAT_TREE_TOP_SEAT）的聯集。
+ * 由圖集像素算出，測試會用圖集重新量一次比對。
+ */
+export const CAT_TREE_MAX_SHIFT = 120
+/** 招牌的判定範圍：中心 TOWER_SIGN ± 這個半寬、半高 */
+export const TOWER_SIGN_HALF = { w: 12, h: 8 }
+export const CAT_TREE_ENVELOPE_ROW0 = -12
+export const CAT_TREE_ENVELOPE: readonly (readonly [number, number])[] = [
+  [6, 16], [4, 18], [-5, 20], [-6, 21], [-6, 22], [-6, 23],
+  [-6, 24], [-6, 25], [-6, 25], [-6, 26], [-7, 26], [-7, 27],
+  [-7, 27], [-7, 28], [-9, 29], [-11, 31], [-12, 32], [-13, 33],
+  [-13, 33], [-13, 33], [-13, 33], [-13, 33], [-13, 33], [-13, 33],
+  [-13, 33], [-13, 32], [-12, 32], [-11, 31], [-10, 29], [-6, 26],
+  [2, 25], [2, 25], [2, 25], [2, 25], [2, 25], [2, 25],
+  [2, 25], [2, 25], [-24, 25], [-28, 25], [-31, 25], [-34, 27],
+  [-35, 28], [-35, 29], [-36, 29], [-36, 29], [-36, 29], [-36, 29],
+  [-36, 28], [-35, 27], [-34, 26], [-23, 14], [-23, 14], [-23, 14],
+  [-23, 14], [-23, 22], [-23, 30], [-23, 31], [-23, 31], [-23, 31],
+  [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31],
+  [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31],
+  [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31],
+  [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 31], [-23, 30],
+  [-23, 29], [-24, 27], [-26, 31], [-29, 35], [-31, 36], [-33, 36],
+  [-34, 36], [-35, 36], [-36, 36], [-36, 36], [-36, 35], [-36, 34],
+  [-36, 32], [-34, 30], [-33, 29], [-21, 27], [-16, 25], [-7, 0],
+]
 export const TREE_W = 82
 export const TREE_H = 103
 export const FAR_H = 37
@@ -198,6 +227,29 @@ export function towerDoorRect(L: Layout): Rect {
 export function towerSignCenter(L: Layout): { x: number; y: number } {
   const t = towerTopLeft(L)
   return { x: t.x + TOWER_SIGN.x * TOWER_W, y: t.y + TOWER_SIGN.y * TOWER_H }
+}
+
+/** 開門版鐘樓招牌的判定矩形（邏輯座標） */
+export function towerSignRect(L: Layout): Rect {
+  const c = towerSignCenter(L)
+  return { x0: c.x - TOWER_SIGN_HALF.w, x1: c.x + TOWER_SIGN_HALF.w, y0: c.y - TOWER_SIGN_HALF.h, y1: c.y + TOWER_SIGN_HALF.h }
+}
+
+/**
+ * 貓跳台（水平中心 x、素材頂端 top）加上睡在頂層平台的貓，會不會碰到塔門（外擴 1 像素）或招牌：逐列用不透明像素輪廓判斷。
+ * 頂端（含頂層貓高出的 CAT_TREE_HEADROOM）整個在塔門之下就一定不碰，直接回傳 false。
+ */
+export function catTreeHitsTower(L: Layout, x: number, top: number): boolean {
+  const door = towerDoorRect(L)
+  if (top - CAT_TREE_HEADROOM >= door.y1 + 1) return false
+  const boxes: Rect[] = [{ x0: door.x0 - 1, x1: door.x1 + 1, y0: door.y0 - 1, y1: door.y1 + 1 }, towerSignRect(L)]
+  for (let i = 0; i < CAT_TREE_ENVELOPE.length; i++) {
+    const [lo, hi] = CAT_TREE_ENVELOPE[i]
+    if (hi <= lo) continue
+    const y = top + CAT_TREE_ENVELOPE_ROW0 + i
+    for (const b of boxes) if (y < b.y1 && y + 1 > b.y0 && x + lo < b.x1 && x + hi > b.x0) return true
+  }
+  return false
 }
 
 /**
@@ -584,10 +636,11 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         break
       }
       case 'catTree':
-        // 鐘樓中心再往右 CAT_TREE_DX_FROM_TOWER：右緣離畫面右緣約 30，頂端（含睡在頂層的貓）在塔門下緣之下
-        x0 = tx + CAT_TREE_DX_FROM_TOWER
-        x1 = x0
-        ax = x0
+        // 預設在鐘樓中心再往右 CAT_TREE_DX_FROM_TOWER（右緣離畫面右緣約 30）。放不下（頂端含頂層貓會碰到塔門或招牌）時
+        // 才往左挪，挪到剛好不碰（cost 是離預設位置的距離，所以取最小的挪動量）
+        x1 = tx + CAT_TREE_DX_FROM_TOWER
+        x0 = x1 - CAT_TREE_MAX_SHIFT
+        ax = x1
         break
       case 'picnicMat': {
         // 塔門正下方、貓跳台上方：素材頂端在塔腳之下（不蓋塔門、不擋塔門的 hover 與點擊範圍），腳下佔地不壓貓跳台
@@ -627,12 +680,13 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         break
     }
     let best: { x: number; y: number; cost: number } | null = null
+    const stepX = sp.id === 'catTree' ? 1 : 2
     for (let y = Math.ceil(y0); y <= y1; y += 2)
-      for (let x = Math.ceil(x0); x <= x1; x += 2) {
+      for (let x = Math.ceil(x0); x <= x1; x += stepX) {
         const r = { x0: x - sp.fw / 2, x1: x + sp.fw / 2, y0: y - sp.fd, y1: y }
         // 狗窩的佔地左緣在可走範圍之外（燈桿後面），只要求右邊與上下界；其餘空位整個佔地都要在可走範圍內
         if (sp.id === 'kennel' ? !(r.x1 <= b.x1 - 10 && r.y0 >= b.y0 && r.y1 <= b.y1) : !inMain(r)) continue
-        if (sp.id === 'catTree' && (x + sp.w / 2 > L.W - CAT_TREE_RIGHT_MARGIN || y - sp.h - CAT_TREE_HEADROOM < towerDoorRect(L).y1 + 1)) continue
+        if (sp.id === 'catTree' && (x + sp.w / 2 > L.W - CAT_TREE_RIGHT_MARGIN || catTreeHitsTower(L, x, y - sp.h))) continue
         if (fixed.some((f) => hit(r, f))) continue
         if (GRASS_IDS.includes(sp.id)) {
           const box = { x0: x - Math.floor(sp.w / 2), x1: x - Math.floor(sp.w / 2) + sp.w, y0: y - sp.h, y1: y }
@@ -661,8 +715,40 @@ export function buildingSlots(L: Layout): BuildingSlot[] {
   return scene(L).slots
 }
 
-/** 窄視窗放不下某個建築時，購買時顯示的提示 */
+/** 窄視窗放不下某個建築時，購買時顯示的提示（找不到放大到多少才放得下時的備用說法） */
 export const SLOT_UNAVAILABLE_MESSAGE = '此視窗大小空間不足，請放大視窗'
+
+const messageCache = new WeakMap<Layout, Map<string, string>>()
+
+/**
+ * 放不下 id 這個建築時的提示：用同一個高度與縮放倍率，由現在的寬度往上找第一個放得下的視窗寬度（CSS 像素，進位到 10），
+ * 提示「請放大視窗寬度到約 N px 以上」；加寬仍放不下就改找高度；兩個都找不到才用備用說法。
+ */
+export function slotUnavailableMessage(L: Layout, id: string): string {
+  let cache = messageCache.get(L)
+  if (!cache) messageCache.set(L, (cache = new Map()))
+  const hit = cache.get(id)
+  if (hit) return hit
+  const fits = (backW: number, backH: number): boolean => buildingSlots(computeLayout(backW, backH, L.dpr)).some((q) => q.id === id)
+  const cssW = L.backW / L.dpr
+  const cssH = L.backH / L.dpr
+  let msg = SLOT_UNAVAILABLE_MESSAGE
+  const round10 = (v: number): number => Math.ceil(v / 10) * 10
+  let found = false
+  for (let w = Math.ceil(cssW) + 2; w <= cssW + 800 && !found; w += 4)
+    if (fits(Math.round(w * L.dpr), L.backH)) {
+      msg = `此視窗大小空間不足，請放大視窗寬度到約 ${round10(w)}px 以上`
+      found = true
+    }
+  for (let h = Math.ceil(cssH) + 2; h <= cssH + 500 && !found; h += 4)
+    if (fits(L.backW, Math.round(h * L.dpr))) {
+      // 畫布上方還有 28 CSS 像素的選單列，所以視窗高度 = 畫布高度 + 28
+      msg = `此視窗大小空間不足，請放大視窗高度到約 ${round10(h + 28)}px 以上`
+      found = true
+    }
+  cache.set(id, msg)
+  return msg
+}
 
 export interface BuildingAvailability {
   id: string
@@ -683,6 +769,15 @@ export function buildingAvailability(L: Layout): BuildingAvailability[] {
     const slot = slots.find((q) => q.id === sp.id)
     return slot
       ? { id: sp.id, name: sp.name, available: true, slotId: slot.id, message: null }
-      : { id: sp.id, name: sp.name, available: false, slotId: null, message: SLOT_UNAVAILABLE_MESSAGE }
+      : {
+          id: sp.id,
+          name: sp.name,
+          available: false,
+          slotId: null,
+          // 要掃描視窗大小才算得出來，所以讀取時才算（算過會快取）
+          get message(): string {
+            return slotUnavailableMessage(L, sp.id)
+          },
+        }
   })
 }

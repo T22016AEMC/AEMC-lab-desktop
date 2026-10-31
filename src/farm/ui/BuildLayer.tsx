@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { PURCHASABLE, buildingDef, type BuildingId } from '../config/buildings'
-import { buildingAvailability, buildingSlots, slotBox, SLOT_UNAVAILABLE_MESSAGE, toCss } from '../pixel/layout'
+import { buildingAvailability, buildingSlots, slotBox, toCss } from '../pixel/layout'
 import type { PixelEngine } from '../pixel/engine'
 import { useFarmStore } from '../store/farmStore'
 
@@ -107,7 +107,10 @@ export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; lay
         </div>
         {hidden.length > 0 && (
           <div data-testid="build-unavailable" className="border-2 border-[#7a2b1c] bg-[#ffe1d6]/95 px-3 py-0.5 text-xs font-bold text-[#7a2b1c] shadow-[2px_2px_0_rgba(0,0,0,0.4)]">
-            {SLOT_UNAVAILABLE_MESSAGE}
+            {hidden.map((id) => {
+              const a = avail.find((q) => q.id === id)
+              return <div key={id}>{hidden.length > 1 ? `${a?.name ?? ''}：${a?.message ?? ''}` : a?.message}</div>
+            })}
           </div>
         )}
         {todo.length === 0 && <div className="border-2 border-[#3b2a1c] bg-[#e4f5d0]/95 px-3 py-0.5 text-xs font-bold text-[#2f5a1c]">本版的建築都買齊了</div>}

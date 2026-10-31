@@ -21,11 +21,16 @@ export function buyBuilding(save: SaveData, id: string): BuyResult {
   return { save: { ...save, points: save.points - def.price, ownedBuildings: [...save.ownedBuildings, id] } }
 }
 
-/** 食盆今天還剩幾份（本地日期 00:00 補滿；沒買食盆就是 0） */
+/** 食盆今天的份量上限：寵物數 × 每隻 2 份（上限是查詢時即時算的，所以隔天補滿用當時的寵物數，當天領養新寵物就多 2 份） */
+export function bowlCapacity(save: SaveData): number {
+  return save.pets.length * BALANCE.buildings.bowls.portionsPerPet
+}
+
+/** 食盆今天還剩幾份（本地日期 00:00 補滿；沒買食盆就是 0）。存檔只記今天用掉幾份（bowl.used），格式不變 */
 export function bowlLeft(save: SaveData, nowMs: number): number {
   if (!save.ownedBuildings.includes('bowls')) return 0
   const used = save.bowl.date === todayKey(nowMs) ? save.bowl.used : 0
-  return Math.max(0, BALANCE.buildings.bowls.portionsPerDay - used)
+  return Math.max(0, bowlCapacity(save) - used)
 }
 
 export interface EatResult {

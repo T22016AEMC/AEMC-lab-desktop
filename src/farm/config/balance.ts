@@ -6,7 +6,7 @@ export const BALANCE = {
   /** 領養後滿幾天算成年 */
   adultDays: 3,
   /** 每小時下降量 */
-  decayPerHour: { satiety: 4, mood: 3, cleanliness: 2.5 },
+  decayPerHour: { satiety: 1.7, mood: 1.3, cleanliness: 1.1 },
   /** 飽食度很低時，心情額外下降的倍率 */
   moodExtraDecayWhenHungry: 0.5,
   /** 離開網站期間補算的下限（已經低於此值的不再往下掉） */
@@ -75,8 +75,8 @@ export const BALANCE = {
     /** 食盆水盆：飽食度低於 threshold 且沒在睡覺、洗澡、被操作時，自己走去吃 */
     bowls: {
       threshold: 60,
-      /** 每天份量（本地日期 00:00 補滿），所有寵物共用 */
-      portionsPerDay: 6,
+      /** 每隻寵物每天的份量：全部寵物共用一池，今天的上限 = 寵物數 × 這個值（本地日期 00:00 補滿；當天領養新寵物，上限立刻多這麼多） */
+      portionsPerPet: 2,
       /** 每份回復的飽食度（手動餵食是 +20，要花 1 金幣） */
       satiety: 15,
       /** 同時最多幾隻在吃 */
@@ -102,7 +102,7 @@ export const BALANCE = {
    * 睡覺時的心情回復（每小時，只在線上即時結算，離線期間不算）：
    * 一般睡覺回復 base（抵銷心情下降），睡在狗窩／貓跳台旁邊乘以 buildingMul。
    */
-  sleepMood: { base: 4, buildingMul: 2.5 },
+  sleepMood: { base: 1.7, buildingMul: 2.5 },
 
   weatherBlockHours: 4,
   /** 天氣權重：晴、多雲、雨、雪 */

@@ -37,7 +37,7 @@ const DEFS: Partial<Record<BuildingId, BuildingDef>> = {
   bowls: {
     id: 'bowls',
     name: '食盆水盆',
-    blurb: `肚子餓的寵物會自己來吃，每天 ${BALANCE.buildings.bowls.portionsPerDay} 份，隔天補滿`,
+    blurb: `肚子餓的寵物會自己來吃，每隻寵物每天 ${BALANCE.buildings.bowls.portionsPerPet} 份，隔天補滿`,
     price: BALANCE.buildings.price.bowls,
     sprite: 'bowls',
   },
