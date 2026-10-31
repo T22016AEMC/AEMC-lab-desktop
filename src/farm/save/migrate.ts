@@ -1,6 +1,8 @@
+import { BALANCE } from '../config/balance'
 import { isBuildingId } from '../config/buildings'
+import { isCollectionKey } from '../config/items'
 import { SPECIES, isSpeciesId, isVariantId } from '../config/species'
-import { CURRENT_SCHEMA_VERSION, type BowlState, type EarningState, type Pet, type SaveData } from './types'
+import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type Find, type Pet, type SaveData, type SkinState } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
@@ -43,6 +45,7 @@ function cleanEarning(raw: unknown): EarningState {
     programCoins: Math.floor(num(r.programCoins, 0, 0)),
     gameCoins: Math.floor(num(r.gameCoins, 0, 0)),
     lastAward,
+    digCoins: Math.floor(num(r.digCoins, 0, 0, BALANCE.dig.dailyCoinMax)),
   }
 }
 
@@ -65,6 +68,58 @@ export function legacyRefundOf(raw: unknown): number {
   let sum = 0
   for (const [id, coins] of Object.entries(REMOVED_BUILDING_REFUNDS)) if (owned.includes(id)) sum += coins
   return sum
+}
+
+/** 寶物數量：只留合法的編號與正整數（上限 99999，避免壞檔撐爆畫面） */
+function cleanCollection(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isCollectionKey(k) || typeof v !== 'number' || !Number.isFinite(v)) continue
+    const n = Math.min(99999, Math.floor(v))
+    if (n >= 1) out[k] = n
+  }
+  return out
+}
+
+function cleanFinds(raw: unknown): Find[] {
+  if (!Array.isArray(raw)) return []
+  const out: Find[] = []
+  const ids = new Set<string>()
+  for (const f of raw) {
+    if (!f || typeof f !== 'object') continue
+    const r = f as Record<string, unknown>
+    if (typeof r.id !== 'string' || !r.id || ids.has(r.id)) continue
+    if ((r.kind !== 'mound' && r.kind !== 'bundle') || (r.by !== 'dog' && r.by !== 'cat')) continue
+    if (typeof r.at !== 'number' || !Number.isFinite(r.at)) continue
+    ids.add(r.id)
+    out.push({ id: r.id, kind: r.kind, by: r.by, fx: num(r.fx, 0.5, 0, 1), fy: num(r.fy, 0.5, 0, 1), at: r.at })
+    if (out.length >= BALANCE.dig.holdMax) break
+  }
+  return out
+}
+
+function cleanEvents(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (k.length <= 40 && typeof v === 'number' && Number.isFinite(v)) out[k] = v
+  return out
+}
+
+function cleanSkins(raw: unknown): SkinState {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const owned = Array.isArray(r.owned) ? [...new Set(r.owned.filter((x): x is string => typeof x === 'string' && x.length <= 40))] : []
+  const equipped: Record<string, string> = {}
+  if (r.equipped && typeof r.equipped === 'object') for (const [k, v] of Object.entries(r.equipped as Record<string, unknown>)) if (typeof v === 'string' && owned.includes(v)) equipped[k] = v
+  return { owned, equipped }
+}
+
+/** 儲存的資料是不是比這份程式更新（schemaVersion 較大，或同一個 schema 內 dataRev 較大）：是的話不讀、不覆寫 */
+export function isNewerData(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false
+  const r = raw as Record<string, unknown>
+  if (typeof r.schemaVersion === 'number' && r.schemaVersion > CURRENT_SCHEMA_VERSION) return true
+  return typeof r.dataRev === 'number' && r.dataRev > DATA_REV
 }
 
 function cleanOwned(raw: unknown): string[] {
@@ -103,6 +158,11 @@ export function parseSave(raw: unknown): SaveData | null {
     ownedBuildings: cleanOwned(r.ownedBuildings),
     earning: cleanEarning(r.earning),
     bowl: cleanBowl(r.bowl),
+    collection: cleanCollection(r.collection),
+    finds: cleanFinds(r.finds),
+    events: cleanEvents(r.events),
+    skins: cleanSkins(r.skins),
+    dataRev: DATA_REV,
   }
   if (r.resetNotice === true) save.resetNotice = true
   return save

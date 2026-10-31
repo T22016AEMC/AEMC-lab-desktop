@@ -8,7 +8,7 @@ import { useFarmStore } from '../store/farmStore'
 /**
  * 建築模式的畫面層：草地與走道上顯示本版可購買的虛線空位（名稱＋價格），已購買的不再顯示；
  * 點空位彈出小卡片（名稱、價格、一句功能說明、購買）。視窗放不下的建築不顯示空位，改顯示提示。
- * 其他空位（野餐墊、沙坑）留給之後的版本，這裡不會出現。
+ * 其他空位（野餐墊）留給之後的版本，這裡不會出現。
  * layoutVersion：視窗大小改變（版面重算）時遞增，讓虛線框跟著重新定位。
  */
 export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; layoutVersion: number }) {

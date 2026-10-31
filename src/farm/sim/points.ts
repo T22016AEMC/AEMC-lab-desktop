@@ -1,5 +1,5 @@
 import { BALANCE } from '../config/balance'
-import { CURRENT_SCHEMA_VERSION, type SaveData } from '../save/types'
+import { CURRENT_SCHEMA_VERSION, DATA_REV, type SaveData } from '../save/types'
 
 /** 本機日期 YYYY-MM-DD */
 export function todayKey(ms: number): string {
@@ -47,7 +47,12 @@ export function newSave(now: number, today: string): SaveData {
     nextPetId: 1,
     createdAt: now,
     ownedBuildings: [],
-    earning: { date: today, programCoins: 0, gameCoins: 0, lastAward: {} },
+    earning: { date: today, programCoins: 0, gameCoins: 0, lastAward: {}, digCoins: 0 },
     bowl: { date: today, used: 0 },
+    collection: {},
+    finds: [],
+    events: {},
+    skins: { owned: [], equipped: {} },
+    dataRev: DATA_REV,
   }
 }

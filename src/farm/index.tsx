@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { getApp } from '../config/registry'
+import { itemDef } from './config/items'
 import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
@@ -7,15 +8,19 @@ import { gameNow, overrides, worldHour, worldWeather } from './overrides'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
+import * as findsMod from './pixel/finds'
 import { bowlLeft } from './sim/buildings'
+import { findsBlock } from './sim/dig'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { EventDialog } from './ui/EventDialog'
 import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
+import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
 import { ballCursor } from './ui/ballCursor'
-import type { PlayToyId } from './sim/commands'
+import { toyOf, type PlayToyId } from './sim/commands'
 
 // 測試模式面板：只在開發環境載入。正式 build 時 import.meta.env.DEV 會被替換成 false，
 // 這個分支連同動態 import 的內容都會被整段移除。
@@ -50,10 +55,11 @@ export function Farm() {
   const hasSave = useFarmStore((s) => s.save !== null)
   const petCount = useFarmStore((s) => s.save?.pets.length ?? 0)
   /** 還沒有任何寵物（全新玩家，或一次性重置之後）：走第一次領養流程（第一隻免費）；重置提示或失敗說明顯示期間先不顯示 */
-  const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed)
+  const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed && !s.newerData)
   const adoptOpen = useUIStore((s) => s.adoptOpen)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const aboutOpen = useUIStore((s) => s.aboutOpen)
+  const collectionOpen = useUIStore((s) => s.collectionOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
   /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
@@ -83,7 +89,8 @@ export function Farm() {
       wake: (id) => useFarmStore.getState().wakeForDrag(id),
       notify: (m) => useUIStore.getState().showToast(m),
       eatAtBowl: (id) => useFarmStore.getState().eatAtBowl(id),
-      settlePlay: (id, n) => useFarmStore.getState().settlePlay(id, n),
+      settlePlay: (id, n, toy) => useFarmStore.getState().settlePlay(id, n, toy),
+      addFind: (id, kind, fx, fy) => useFarmStore.getState().addFind(id, kind, fx, fy),
     }
   }, [engine])
 
@@ -93,8 +100,10 @@ export function Farm() {
       const w = window as unknown as Record<string, unknown>
       w.__farm = engine
       w.__farmStore = useFarmStore
+      w.__ui = useUIStore
       w.__overrides = overrides
       w.__layout = layoutMod
+      w.__finds = findsMod
     }
   }, [engine])
 
@@ -138,6 +147,8 @@ export function Farm() {
     let last = performance.now()
     let lastPets: unknown = null
     let lastOwned: unknown = null
+    let lastFinds: unknown = null
+    let lastSkins: unknown = null
     let lastDraw = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
@@ -162,6 +173,16 @@ export function Farm() {
         engine.setOwned(st.save?.ownedBuildings ?? [])
       }
       engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
+      if (st.save?.finds !== lastFinds) {
+        lastFinds = st.save?.finds
+        engine.setFinds(st.save?.finds ?? [])
+      }
+      // 外觀（金色屋頂、黃金鐘樓）：解鎖才載入圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
+      if (st.save?.skins !== lastSkins) {
+        lastSkins = st.save?.skins
+        engine.skins = st.save?.skins.equipped ?? {}
+        if (Object.keys(engine.skins).length > 0) assets.loadGroup('skins').catch(() => {})
+      }
       if (st.save?.pets !== lastPets) {
         lastPets = st.save?.pets
         engine.sync(st.save?.pets ?? [])
@@ -181,7 +202,7 @@ export function Farm() {
       const hudEl = hudRef.current
       if (hudEl) {
         if (hud) {
-          const text = `丟球 ${hud.left} 秒・撿回 ${hud.catches}`
+          const text = hud.toy === 'ball' ? `丟球 ${hud.left} 秒・撿回 ${hud.catches}` : hud.toy === 'dig' ? `挖寶 ${hud.left} 秒・挖到 ${hud.catches} 個` : `尋寶 ${hud.left} 秒・帶回 ${hud.catches} 個`
           if (hudEl.textContent !== text) hudEl.textContent = text
           hudEl.style.visibility = 'visible'
         } else hudEl.style.visibility = 'hidden'
@@ -251,8 +272,8 @@ export function Farm() {
   }, [petCount, selected])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
-    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || importState) engine.endPlay('window')
-  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, importState])
+    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || importState) engine.endPlay('window')
+  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, importState])
   useEffect(() => {
     if (covered) engine.endPlay('window')
   }, [engine, covered])
@@ -319,7 +340,8 @@ export function Farm() {
       }
     }
     const id = engine.pointerMove(p.x, p.y)
-    const over = id || engine.hitTest(p.x, p.y)?.kind === 'gift'
+    const hk = engine.hitTest(p.x, p.y)?.kind
+    const over = id || hk === 'gift' || hk === 'find'
     // 玩耍中：除了別的寵物與禮物，整個畫布都是球游標
     e.currentTarget.style.cursor = over ? 'pointer' : playingRef.current ? ballCursor(engine.layout) : 'default'
   }
@@ -329,6 +351,7 @@ export function Farm() {
     const p = local(e)
     const hit = engine.hitTest(p.x, p.y)
     if (hit?.kind === 'gift') useFarmStore.getState().collectGift(hit.id)
+    else if (hit?.kind === 'find') revealAt(hit.id)
     else if (hit?.kind === 'pet') {
       // 走去水池的途中被點到或拖曳：取消洗澡
       engine.cancelBathWalk(hit.id)
@@ -341,9 +364,27 @@ export function Farm() {
       }
     } else {
       setSelected(null) // 點空白處關閉
-      // 玩耍中：點哪裡就把球丟到哪裡（不合法的位置不丟，冒一個叉叉並提示）
-      if (engine.isPlaying()) throwBall(p.x, p.y)
+      // 玩耍中（丟球）：點哪裡就把球丟到哪裡（不合法的位置不丟，冒一個叉叉並提示）；挖寶、尋寶是寵物自己去，點畫面沒有作用
+      if (engine.isPlayingBall()) throwBall(p.x, p.y)
     }
+  }
+
+  /** 點開一個寶物：抽選與發獎在存檔層，這裡只負責動畫與浮字 */
+  const revealAt = (id: string): void => {
+    const pt = engine.findPointOf(id)
+    const out = useFarmStore.getState().revealFind(id)
+    if (!out || !pt) return
+    const r = out.result
+    const label = r.kind === 'coin' ? `+${r.value} 金幣` : r.kind === 'item' ? (itemDef(r.id)?.name ?? r.id) : '什麼也沒有'
+    engine.showReveal(pt.x, pt.y, r, label)
+  }
+
+  /** 挖寶、尋寶選單上的玩具：寶物已滿就不能開始（提示「先點開土堆」，不扣金幣） */
+  const toyBlock = (toy: PlayToyId): string | null => {
+    const save = useFarmStore.getState().save
+    const pet = save?.pets.find((q) => q.id === selected)
+    if (!save || !pet) return null
+    return toyOf(pet.species, toy)?.needsRoom ? findsBlock(save, engine.findCapNow()) : null
   }
 
   const throwBall = (cssX: number, cssY: number): void => {
@@ -387,7 +428,7 @@ export function Farm() {
       ui.showToast(why)
       return
     }
-    const err = useFarmStore.getState().startPlay(id, toy, why)
+    const err = useFarmStore.getState().startPlay(id, toy, why, engine.findCapNow())
     if (err) {
       ui.showToast(err)
       return
@@ -398,7 +439,7 @@ export function Farm() {
       return
     }
     setSelected(null)
-    ui.showToast(`點草地或走道把球丟出去・${BALANCE.play.seconds} 秒・Esc 或右鍵結束`, 3200)
+    ui.showToast(toy === 'ball' ? `點草地或走道把球丟出去・${BALANCE.play.seconds} 秒・Esc 或右鍵結束` : toy === 'dig' ? `狗狗開始挖寶・${BALANCE.dig.seconds} 秒・點土堆揭曉・Esc 或右鍵結束` : `貓咪出門尋寶・${BALANCE.dig.seconds} 秒・點布包揭曉・Esc 或右鍵結束`, 3200)
   }
 
   const openHall = (): void => {
@@ -560,11 +601,13 @@ export function Farm() {
 
       {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
-      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} />}
+      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} />}
 
       {status === 'ready' && assetsReady && needFirst && <AdoptDialog first />}
       {status === 'ready' && assetsReady && <ResetNotice />}
       {status === 'ready' && assetsReady && <LegacyRefundNotice />}
+      {status === 'ready' && assetsReady && <NewerDataNotice />}
+      {status === 'ready' && assetsReady && <EventDialog />}
       {hasSave && !needFirst && adoptOpen && <AdoptDialog />}
 
       {DevPanel && (

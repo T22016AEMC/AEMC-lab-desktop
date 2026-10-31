@@ -1,12 +1,12 @@
 import { SPECIES, variantOf, type SpeciesId } from '../config/species'
-import type { Pet } from '../save/types'
+import type { Find, Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Weather } from '../sim/worldTime'
 import { releaseUse, updateBuildingUse, type BuildingUse } from './buildingUse'
 import type { BuildingSlot, Layout } from './layout'
 import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
 import { findPath, lineClear, type FixedPet, type Pt } from './nav'
-import { updatePlay, type PlayState } from './play'
+import { updatePlay, type PlayState, type PlayToyId } from './play'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -15,7 +15,7 @@ import { updatePlay, type PlayState } from './play'
  * 不做旋轉、傾斜、縮放；往左走用水平翻轉。
  */
 
-export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom' | 'bark'
+export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom' | 'bark' | 'dig' | 'crouch' | 'pounce'
 
 export interface Anim {
   /** 幀名稱（manifest 裡 dog_<品種>_<名稱> 的名稱） */
@@ -35,6 +35,10 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     happy: { frames: ['happy', 'stand'], fps: 3 },
     groom: { frames: ['sit_a'], fps: 1 },
     bark: { frames: ['bark'], fps: 1 },
+    // 挖寶用 dig_a／dig_b（頭低下刨土、有泥土）；crouch、pounce 是貓尋寶用的，狗不會用到
+    dig: { frames: ['dig_a', 'dig_b'], fps: 6 },
+    crouch: { frames: ['stand'], fps: 1 },
+    pounce: { frames: ['jump'], fps: 1 },
   },
   cat: {
     idle: { frames: ['stand'], fps: 1 },
@@ -45,6 +49,10 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     happy: { frames: ['sit_a', 'stand'], fps: 2 },
     groom: { frames: ['groom'], fps: 1 },
     bark: { frames: ['sit_a'], fps: 1 },
+    // 尋寶：貓沒有嗅聞幀，用 crouch（壓低身體）→ pounce（撲）；dig 不會用到
+    dig: { frames: ['crouch'], fps: 1 },
+    crouch: { frames: ['crouch'], fps: 1 },
+    pounce: { frames: ['pounce'], fps: 1 },
   },
 }
 
@@ -134,7 +142,7 @@ export interface BehaviorEnv {
   /** 其他寵物的位置（挑目標時避開） */
   others: Actor[]
   /** 效果粒子（愛心、泡泡） */
-  emit: (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop', x: number, y: number) => void
+  emit: (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop' | 'dirt', x: number, y: number) => void
   /** 水花、漣漪（引擎負責演出） */
   fx: (kind: 'splash' | 'ripple', x: number, y: number) => void
   /** 走到水池前之後申請洗澡（扣金幣）；回傳 null 表示成功，否則是失敗原因 */
@@ -147,8 +155,13 @@ export interface BehaviorEnv {
   bowlLeft: number
   /** 在食盆吃一份（用掉份量、回復飽食度）；回傳 null 表示成功，否則是失敗原因 */
   eatAtBowl: (a: Actor) => string | null
-  /** 玩耍結算：撿回次數（引擎接到存檔：心情、體重、飽食度） */
-  settlePlay: (petId: string, catches: number) => void
+  /** 玩耍結算：撿回次數（丟球）或留下的寶物數（挖寶、尋寶）（引擎接到存檔：心情、體重、飽食度） */
+  settlePlay: (petId: string, catches: number, toy: PlayToyId) => void
+  /** 挖寶、尋寶：目前還沒揭曉的寶物（避開、判斷是否已滿）；這個視窗放得下幾個 */
+  finds: readonly Find[]
+  findCap: number
+  /** 留下一個寶物（座標是場景座標）；滿了回傳 false */
+  addFind: (a: Actor, kind: 'mound' | 'bundle', x: number, y: number) => boolean
   /** 睡著或坐在座位上、不會動的寵物（尋路時繞開） */
   fixed: readonly FixedPet[]
 }

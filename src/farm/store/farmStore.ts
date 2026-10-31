@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 import { BALANCE } from '../config/balance'
 import { gameNow, worldHour } from '../overrides'
-import { LocalStorageAdapter } from '../save/storage'
-import type { SaveData, SaveStorage } from '../save/types'
+import { LocalStorageAdapter, setNewerDataHandler } from '../save/storage'
+import type { Find, SaveData, SaveStorage } from '../save/types'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
+import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { useUIStore } from '../../store/uiStore'
 
@@ -31,6 +32,10 @@ interface FarmState {
   effects: FarmEffect[]
   /** 目前頭上有禮物、等著被點擊的寵物 id（不存檔） */
   gifts: string[]
+  /** 等著顯示的事件對話框（不存檔；事件旗標已經寫進存檔，所以重新整理後不會再出現） */
+  pendingEvents: EventNotice[]
+  /** 儲存的資料來自比這份程式更新的版本：不讀、不覆寫，畫面提示重新整理 */
+  newerData: boolean
 
   init: () => Promise<void>
   /** init 的實作（init 保證同一時間只跑一次） */
@@ -39,9 +44,17 @@ interface FarmState {
   adoptPet: (req: Omit<AdoptRequest, 'free'>) => string | null
   runAction: (action: ActionId, petId: string) => string | null
   /** 玩耍開始（選了玩具）：扣金幣。playBlock = 引擎說現在不能玩的原因。回傳錯誤訊息或 null */
-  startPlay: (petId: string, toy: PlayToyId, playBlock?: string | null) => string | null
-  /** 玩耍結算（撿回次數）：心情、體重、飽食度；0 次不動 */
-  settlePlay: (petId: string, catches: number) => void
+  startPlay: (petId: string, toy: PlayToyId, playBlock?: string | null, findCap?: number) => string | null
+  /** 玩耍結算（撿回次數、留下的寶物數）：心情、體重、飽食度；0 次不動 */
+  settlePlay: (petId: string, catches: number, toy: PlayToyId) => void
+  /** 挖寶、尋寶：留下一個寶物（座標是草地範圍內的相對位置）；已滿回傳 false */
+  addFind: (petId: string, kind: Find['kind'], fx: number, fy: number) => boolean
+  /** 點開一個寶物：抽選、發金幣、記收藏、檢查事件，立刻寫入存檔。回傳結果（找不到 = null） */
+  revealFind: (id: string) => RevealOutcome | null
+  /** 到期（10 分鐘）的寶物自動揭曉 */
+  revealDueNow: () => void
+  /** 事件對話框按「確定」 */
+  dismissEvent: () => void
   /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
   wakeForDrag: (petId: string) => void
   /** 週期性結算：數值下降、跨日的每日獎勵、睡覺的心情回復（atBuilding = 睡在建築旁的寵物 id） */
@@ -66,6 +79,20 @@ interface FarmState {
   resetAll: () => Promise<void>
 }
 
+/** 自動揭曉（離線或沒點的寶物到期）的一句話摘要：幾個、共得到幾金幣、幾件新寶物 */
+function announceAuto(revealed: RevealOutcome[], save: SaveData, now: number): void {
+  let coins = 0
+  let fresh = 0
+  for (const r of revealed) {
+    if (r.result.kind === 'coin') coins += r.result.value
+    else if (r.result.kind === 'item' && r.result.isNew) fresh++
+  }
+  const parts = [`${revealed.length} 個寶物到期，自動揭曉了`]
+  if (coins > 0) parts.push(`+${coins} 金幣（今日 ${digCoinsToday(save, now).coins}/${digCoinsToday(save, now).max}）`)
+  if (fresh > 0) parts.push(`${fresh} 件新寶物`)
+  useUIStore.getState().showToast(parts.join('，'), 4200, 'reveal')
+}
+
 const ctxNow = (): Ctx => {
   const nowMs = gameNow()
   return { nowMs, hour: worldHour(nowMs) }
@@ -81,6 +108,8 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   legacyRefund: 0,
   effects: [],
   gifts: [],
+  pendingEvents: [],
+  newerData: false,
 
   init: () => {
     // 開發模式的 StrictMode 會呼叫兩次：同一時間只跑一次（否則兩次載入、兩次重置檢查會各自更新存檔，畫面上的提醒計時被打斷）
@@ -93,7 +122,12 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   initImpl: async () => {
     const now = gameNow()
     // v3.4.0 一次性重置：schema 4 以下的舊存檔在這裡換成全新存檔（已備份）；寫入失敗就不動舊存檔、這次不能用養殖場，下次載入重試
-    const { save: loaded, reset, refund } = await storage.loadOrReset(() => ({ ...newSave(now, todayKey(now)), resetNotice: true as const }))
+    const { save: loaded, reset, refund, newer } = await storage.loadOrReset(() => ({ ...newSave(now, todayKey(now)), resetNotice: true as const }))
+    if (newer) {
+      suspendSaves()
+      set({ status: 'ready', save: null, newerData: true })
+      return
+    }
     if (reset === 'failed') {
       suspendSaves()
       set({ status: 'ready', save: null, resetFailed: true })
@@ -107,8 +141,12 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     let save = advanceSave(loaded, now, true)
     const daily = claimDaily(save, todayKey(now))
     save = daily.save
-    set({ status: 'ready', save })
-    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
+    // 離線期間到期的寶物一次揭曉（揭曉後從清單拿掉，所以同一天載入多次不會重複結算）
+    const due = revealDue(save, now, Math.random)
+    save = due.save
+    set({ status: 'ready', save, pendingEvents: due.notices })
+    if (due.revealed.length) announceAuto(due.revealed, save, now)
+    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (refund) set({ legacyRefund: refund })
   },
 
@@ -133,21 +171,58 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     return null
   },
 
-  startPlay: (petId, toy, playBlock) => {
+  startPlay: (petId, toy, playBlock, findCap) => {
     const save = get().save
     if (!save) return '尚未開始'
-    const r = startPlay(save, { ...ctxNow(), playBlock }, petId, toy)
+    const r = startPlay(save, { ...ctxNow(), playBlock, findCap }, petId, toy)
     if (r.error) return r.error
     set({ save: r.save })
     return null
   },
 
-  settlePlay: (petId, catches) => {
+  settlePlay: (petId, catches, toy) => {
     const save = get().save
     if (!save) return
-    const r = settlePlay(save, ctxNow(), petId, catches)
+    const r = settlePlay(save, ctxNow(), petId, catches, toy)
     if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
   },
+
+  addFind: (petId, kind, fx, fy) => {
+    const save = get().save
+    const pet = save?.pets.find((p) => p.id === petId)
+    if (!save || !pet) return false
+    const now = gameNow()
+    const find: Find = { id: makeFindId(now, Math.random), kind, by: pet.species, fx, fy, at: now }
+    const next = addFind(save, find)
+    if (!next) return false
+    set({ save: next })
+    return true
+  },
+
+  revealFind: (id) => {
+    const save = get().save
+    if (!save) return null
+    const now = gameNow()
+    const out = revealFind(save, id, now, Math.random)
+    if (!out) return null
+    set((s) => ({ save: out.save, pendingEvents: [...s.pendingEvents, ...out.notices] }))
+    useUIStore.getState().showToast(resultText(out.result, out.result.kind === 'coin' ? digCoinsToday(out.save, now) : undefined), undefined, 'reveal')
+    flushSave() // 揭曉後立刻寫入（不等節流）
+    return out
+  },
+
+  revealDueNow: () => {
+    const save = get().save
+    if (!save || save.finds.length === 0) return
+    const now = gameNow()
+    const due = revealDue(save, now, Math.random)
+    if (due.revealed.length === 0) return
+    set((s) => ({ save: due.save, pendingEvents: [...s.pendingEvents, ...due.notices] }))
+    announceAuto(due.revealed, due.save, now)
+    flushSave()
+  },
+
+  dismissEvent: () => set((s) => ({ pendingEvents: s.pendingEvents.slice(1) })),
 
   wakeForDrag: (petId) => {
     const save = get().save
@@ -166,8 +241,10 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
     const daily = claimDaily(next, todayKey(now))
     next = daily.save
-    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
+    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (next !== save) set({ save: next })
+    // 到期（10 分鐘）的寶物自動揭曉
+    get().revealDueNow()
   },
 
   dismissLegacyRefund: () => set({ legacyRefund: 0 }),
@@ -297,6 +374,13 @@ useFarmStore.subscribe((state, prev) => {
     return
   }
   if (saveTimer === undefined) saveTimer = window.setTimeout(flush, BALANCE.saveDebounceMs)
+})
+// 儲存的資料來自更新的版本（例如另一個分頁已經是新版）：不覆寫，停止自動存檔並提示重新整理
+setNewerDataHandler(() => {
+  if (useFarmStore.getState().newerData) return
+  suspendSaves()
+  useFarmStore.setState({ newerData: true })
+  useUIStore.getState().showToast('存檔來自更新的版本，這個分頁不會覆寫它，請重新整理網頁', 10000, 'update')
 })
 window.addEventListener('beforeunload', flush)
 document.addEventListener('visibilitychange', () => document.hidden && flush())

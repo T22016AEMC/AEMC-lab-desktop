@@ -1,5 +1,8 @@
-import type { Pet } from '../save/types'
+import type { Find, Pet } from '../save/types'
 import type { FarmEffect } from '../sim/commands'
+import { skinDef } from '../config/skins'
+import type { RevealResult } from '../sim/dig'
+import { BALANCE } from '../config/balance'
 import { buildingDef } from '../config/buildings'
 import { variantOf } from '../config/species'
 import { isSleeping } from '../sim/rules'
@@ -18,6 +21,8 @@ import {
   updateActor, usesPond, type Actor, type BehaviorEnv,
 } from './pets'
 import { ballPos, beginPlay, checkThrow, endPlay, isCarrying, mouthOffset, throwBall, type PlayBall, type PlayEnd, type PlayEnv, type PlayToyId, type ThrowCheck } from './play'
+import { isCarryingBundle } from './finder'
+import { findCap, findPositions, worldToFind } from './finds'
 import {
   drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
   makeDrops, updateDrops, type Drop,
@@ -31,7 +36,7 @@ export interface FrameInfo {
   gifts: string[]
 }
 
-export type Hit = { kind: 'pet' | 'gift'; id: string } | { kind: 'door' }
+export type Hit = { kind: 'pet' | 'gift' | 'find'; id: string } | { kind: 'door' }
 
 /** 引擎對外的連接點：扣點洗澡、叫醒、提示訊息（由畫面層接到 store 與 toast） */
 export interface EngineHooks {
@@ -42,8 +47,10 @@ export interface EngineHooks {
   notify: (message: string) => void
   /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）；回傳 null 成功，否則失敗原因 */
   eatAtBowl: (petId: string) => string | null
-  /** 玩耍結算（撿回次數）：心情、體重、飽食度 */
-  settlePlay: (petId: string, catches: number) => void
+  /** 玩耍結算（撿回次數、留下的寶物數）：心情、體重、飽食度 */
+  settlePlay: (petId: string, catches: number, toy: PlayToyId) => void
+  /** 挖寶、尋寶：留下一個寶物（座標是草地範圍內的相對位置）；滿了回傳 false */
+  addFind: (petId: string, kind: 'mound' | 'bundle', fx: number, fy: number) => boolean
 }
 
 /** 放開拖曳的結果 */
@@ -102,7 +109,13 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
-  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {} }
+  hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {}, addFind: () => false }
+  /** 還沒揭曉的寶物（存檔 finds）、各部位穿的外觀（'gold' = 金色版；不在清單或圖集還沒載入就用預設圖） */
+  private finds: readonly Find[] = []
+  private findPos: { L: Layout; owned: ReadonlySet<string>; list: readonly Find[]; pts: Map<string, { x: number; y: number }> } | null = null
+  skins: Readonly<Record<string, string>> = {}
+  /** 揭曉動畫：寶物位置、結果、已經過的時間 */
+  private reveals: { x: number; y: number; result: RevealResult; t: number }[] = []
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
   private ownedIds: ReadonlySet<string> = new Set()
   bowlLeft = 0
@@ -128,6 +141,45 @@ export class PixelEngine {
     for (const a of this.actors.values()) clampActor(a, this.layout)
     // 版面真的變了（球與 home 的位置可能失效）：玩耍提前結算
     if (old.backW !== this.layout.backW || old.backH !== this.layout.backH || old.dpr !== this.layout.dpr) this.endPlay('resize')
+  }
+
+  /** 設定還沒揭曉的寶物（存檔 finds 變動時呼叫） */
+  setFinds(list: readonly Find[]): void {
+    this.finds = list
+  }
+
+  /** 這個視窗放得下幾個寶物（低視窗會比 holdMax 小） */
+  findCapNow(): number {
+    return findCap(this.layout)
+  }
+
+  /** 寶物在場景上的位置（id → 座標）；同一個 Layout、同一份 owned、同一份清單會快取 */
+  findPoints(): Map<string, { x: number; y: number }> {
+    const c = this.findPos
+    if (c && c.L === this.layout && c.owned === this.ownedIds && c.list === this.finds) return c.pts
+    const pts = findPositions(this.layout, this.finds)
+    this.findPos = { L: this.layout, owned: this.ownedIds, list: this.finds, pts }
+    return pts
+  }
+
+  /** 玩耍中的寵物留下一個寶物：場景座標 → 相對位置，交給存檔（滿了回傳 false） */
+  private addFind = (a: Actor, kind: 'mound' | 'bundle', x: number, y: number): boolean => {
+    const r = worldToFind(this.layout, x, y)
+    return this.hooks.addFind(a.id, kind, r.fx, r.fy)
+  }
+
+  /** 揭曉動畫：在 (x, y) 冒出結果的圖示、泥土與星星（label = 浮字） */
+  showReveal(x: number, y: number, result: RevealResult, label: string): void {
+    this.reveals.push({ x, y, result, t: 0 })
+    for (let i = 0; i < 8; i++) this.emit('dirt', x + (this.rand() - 0.5) * 12, y - 2)
+    const good = result.kind !== 'empty'
+    if (good) for (let i = 0; i < 3; i++) this.particles.push({ key: 'fx_sparkle', x: x + (this.rand() - 0.5) * 22, y: y - 12 - this.rand() * 8, vx: (this.rand() - 0.5) * 14, vy: -(8 + this.rand() * 10), life: 0, max: 0.9 })
+    this.floats.push({ x, y: y - 34, text: label, tone: good ? 'good' : 'bad', t: 0 })
+  }
+
+  /** 寶物的點擊判定半徑（邏輯像素）：至少 24 個 CSS 像素，手指也點得到 */
+  private findReach(): number {
+    return Math.max(12, (24 * this.layout.dpr) / this.layout.S)
   }
 
   /** 讓場景上的寵物與存檔裡的寵物一致（新增、移除、資料更新） */
@@ -185,7 +237,11 @@ export class PixelEngine {
     }
   }
 
-  private emit = (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop', x: number, y: number): void => {
+  private emit = (kind: 'heart' | 'bubble' | 'note' | 'wbubble' | 'drop' | 'dirt', x: number, y: number): void => {
+    if (kind === 'dirt') {
+      this.particles.push({ key: 'dirt', x, y, vx: (this.rand() - 0.2) * 30, vy: -(16 + this.rand() * 18), life: 0, max: 0.55, g: 150 })
+      return
+    }
     if (kind === 'wbubble') {
       this.particles.push({ key: this.rand() < 0.6 ? 'water_bubble_s' : 'water_bubble_l', x, y, vx: (this.rand() - 0.5) * 6, vy: -(9 + this.rand() * 7), life: 0, max: 1.3 + this.rand() * 0.5 })
       return
@@ -228,7 +284,8 @@ export class PixelEngine {
     const env: BehaviorEnv = {
       layout: this.layout, nowMs: f.nowMs, hour: f.hour, rand: this.rand, selectedId: this.selectedId, others: list, emit: this.emit,
       fx: this.fx, requestBath: this.requestBath, notify: (m) => this.hooks.notify(m),
-      weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id), settlePlay: (id, n) => this.hooks.settlePlay(id, n),
+      weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id), settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
+      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
       fixed: list.filter((a) => !a.drag && !a.fly && !a.bath && (a.action === 'sleep' || a.bld?.phase === 'at')).map((a) => ({ id: a.id, x: a.x, y: a.y })),
     }
     for (const a of list) updateActor(a, dt, env)
@@ -246,6 +303,8 @@ export class PixelEngine {
     this.marks = this.marks.filter((m) => m.t < 0.45)
     for (const fl of this.floats) fl.t += dt
     this.floats = this.floats.filter((fl) => fl.t < 1.9)
+    for (const r of this.reveals) r.t += dt
+    this.reveals = this.reveals.filter((r) => r.t < BALANCE.dig.revealSeconds)
     // 天氣粒子
     this.drops = makeDrops(this.layout, f.weather, this.drops)
     updateDrops(this.drops, this.layout, f.weather, dt)
@@ -277,11 +336,10 @@ export class PixelEngine {
     // 物件與寵物依「腳底 y」排前後
     type Item = { y: number; draw: () => void }
     const items: Item[] = []
-    const houseKey = night ? 'house_night' : this.doorHover ? 'house_open' : 'house_closed'
     items.push({
       y: L.house.baseY,
       draw: () => {
-        const s = assets.get(houseKey)
+        const s = this.houseSprite(night)
         if (s) drawSprite(ctx, s, L.house.x0 + s.ax, L.house.baseY)
       },
     })
@@ -292,8 +350,7 @@ export class PixelEngine {
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
-      const key = o.key === 'clocktower' && this.towerHover ? 'clocktower_open' : o.key
-      const s = assets.get(key)
+      const s = o.key === 'clocktower' ? this.towerSprite() : assets.get(o.key)
       if (!s) continue
       items.push({
         y: o.y,
@@ -314,6 +371,22 @@ export class PixelEngine {
       // 跳進水池、爬出水池的過程要畫在水池前面；被拖著的畫在最上層
       const y = a.drag ? 1e6 : a.bath && (a.bath.phase === 'jump' || a.bath.phase === 'climb') ? Math.max(a.y, pond.y + 0.5) : this.seatView(a)?.sortY ?? a.y
       items.push({ y, draw: () => this.drawActor(ctx, a, f) })
+    }
+    // 寶物：狗的土堆、貓的布包（點開才揭曉；「可揭曉」的星星畫在上層）
+    const fpts = this.findPoints()
+    for (const fd of this.finds) {
+      const pt = fpts.get(fd.id)
+      if (!pt) continue
+      items.push({
+        y: pt.y,
+        draw: () => {
+          if (fd.kind === 'bundle') this.drawBundle(ctx, pt.x, pt.y)
+          else {
+            const m = assets.get('toy_dirt_mound_s')
+            if (m) drawSprite(ctx, m, pt.x, pt.y)
+          }
+        },
+      })
     }
     // 玩耍中的球（飛行、落地彈跳、放在腳邊）；叼著的球畫在狗的嘴邊（drawActor）
     for (const a of this.actors.values()) {
@@ -343,9 +416,15 @@ export class PixelEngine {
 
     // 粒子（愛心、泡泡、音符）
     for (const p of this.particles) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, (p.max - p.life) / 0.4))
+      if (p.key === 'dirt') {
+        // 泥土粒子（程式畫的 2×2 小方塊，不用素材）
+        ctx.fillStyle = p.life < p.max * 0.5 ? '#8a5a2b' : '#6b4524'
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2)
+        continue
+      }
       const s = assets.get(p.key)
       if (!s) continue
-      ctx.globalAlpha = Math.max(0, Math.min(1, (p.max - p.life) / 0.4))
       drawSprite(ctx, s, p.x, p.y)
     }
     ctx.globalAlpha = 1
@@ -356,7 +435,7 @@ export class PixelEngine {
     // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
     const dark = drawDarkness(ctx, L, f.hour, f.weather)
     // 鐘面完全由程式畫，疊在鐘樓上、蓋過原圖那個小鐘面；畫在暗色疊層之後，夜晚也清楚可讀
-    const tower = assets.get(this.towerHover ? 'clocktower_open' : 'clocktower')
+    const tower = this.towerSprite()
     const face = tower?.meta?.clock
     if (tower && face) drawClock(ctx, towerX(L) - tower.ax + face.cx, towerBase(L) - tower.ay + face.cy, f.hour)
     // 夜晚開門版：門縫裡的暖光不被暗色蓋掉（把門的範圍用原本的亮度再畫一次）
@@ -379,6 +458,17 @@ export class PixelEngine {
       if (lamp) drawGlow(ctx, lamp.x, lamp.y - 62, glow)
     }
 
+    // 「可揭曉」的星星（疊在每個寶物上方）與揭曉動畫（在暗色疊層之上，夜晚也清楚）
+    const sparkle = assets.get('fx_reveal')
+    if (sparkle) {
+      for (const fd of this.finds) {
+        const pt = fpts.get(fd.id)
+        if (!pt) continue
+        const base = fd.kind === 'bundle' ? 14 : (assets.get('toy_dirt_mound_s')?.h ?? 15)
+        drawSprite(ctx, sparkle, pt.x, pt.y - base - 1 + Math.round(Math.sin(this.time * 3 + pt.x) * 1.5))
+      }
+    }
+    for (const r of this.reveals) this.drawReveal(ctx, r)
     // 禮物與浮字（在暗色疊層之上，保持清楚）
     for (const id of f.gifts) {
       const a = this.actors.get(id)
@@ -513,6 +603,56 @@ export class PixelEngine {
     drawSprite(ctx, s, p.x, p.y - p.z)
   }
 
+  /** 住家的圖：穿了外觀（圖集 skins 已載入）就用外觀的，否則用預設圖 */
+  private houseSprite(night: boolean): Sprite | null {
+    const base = night ? 'house_night' : this.doorHover ? 'house_open' : 'house_closed'
+    const def = this.skins.house ? skinDef(this.skins.house) : undefined
+    const k = def ? (night ? def.frames.night : this.doorHover ? def.frames.open : def.frames.closed) : null
+    return (k ? assets.get(k) : null) ?? assets.get(base)
+  }
+
+  /** 鐘樓的圖（滑鼠在門上換開門版）：穿了外觀就用外觀的 */
+  private towerSprite(): Sprite | null {
+    const base = this.towerHover ? 'clocktower_open' : 'clocktower'
+    const def = this.skins.tower ? skinDef(this.skins.tower) : undefined
+    const k = def ? (this.towerHover ? def.frames.open : def.frames.closed) : null
+    return (k ? assets.get(k) : null) ?? assets.get(base)
+  }
+
+  /** 貓的布包（程式畫的通用外觀，12×13：看不出裡面是什麼）；腳底中心在 (x, y) */
+  private drawBundle(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const px = Math.round(x)
+    const py = Math.round(y)
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'
+    ctx.fillRect(px - 5, py - 1, 10, 2)
+    ctx.fillStyle = '#3b2a1c'
+    ctx.fillRect(px - 6, py - 10, 12, 10)
+    ctx.fillRect(px - 3, py - 13, 6, 3)
+    ctx.fillStyle = '#c9985a'
+    ctx.fillRect(px - 5, py - 9, 10, 8)
+    ctx.fillStyle = '#dfb682'
+    ctx.fillRect(px - 5, py - 9, 10, 2)
+    ctx.fillStyle = '#a97a40'
+    ctx.fillRect(px - 5, py - 3, 10, 2)
+    ctx.fillStyle = '#e8453c'
+    ctx.fillRect(px - 2, py - 12, 4, 2)
+  }
+
+  /** 揭曉動畫：結果的圖示從寶物位置升起、停一下、淡出（空 = 只有泥土與浮字） */
+  private drawReveal(ctx: CanvasRenderingContext2D, r: { x: number; y: number; result: RevealResult; t: number }): void {
+    const res = r.result
+    const key = res.kind === 'coin' ? 'coin_' + res.coin : res.kind === 'item' ? (res.shard ? `item_${res.id}_${res.shard}` : `item_${res.id}`) : null
+    const s = key ? assets.get(key) : null
+    if (!s) return
+    const k = r.t / BALANCE.dig.revealSeconds
+    const rise = Math.min(1, k / 0.45)
+    const e = 1 - (1 - rise) * (1 - rise)
+    ctx.globalAlpha = k > 0.7 ? Math.max(0, (1 - k) / 0.3) : 1
+    // 圖示大小固定（不縮放）：錢幣小、寶物 48，所以升得高一點
+    drawSprite(ctx, s, r.x, r.y - 6 - e * (s.h > 20 ? 30 : 18))
+    ctx.globalAlpha = 1
+  }
+
   private drawGift(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const px = Math.round(x) - 5
     const py = Math.round(y) - 5
@@ -554,6 +694,8 @@ export class PixelEngine {
       const ball = assets.get('toy_ball_s')
       if (m && ball) drawSprite(ctx, ball, px + a.shakeX + m.x, py - hop + m.y + Math.round(ball.h / 2))
     }
+    // 貓尋寶：叼著布包走回來（布包掛在嘴邊：往前的那一側、身體高度約 28%；往左走時水平翻轉）
+    if (a.play && isCarryingBundle(a.play)) this.drawBundle(ctx, px + a.shakeX + (s.w - s.ax - 5) * a.facing, py - hop - Math.round(s.h * 0.28))
     // 頭上的狀態圖示（餓＝驚嘆號、心情低＝汗滴、髒＝泡泡、睡覺＝ZZZ、開心＝愛心）
     const key = this.statusIcon(a, f)
     if (key) {
@@ -634,7 +776,21 @@ export class PixelEngine {
     }
     const a = this.petAt(x, y)
     if (a) return { kind: 'pet', id: a.id }
-    return null
+    // 寶物（土堆、布包，連同上方的「可揭曉」星星）：腳底往上約 2 倍半徑、往下半個半徑；y 大的在前面先判斷
+    const R = this.findReach()
+    const pts = this.findPoints()
+    let hit: { id: string; y: number } | null = null
+    for (const f of this.finds) {
+      const p = pts.get(f.id)
+      if (!p || Math.abs(p.x - x) > R || y < p.y - R * 2 || y > p.y + R * 0.5) continue
+      if (!hit || p.y > hit.y) hit = { id: f.id, y: p.y }
+    }
+    return hit ? { kind: 'find', id: hit.id } : null
+  }
+
+  /** 寶物在場景上的位置（揭曉動畫要從這裡冒出來）；找不到 = null */
+  findPointOf(id: string): { x: number; y: number } | null {
+    return this.findPoints().get(id) ?? null
   }
 
   /** 滑鼠移動：寵物稍微看向滑鼠並輕輕跳一下；回傳目前在哪隻寵物上 */
@@ -782,8 +938,9 @@ export class PixelEngine {
 
   private playEnv(): PlayEnv {
     return {
-      layout: this.layout, rand: this.rand, emit: this.emit, settlePlay: (id, n) => this.hooks.settlePlay(id, n),
+      layout: this.layout, rand: this.rand, emit: this.emit, settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
       others: [...this.actors.values()], nowMs: this.lastFrame.nowMs, hour: this.lastFrame.hour,
+      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
     }
   }
 
@@ -817,7 +974,7 @@ export class PixelEngine {
   /** 玩耍中點了畫布上的一個位置（CSS 座標）：合法就丟球，不合法在那裡冒一個叉叉。回傳判斷結果給畫面層決定要不要提示 */
   throwAtCss(cssX: number, cssY: number): ThrowCheck {
     const a = this.playingActor()
-    if (!a) return { ok: false, reason: 'busy' }
+    if (!a || a.play?.toy !== 'ball') return { ok: false, reason: 'busy' }
     const { x, y } = fromCss(this.layout, cssX, cssY)
     const r = checkThrow(this.layout, a, [...this.actors.values()], x, y)
     if (r.ok) throwBall(a, r.x, r.y, PLAY_OPS.setAction)
@@ -826,9 +983,14 @@ export class PixelEngine {
   }
 
   /** 玩耍的 HUD 資料：剩餘秒數（無條件進位）與撿回次數；沒在玩 = null */
-  playHud(): { left: number; catches: number } | null {
+  playHud(): { left: number; catches: number; toy: PlayToyId } | null {
     const p = this.playingActor()?.play
-    return p ? { left: Math.max(0, Math.ceil(p.left)), catches: p.catches } : null
+    return p ? { left: Math.max(0, Math.ceil(p.left)), catches: p.catches, toy: p.toy } : null
+  }
+
+  /** 正在玩的是丟球（點畫面才丟球）；挖寶、尋寶是寵物自己去，點畫面沒有作用 */
+  isPlayingBall(): boolean {
+    return this.playingActor()?.play?.toy === 'ball'
   }
 
   houseSize(): { w: number; h: number } {

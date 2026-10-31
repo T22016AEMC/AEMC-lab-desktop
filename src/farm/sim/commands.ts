@@ -3,6 +3,7 @@ import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import type { Pet, SaveData } from '../save/types'
 import { clamp100 } from './stats'
 import { adoptCheck, isSleeping } from './rules'
+import { findsBlock } from './dig'
 
 /** 寵物操作（點寵物彈出的氣泡選單）。之後的「玩耍」等動作只要在這裡新增名稱 */
 export type ActionId = 'feed' | 'pet' | 'bath' | 'walk' | 'groom' | 'wake' | 'play'
@@ -13,17 +14,30 @@ export interface Ctx {
   hour: number
   /** 場景現在不能玩耍的原因（別隻在玩、洗澡中、被拖曳中；由引擎算出）。沒有 = 可以 */
   playBlock?: string | null
+  /** 這個視窗放得下幾個寶物（pixel/finds.ts 的 findCap）；沒有 = BALANCE.dig.holdMax。挖寶、尋寶開始前檢查寶物是否已滿用 */
+  findCap?: number
 }
 
-/** 玩耍的玩具。只有列在這裡的物種才顯示「玩耍」（貓的玩具 v3.6.0 才加：在 PLAY_TOYS.cat 新增即可） */
-export type PlayToyId = 'ball'
+/** 玩耍的玩具（v3.6.0：狗 丟球、挖寶；貓 尋寶）。只有列在這裡的物種才顯示「玩耍」 */
+export type PlayToyId = 'ball' | 'dig' | 'hunt'
 export interface PlayToy {
   id: PlayToyId
   label: string
+  /** 玩多久（秒）、花多少金幣 */
+  seconds: number
+  cost: number
+  /** 開始前要先有空位放寶物（挖寶、尋寶）：寶物滿了不能開始 */
+  needsRoom?: boolean
 }
 export const PLAY_TOYS: Partial<Record<SpeciesId, readonly PlayToy[]>> = {
-  dog: [{ id: 'ball', label: '丟球' }],
+  dog: [
+    { id: 'ball', label: '丟球', seconds: BALANCE.play.seconds, cost: BALANCE.play.cost },
+    { id: 'dig', label: '挖寶', seconds: BALANCE.dig.seconds, cost: BALANCE.dig.cost, needsRoom: true },
+  ],
+  cat: [{ id: 'hunt', label: '尋寶', seconds: BALANCE.dig.seconds, cost: BALANCE.dig.cost, needsRoom: true }],
 }
+
+export const toyOf = (species: SpeciesId, toy: PlayToyId): PlayToy | undefined => PLAY_TOYS[species]?.find((t) => t.id === toy)
 
 /** 指令執行後給畫面層的效果：浮字、寵物動畫 */
 export type FarmEffect =
@@ -178,8 +192,13 @@ export function startPlay(save: SaveData, ctx: Ctx, petId: string, toy: PlayToyI
   const opt = petActions(save, pet, ctx).find((a) => a.id === 'play')
   if (!opt) return fail('現在不能這麼做')
   if (opt.disabledReason) return fail(opt.disabledReason)
+  const def = toyOf(pet.species, toy)!
+  // 寶物已滿：不能開始，也不扣金幣
+  const noRoom = def.needsRoom ? findsBlock(save, ctx.findCap) : null
+  if (noRoom) return fail(noRoom)
+  if (save.points < def.cost) return fail(`金幣不足（需要 ${def.cost} 金幣，目前 ${save.points} 金幣）`)
   const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
-  return { save: replacePet({ ...save, points: save.points - BALANCE.play.cost }, { ...pet, awakeUntil }), effects: [] }
+  return { save: replacePet({ ...save, points: save.points - def.cost }, { ...pet, awakeUntil }), effects: [] }
 }
 
 /** 撿回 n 次的結算數值（0 次 = 空；次數夾在 0～maxCatches） */
@@ -194,10 +213,22 @@ export function playDelta(catches: number): Delta {
   }
 }
 
-/** 玩耍結算（時間到或提前結束）：撿回 0 次完全不加；不扣金幣。數值夾在 0～100 */
-export function settlePlay(save: SaveData, ctx: Ctx, petId: string, catches: number): ExecResult {
+/** 挖寶、尋寶留下 n 個寶物的結算數值（0 個 = 空） */
+export function digDelta(finds: number): Delta {
+  const b = BALANCE.dig
+  const n = Math.max(0, Math.min(b.maxFinds, Math.floor(Number.isFinite(finds) ? finds : 0)))
+  if (n === 0) return {}
+  return {
+    mood: Math.min(b.mood.max, b.mood.base + b.mood.perFind * n),
+    weight: Math.max(b.weight.min, b.weight.perFind * n),
+    satiety: Math.max(b.satiety.min, b.satiety.perFind * n),
+  }
+}
+
+/** 玩耍結算（時間到或提前結束）：撿回／留下 0 次完全不加；不扣金幣。數值夾在 0～100 */
+export function settlePlay(save: SaveData, ctx: Ctx, petId: string, catches: number, toy: PlayToyId = 'ball'): ExecResult {
   const pet = save.pets.find((p) => p.id === petId)
-  const delta = playDelta(catches)
+  const delta = toy === 'ball' ? playDelta(catches) : digDelta(catches)
   if (!pet || Object.keys(delta).length === 0) return { save, effects: [] }
   const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
   const r = applyDelta({ ...pet, awakeUntil: Math.max(pet.awakeUntil ?? 0, awakeUntil) }, delta)

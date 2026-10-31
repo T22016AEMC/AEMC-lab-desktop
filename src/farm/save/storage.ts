@@ -1,10 +1,17 @@
 import { LocalStorageDocument } from '../../lib/documentStorage'
-import { isResetSchema, legacyRefundOf, parseSave } from './migrate'
+import { isNewerData, isResetSchema, legacyRefundOf, parseSave } from './migrate'
 import type { LoadResult, SaveData, SaveStorage } from './types'
 
 const KEY = 'aemc-desktop:farm-save'
 /** v3.4.0 重置前，舊存檔的原封不動複本：只寫一次、不讀取、不顯示、不進匯出檔，只是留在瀏覽器裡以防萬一 */
 export const PRE_V5_BACKUP_KEY = 'aemc-desktop:farm-pre-v5-backup'
+
+type NewerHandler = () => void
+let newerHandler: NewerHandler | null = null
+/** 註冊「儲存的資料來自更新版本」的處理函式（畫面層：停止自動存檔、提示重新整理） */
+export function setNewerDataHandler(h: NewerHandler | null): void {
+  newerHandler = h
+}
 
 /** 養殖場存檔：存在瀏覽器 localStorage（通用儲存層 LocalStorageDocument 的特化） */
 export class LocalStorageAdapter extends LocalStorageDocument<SaveData> implements SaveStorage {
@@ -13,6 +20,23 @@ export class LocalStorageAdapter extends LocalStorageDocument<SaveData> implemen
   constructor(key: string = KEY, backupKey: string = PRE_V5_BACKUP_KEY) {
     super(key, parseSave)
     this.backupSlot = new LocalStorageDocument<unknown>(backupKey, (r) => r)
+  }
+
+  /**
+   * 自動存檔：寫入前先看已存的資料。如果它來自比這份程式更新的版本（例如另一個分頁已經是新版），就不覆寫（否則新版的欄位會被洗掉），
+   * 改成通知畫面層提示重新整理。匯入（saveStrict）不經過這裡。
+   */
+  async save(data: SaveData): Promise<void> {
+    try {
+      const raw = await this.snapshot()
+      if (raw && isNewerData(JSON.parse(raw))) {
+        newerHandler?.()
+        return
+      }
+    } catch {
+      /* 讀不到或壞掉的資料照一般流程寫入 */
+    }
+    await super.save(data)
   }
 
   async loadOrReset(makeFresh: () => SaveData): Promise<LoadResult> {
@@ -24,6 +48,8 @@ export class LocalStorageAdapter extends LocalStorageDocument<SaveData> implemen
     } catch {
       return { save: null, reset: 'none' }
     }
+    // 更新版本寫的存檔：不讀、不重置、不覆寫（舊版程式只會看到「沒有存檔」並讓使用者重新領養，那會蓋掉它）
+    if (isNewerData(obj)) return { save: null, reset: 'none', newer: true }
     if (!isResetSchema(obj)) {
       const save = parseSave(obj)
       const refund = legacyRefundOf(obj)

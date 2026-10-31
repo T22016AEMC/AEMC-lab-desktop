@@ -20,7 +20,7 @@ registerSW({
 if ('serviceWorker' in navigator) {
   const hadController = Boolean(navigator.serviceWorker.controller)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController) useUIStore.getState().showToast('有新版本，重新整理即可', 10000)
+    if (hadController) useUIStore.getState().showToast('有新版本，重新整理即可', 10000, 'update')
   })
 }
 

@@ -401,7 +401,7 @@ const DECOR_BLOCK_D = 10
 
 const hit = (r: Rect, o: Rect, gx = 0, gy = gx): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
 /** 草地上的建築 id（排位時要檢查素材外框） */
-const GRASS_IDS = ['picnicMat', 'sandbox']
+const GRASS_IDS = ['picnicMat']
 const sceneCache = new WeakMap<Layout, { back: SceneObject[]; slots: BuildingSlot[]; decor: SceneObject[] }>()
 
 /** 草地上的小路上緣（路與草地的交界）；建築空位貼在這條線上 */
@@ -528,7 +528,7 @@ export type SlotKind = 'kennel' | 'catTree' | 'small'
  * 建築空位：x、y = 腳底中心（邏輯座標）；w、h = 之後放的素材外框大小（佔位範圍）；
  * fw、fd = 腳下的佔地（寬、深），空位彼此、與固定物件的佔地都不重疊。
  * id 就是專用標記：kennel（狗窩）、bowls（食盆水盆）、catTree（貓跳台）、
- * picnicMat（野餐墊）、sandbox（沙坑）。
+ * picnicMat（野餐墊）。
  */
 export interface BuildingSlot {
   id: string
@@ -551,13 +551,12 @@ export interface SlotSpec {
   fd: number
 }
 
-/** 8 種建築的空位規格，依排位優先順序（先排的先找位置） */
+/** 4 種建築的空位規格，依排位優先順序（先排的先找位置） */
 export const SLOT_SPECS: SlotSpec[] = [
   { id: 'kennel', name: '狗窩', kind: 'kennel', w: KENNEL_W, h: KENNEL_H, fw: 76, fd: 22 },
   { id: 'bowls', name: '食盆水盆', kind: 'small', w: BOWLS_W, h: BOWLS_H, fw: 48, fd: 12 },
   { id: 'catTree', name: '貓跳台', kind: 'catTree', w: CAT_TREE_W, h: CAT_TREE_H, fw: 53, fd: 22 },
   { id: 'picnicMat', name: '野餐墊', kind: 'small', w: 117, h: 69, fw: 84, fd: 20 },
-  { id: 'sandbox', name: '沙坑', kind: 'small', w: 110, h: 65, fw: 84, fd: 16 },
 ]
 
 /** 走道上的空位（狗窩、食盆水盆、貓跳台）腳底在走道上緣再往下這麼多：落在沙地走道的上半部 */
@@ -594,15 +593,13 @@ export function slotBlockers(slots: BuildingSlot[], owned: ReadonlySet<string>):
 /**
  * 排空位。不手調座標：全部依草地上緣、走道位置、視窗大小算出。
  *  走道上：狗窩（路燈後面，左緣被燈桿蓋住 KENNEL_TUCK 像素，位置固定）→ 食盆水盆（狗窩右邊、素材間隔 BOWLS_GAP）→ 貓跳台（鐘樓正下方偏左，右緣離畫面右緣 > 40）；腳底都在走道上半部。
- *  草地上：野餐墊（鐘樓前面、塔門正下方、貓跳台上方，貼地不遮塔門）→ 沙坑（草地中段）。
+ *  草地上：野餐墊（鐘樓前面、塔門正下方、貓跳台上方，貼地不遮塔門）。
  * 找不到位置的空位不放（回傳的陣列沒有它），由 buildingAvailability 轉成「此視窗大小空間不足」。
  */
 function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
-  const { farBottom: fb } = L
   const b = petBounds(L)
   const strip = pondStrip(L)
   const tx = towerX(L)
-  const xr = tx - TOWER_CLEAR // 草地空位的右界（鐘樓淨空範圍的左緣）
   const pathTop = pathTopOf(L)
   const foot = pathFootY(L)
   const fixed = obstacles.map((r) => ({ x0: r.x0 - 4, x1: r.x1 + 4, y0: r.y0 - 6, y1: r.y1 + 4 }))
@@ -625,8 +622,6 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
   for (const sp of SLOT_SPECS) {
     // 每個空位的搜尋視窗：x、y 範圍與偏好位置 (ax, ay)、與其他空位的最小間隔
     let x0 = 0, x1 = 0, y0 = foot, y1 = foot, ax = 0, ay = foot, gap = 10
-    const yGrass0 = Math.max(fb + BACK_MARGIN + sp.fd + 2, fb - 8 + sp.h) // 草地空位腳底的最小 y（素材頂端不伸進遠景、佔地在活動範圍內）
-    const yGrassMax = pathTop - 14 // 草地空位腳底的最大 y（和走道上的空位隔開）
     switch (sp.id) {
       case 'kennel':
         // 狗窩與路燈的不透明像素左右相接（位置固定，只由路燈決定）
@@ -662,16 +657,6 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         gap = 10
         break
       }
-      case 'sandbox':
-        // 還沒開放（留給之後的版本）：草地中段偏右
-        x0 = b.x0 + 8 + sp.fw / 2
-        x1 = xr + 22 - sp.fw / 2
-        ax = b.x0 + 8 + 0.8 * (xr - b.x0)
-        y0 = yGrass0 + 12
-        y1 = yGrassMax
-        ay = (y0 + y1) / 2
-        gap = 8
-        break
     }
     let best: { x: number; y: number; cost: number } | null = null
     const stepX = sp.id === 'catTree' ? 1 : 2

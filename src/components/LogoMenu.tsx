@@ -68,6 +68,17 @@ export function LogoMenu() {
           >
             關於這個桌面
           </button>
+          <button
+            role="menuitem"
+            data-testid="logo-menu-collection"
+            className={ITEM}
+            onClick={() => {
+              setOpen(false)
+              useUIStore.getState().setCollectionOpen(true)
+            }}
+          >
+            收藏冊
+          </button>
           <div className="my-1 border-t border-white/15" />
           <button
             role="menuitem"

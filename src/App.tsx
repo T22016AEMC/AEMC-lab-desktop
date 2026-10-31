@@ -3,6 +3,7 @@ import { AboutDialog } from './components/AboutDialog'
 import { BackupReminder } from './components/BackupReminder'
 import { IMPORTED_FLAG, ImportDialog } from './components/BackupDialogs'
 import { BootScreen } from './components/BootScreen'
+import { CollectionDialog } from './components/CollectionDialog'
 import { Desktop } from './components/Desktop'
 import { DesktopOnlyNotice } from './components/DesktopOnlyNotice'
 import { Dock } from './components/Dock'
@@ -48,6 +49,7 @@ function DesktopApp() {
       <Dock />
       <Launchpad />
       <AboutDialog />
+      <CollectionDialog />
       <ImportDialog />
       <BackupReminder />
       <Toast />

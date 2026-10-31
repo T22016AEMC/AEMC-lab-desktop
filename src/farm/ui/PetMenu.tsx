@@ -3,7 +3,6 @@ import { useUIStore } from '../../store/uiStore'
 import { SPECIES, variantOf } from '../config/species'
 import { worldHour } from '../overrides'
 import { PLAY_TOYS, petActions, type PlayToyId } from '../sim/commands'
-import { BALANCE } from '../config/balance'
 import { isSleeping } from '../sim/rules'
 import { stageOf, weightLabel, heightCm } from '../sim/stats'
 import { useFarmStore } from '../store/farmStore'
@@ -30,8 +29,15 @@ function Bar({ label, value, color }: { label: string; value: number; color: str
  */
 export const PetMenu = forwardRef<
   HTMLDivElement,
-  { petId: string; onBath?: (petId: string) => void; onPlay?: (petId: string, toy: PlayToyId) => void; playBlock?: string | null }
->(function PetMenu({ petId, onBath, onPlay, playBlock }, ref) {
+  {
+    petId: string
+    onBath?: (petId: string) => void
+    onPlay?: (petId: string, toy: PlayToyId) => void
+    playBlock?: string | null
+    /** 某個玩具現在不能玩的原因（例如寶物已滿：先點開土堆）；可以玩 = null */
+    toyBlock?: (toy: PlayToyId) => string | null
+  }
+>(function PetMenu({ petId, onBath, onPlay, playBlock, toyBlock }, ref) {
   const save = useFarmStore((s) => s.save)
   const runAction = useFarmStore((s) => s.runAction)
   const [tick, setTick] = useState(0)
@@ -97,19 +103,25 @@ export const PetMenu = forwardRef<
       </div>
       {view === 'toys' ? (
         <div className="mt-2 grid grid-cols-3 gap-1.5" data-testid="toy-list">
-          {(PLAY_TOYS[pet.species] ?? []).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              title={`${t.label}（${BALANCE.play.cost} 金幣，${BALANCE.play.seconds} 秒）`}
-              onClick={() => onPlay?.(pet.id, t.id)}
-              className="px-btn px-1 py-1 text-xs"
-              data-testid={`toy-${t.id}`}
-            >
-              {t.label}
-              <span className="block text-[9px] font-normal opacity-70">{BALANCE.play.cost} 金幣</span>
-            </button>
-          ))}
+          {(PLAY_TOYS[pet.species] ?? []).map((t) => {
+            // 寶物已滿等原因：看起來是停用的，但仍可點（點了用提示說明原因），不扣金幣
+            const why = toyBlock?.(t.id) ?? null
+            return (
+              <button
+                key={t.id}
+                type="button"
+                title={why ?? `${t.label}（${t.cost} 金幣，${t.seconds} 秒）`}
+                aria-disabled={why !== null || undefined}
+                onClick={() => (why ? useUIStore.getState().showToast(why) : onPlay?.(pet.id, t.id))}
+                className={`px-btn px-1 py-1 text-xs ${why ? 'opacity-60' : ''}`}
+                style={why ? { background: '#cfc3a8', color: '#8a7d66', boxShadow: 'none', cursor: 'not-allowed' } : undefined}
+                data-testid={`toy-${t.id}`}
+              >
+                {t.label}
+                <span className="block text-[9px] font-normal opacity-70">{t.cost} 金幣</span>
+              </button>
+            )
+          })}
           <button type="button" onClick={() => setView('main')} className="px-btn px-1 py-1 text-xs" data-testid="toy-back">
             返回
           </button>

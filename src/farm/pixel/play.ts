@@ -5,6 +5,7 @@ import { isSleepTime } from '../sim/worldTime'
 import { releaseUse } from './buildingUse'
 import { isWalkable, nearestWalkable, petBounds, type Layout } from './layout'
 import { isClear, type Pt } from './nav'
+import { isFinderBusy, updateFinder } from './finder'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
@@ -20,8 +21,13 @@ import type { Action, Actor, BehaviorEnv } from './pets'
  * 多幀動作沒完成就維持目前階段，不會每一幀重新開始；路徑只在目標改變時重算（moveToward 的規則）。
  */
 
-export type PlayToyId = 'ball'
-export type PlayPhase = 'ready' | 'flight' | 'chase' | 'grab' | 'return' | 'drop' | 'cheer'
+export type PlayToyId = 'ball' | 'dig' | 'hunt'
+/**
+ * 丟球：ready → flight → chase → grab → return → drop。
+ * 挖寶（dig）、尋寶（hunt）（v3.6.0，pixel/finder.ts）：search 挑位置 → go 走過去 → work（狗挖地／貓蹲下）→ [貓：pounce 撲 → back 叼著布包走回 → put 放下]／[狗：mark 留下土堆] → search…
+ * 時間到時 cheer；所有玩具共用 cheer 與提前結算。
+ */
+export type PlayPhase = 'ready' | 'flight' | 'chase' | 'grab' | 'return' | 'drop' | 'cheer' | 'search' | 'go' | 'work' | 'pounce' | 'back' | 'put' | 'mark'
 /** 結束的原因：time／user 演 cheer；其他只結算數值 */
 export type PlayEnd = 'time' | 'user' | 'drag' | 'window' | 'sleep' | 'resize'
 
@@ -56,10 +62,13 @@ export interface PlayState {
   hopIn: number
   /** cheer：愛心已經冒了幾顆 */
   hearts: number
+  /** 挖寶／尋寶：這一次要去的位置、貓叼回來放下的位置（沒在這個階段 = null） */
+  spot: Pt | null
+  put: Pt | null
 }
 
 /** 玩耍需要的引擎連接（BehaviorEnv 的子集） */
-export type PlayEnv = Pick<BehaviorEnv, 'layout' | 'rand' | 'emit' | 'settlePlay' | 'others' | 'nowMs' | 'hour'>
+export type PlayEnv = Pick<BehaviorEnv, 'layout' | 'rand' | 'emit' | 'settlePlay' | 'others' | 'nowMs' | 'hour' | 'finds' | 'findCap' | 'addFind'>
 
 export interface PlayOps {
   setAction: (a: Actor, action: Action, dur: number) => void
@@ -114,6 +123,12 @@ export const isCarrying = (p: PlayState): boolean => p.phase === 'grab' || p.pha
 /** 開始玩耍：狗留在原地（home），清掉建築使用、躲雨倒數與指令動作。layout 用來確認 home 站得住 */
 export function beginPlay(a: Actor, L: Layout, setAction: PlayOps['setAction'], hour: number, toy: PlayToyId = 'ball'): void {
   releaseUse(a)
+  // 座位旁的位置是坐下時算的：之後換過視窗大小，同一個座標可能已經落在別的建築裡，離開座位時要確認站得住
+  if (!isWalkable(L, a.x, a.y)) {
+    const p = nearestWalkable(L, a.x, a.y)
+    a.x = p.x
+    a.y = p.y
+  }
   a.override = null
   a.rainIn = null
   a.seek = null
@@ -123,7 +138,11 @@ export function beginPlay(a: Actor, L: Layout, setAction: PlayOps['setAction'], 
   if (!isClear(L, home.x, home.y)) home = nearestWalkable(L, home.x, home.y)
   a.tx = a.x
   a.ty = a.y
-  a.play = { toy, phase: 'ready', t: 0, left: BALANCE.play.seconds, catches: 0, home, ball: null, nightStart: isSleepTime(hour), hopIn: 1.2, hearts: 0 }
+  const ball = toy === 'ball'
+  a.play = {
+    toy, phase: ball ? 'ready' : 'search', t: 0, left: ball ? BALANCE.play.seconds : BALANCE.dig.seconds, catches: 0, home, ball: null, nightStart: isSleepTime(hour), hopIn: 1.2, hearts: 0,
+    spot: null, put: null,
+  }
   setAction(a, 'idle', 1e9)
 }
 
@@ -193,8 +212,10 @@ function returnSpot(a: Actor, p: PlayState, env: PlayEnv): Pt {
 /** 進入 cheer：結算數值（只做這一次）、開心跳一下 */
 function toCheer(a: Actor, env: PlayEnv, ops: PlayOps): void {
   const p = a.play!
-  env.settlePlay(a.id, p.catches)
+  env.settlePlay(a.id, p.catches, p.toy)
   p.phase = 'cheer'
+  p.spot = null
+  p.put = null
   p.t = 0
   p.ball = null
   p.hearts = 0
@@ -228,7 +249,7 @@ export function endPlay(a: Actor, reason: PlayEnd, env: PlayEnv, ops: PlayOps): 
     toCheer(a, env, ops)
     return
   }
-  env.settlePlay(a.id, p.catches)
+  env.settlePlay(a.id, p.catches, p.toy)
   toIdle(a, ops)
 }
 
@@ -247,10 +268,16 @@ export function updatePlay(a: Actor, dt: number, env: BehaviorEnv, ops: PlayOps)
       return
     }
     if (p.left <= 0) {
-      const finishing = p.phase === 'grab' || p.phase === 'return' || p.phase === 'drop'
-      if (!finishing || -p.left > BALANCE.play.graceSeconds) endPlay(a, 'time', env, ops)
+      const ball = p.toy === 'ball'
+      // 已經開始的那一次讓它做完（丟球：叼起之後；挖寶／尋寶：已經走到位置之後），最多再給 graceSeconds 秒
+      const finishing = ball ? p.phase === 'grab' || p.phase === 'return' || p.phase === 'drop' : isFinderBusy(p)
+      if (!finishing || -p.left > (ball ? BALANCE.play.graceSeconds : BALANCE.dig.graceSeconds)) endPlay(a, 'time', env, ops)
     }
     if (!a.play) return
+  }
+  if (p.toy !== 'ball' && p.phase !== 'cheer') {
+    updateFinder(a, dt, env, ops)
+    return
   }
 
   switch (p.phase) {

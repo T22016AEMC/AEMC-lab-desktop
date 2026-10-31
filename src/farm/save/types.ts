@@ -4,6 +4,11 @@ import type { SpeciesId } from '../config/species'
  * 目前的存檔格式。v5（v3.4.0）起，舊格式（v4 以前）不再升級，第一次載入時一律重置為全新存檔（見 storage.ts 的 loadOrReset）。
  */
 export const CURRENT_SCHEMA_VERSION = 5
+/**
+ * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
+ * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
+ */
+export const DATA_REV = 1
 
 export interface Pet {
   id: string
@@ -37,6 +42,31 @@ export interface EarningState {
   gameCoins: number
   /** 各程式上次給金幣的時間（毫秒時間戳，程式 id → 時間）；冷卻跨日也有效 */
   lastAward: Record<string, number>
+  /** 今日挖寶／尋寶揭曉得到的金幣（貓狗共用，上限 BALANCE.dig.dailyCoinMax；歸零規則同上，用揭曉當下的本機日期）。v3.6.0 起；舊存檔沒有 = 0 */
+  digCoins: number
+}
+
+/**
+ * 寶物（v3.6.0）：狗挖出來的土堆（mound）、貓叼回來的布包（bundle），等玩家點開揭曉，10 分鐘沒點自動揭曉。
+ * 座標是「草地範圍內的相對位置」（0～1），換視窗大小時重新換算成像素，不會因為版面不同跑到建築裡。
+ */
+export interface Find {
+  id: string
+  kind: 'mound' | 'bundle'
+  by: 'dog' | 'cat'
+  fx: number
+  fy: number
+  /** 建立時間（毫秒時間戳，遊戲時間來源） */
+  at: number
+}
+
+/**
+ * 外觀（v3.6.0 最小版）：owned = 已擁有的外觀 id（例如 house.gold）、equipped = 各部位目前穿的外觀 id。
+ * 之後的外觀商店（金幣購買）只要把 id 加進 owned；換裝介面再改 equipped。
+ */
+export interface SkinState {
+  owned: string[]
+  equipped: Record<string, string>
 }
 
 /** 食盆水盆今日已用掉的份量（本地日期 00:00 補滿） */
@@ -62,6 +92,16 @@ export interface SaveData {
   ownedBuildings: string[]
   earning: EarningState
   bowl: BowlState
+  /** 寶物（收藏品）數量：鍵是物品編號，套組的片用「編號-片號」（config/items.ts）。v3.6.0 起；舊存檔沒有 = 空 */
+  collection: Record<string, number>
+  /** 還沒揭曉的寶物（土堆、貓的布包），最多 BALANCE.dig.holdMax 個 */
+  finds: Find[]
+  /** 一次性事件旗標：事件 id → 觸發時間（毫秒時間戳）。有這個 id 就不會再觸發 */
+  events: Record<string, number>
+  /** 外觀 */
+  skins: SkinState
+  /** 資料修訂（見 DATA_REV）；舊存檔沒有 = 0 */
+  dataRev: number
   /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
   resetNotice?: true
 }
@@ -73,6 +113,8 @@ export interface SaveData {
 /** loadOrReset 的結果：reset = 'done' 剛把舊存檔換成全新存檔；'failed' 寫入新存檔失敗（舊存檔原封不動，下次載入重試） */
 export interface LoadResult {
   save: SaveData | null
+  /** 儲存的資料來自比這份程式更新的版本（schemaVersion 或 dataRev 較大）：不讀取、不覆寫，畫面提示重新整理 */
+  newer?: boolean
   reset: 'none' | 'done' | 'failed'
   /** 載入時退還的已移除建築金幣（v3.5.1 起營火 20）；沒有 = 0 或省略。只給畫面層顯示一次性提示，不進存檔 */
   refund?: number

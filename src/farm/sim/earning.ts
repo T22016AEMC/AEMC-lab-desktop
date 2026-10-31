@@ -24,7 +24,7 @@ export type GameId = keyof typeof BALANCE.gameGoals
 /** 本地日期變了就把今日進度歸零（冷卻記錄 lastAward 跨日保留） */
 export function rollEarning(e: EarningState, today: string): EarningState {
   if (e.date === today) return e
-  return { ...e, date: today, programCoins: 0, gameCoins: 0 }
+  return { ...e, date: today, programCoins: 0, gameCoins: 0, digCoins: 0 }
 }
 
 /** 今日進度（給畫面顯示；已經依今天的日期歸零過） */

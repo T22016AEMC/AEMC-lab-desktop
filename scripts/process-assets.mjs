@@ -418,6 +418,7 @@ const pCache = {}
 const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
 const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7) }
 let clockClosedSpr = null
+let moundSpr = null
 /** 水池的目標寬度（邏輯像素） */
 const POND_W = 110
 
@@ -429,7 +430,7 @@ const POND_W = 110
  *    沒有 solveFrom 時，targets 裡的每一幀各自求自己的 p（例如裝飾物、特效圖示）
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h' }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax }) {
   const img = await load(file)
   const mask = fgMask(img)
   const { lab, comps: all } = label(mask, img.W, img.H)
@@ -468,6 +469,21 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     const cell = cells[names.indexOf(solveFrom)]
     if (!cell?.length) throw new Error(file + ' 找不到 ' + solveFrom)
     animalP = solve(cell, targets[solveFrom], base)
+  }
+  // fitMax（v3.6.0 收藏品圖示）：整張圖共用同一個 p（保留圖示之間的相對大小），p 取到「最大的那張長邊 = fitMax」
+  if (fitMax) {
+    const live = cells.filter((c) => c.length)
+    const bboxMax = (cell) =>
+      Math.max(Math.max(...cell.map((c) => c.x1)) - Math.min(...cell.map((c) => c.x0)) + 1, Math.max(...cell.map((c) => c.y1)) - Math.min(...cell.map((c) => c.y0)) + 1)
+    const maxGot = (pp) => Math.max(...live.map((cell) => { const s = render(cell, pp); return s ? Math.max(s.w, s.h) : 0 }))
+    let pp = Math.max(...live.map(bboxMax)) / fitMax
+    for (let k = 0; k < 10; k++) {
+      const got = maxGot(pp)
+      if (got <= fitMax && got >= fitMax - 1) break
+      pp *= got / fitMax
+    }
+    while (maxGot(pp) > fitMax) pp *= 1.01
+    animalP = pp
   }
   info(
     file + ': ' + img.W + '×' + img.H + '，連通塊 ' + comps.length + '（原 ' + all.length + '），像素格估算 p=' + e.p.toFixed(2) + '（強度 ' + e.amp.toFixed(2) + '）' +
@@ -523,6 +539,165 @@ const KNOWN_ISSUES = [
 // ---------------------------------------------------------------------------
 // 執行
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// v3.6.0：收藏品圖示、錢幣、完整紙張、金色外觀
+// ---------------------------------------------------------------------------
+
+/** 收藏品圖示的統一畫布邊長（邏輯像素）。預覽會同時輸出 32 與 48 兩種；正式用哪個由環境變數 ITEM_BOX 決定（預設 48，v3.6.0 定案） */
+const ITEM_BOX = Number(process.env.ITEM_BOX ?? 48)
+/** items_dig_a 的 6×5 格（第 23 格是空格）→ 物品編號。U002 是 6 片套組：_1～_6 */
+const DIG_A_NAMES = [
+  'C001', 'C002', 'C003', 'C004', 'C005', 'C006',
+  'C007', 'C008', 'C009', 'C010', 'U001', 'U002_1',
+  'U002_2', 'U002_3', 'U002_4', 'U002_5', 'U003', 'U004',
+  'U005', 'U006', 'U007', 'U008', null, 'R001',
+  'R002', 'R003', 'R004', 'R005', 'L001', 'L002',
+]
+const CAT_A_NAMES = ['U009_1', 'U009_2', 'U009_3', 'U009_4', 'U009_5', 'U009_6', 'L003', 'L004']
+const SILHOUETTE_RGB = [46, 34, 24]
+/** 場景裡土堆（toy_dirt_mound_s）的目標寬度；錢幣、「可揭曉」提示的目標高度；完整紙張的長邊 */
+const MOUND_S_W = 26
+const COIN_H = 16
+const REVEAL_H = 22
+const PAPER_MAX = 96
+
+/**
+ * 去掉「偏粉紅色、而且貼著透明邊」的像素（洋紅背景混進光暈或半透明膠帶留下的粉紅殘邊），最多重複 3 輪；回傳移除的像素數。
+ * loose（完整紙張）：再加上「淡粉色」（R 高、B 比 G 高 8 以上；紙是奶油色，B 一定比 G 低）。
+ * glow（只用在 L001 鑰匙）：再加上「鮭紅／粉紅光暈」（R > 235、G < 170、B 不比 G 低太多）；金色的 B 遠低於 G，不會被刪。
+ * 條件：不透明、R 高、B 偏高、G 明顯低於 R 與 B（紅色印章的 B 很低、金色光暈的 B 也低，不會被誤刪）
+ */
+function defringePink(spr, loose = false, glow = false) {
+  const { w, h, rgba } = spr
+  const pinkish = (i) => rgba[i + 3] && ((rgba[i] > 200 && rgba[i + 2] > 130 && rgba[i + 1] < Math.min(rgba[i], rgba[i + 2]) - 25) || (loose && rgba[i] > 200 && rgba[i + 2] > rgba[i + 1] + 8) || (glow && rgba[i] > 235 && rgba[i + 1] < 170 && rgba[i + 2] > rgba[i + 1] - 30 && rgba[i + 2] > 70 && rgba[i] - rgba[i + 1] > 80))
+  const open = (x, y) => x < 0 || y < 0 || x >= w || y >= h || rgba[(y * w + x) * 4 + 3] === 0
+  let total = 0
+  for (let round = 0; round < 3; round++) {
+    const kill = []
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (pinkish(i) && (open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1))) kill.push(i) }
+    if (!kill.length) break
+    for (const i of kill) rgba[i + 3] = 0
+    total += kill.length
+  }
+  return total
+}
+
+/** 把素材置中貼到 N×N 透明畫布（錨點：水平中心、底邊） */
+function padCenter(spr, N) {
+  const out = Buffer.alloc(N * N * 4)
+  const ox = Math.floor((N - spr.w) / 2), oy = Math.floor((N - spr.h) / 2)
+  for (let y = 0; y < spr.h; y++) {
+    const ty = y + oy
+    if (ty < 0 || ty >= N) continue
+    for (let x = 0; x < spr.w; x++) {
+      const tx = x + ox
+      if (tx < 0 || tx >= N) continue
+      spr.rgba.copy(out, (ty * N + tx) * 4, (y * spr.w + x) * 4, (y * spr.w + x + 1) * 4)
+    }
+  }
+  return { w: N, h: N, rgba: out }
+}
+
+/** 貼到指定大小的畫布（底邊、水平中心對齊；和開門鐘樓、住家三幀的做法一樣） */
+function padBottomCenter(spr, W, H) {
+  const out = Buffer.alloc(W * H * 4)
+  const ox = Math.round((W - spr.w) / 2), oy = H - spr.h
+  for (let y = 0; y < spr.h; y++)
+    for (let x = 0; x < spr.w; x++) {
+      const tx = x + ox, ty = y + oy
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
+      spr.rgba.copy(out, (ty * W + tx) * 4, (y * spr.w + x) * 4, (y * spr.w + x + 1) * 4)
+    }
+  return { w: W, h: H, rgba: out }
+}
+
+/** 把輪廓縮到長邊 maxDim 以內（區塊內不透明比例 >= 0.5 才算有），整塊填暗色：收藏冊的「獎勵剪影」預先烘好 */
+function shrinkSilhouette(spr, maxDim) {
+  const k = Math.max(spr.w, spr.h) / maxDim
+  const w = Math.max(1, Math.round(spr.w / k)), h = Math.max(1, Math.round(spr.h / k))
+  const out = Buffer.alloc(w * h * 4)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const sx0 = Math.floor(x * k), sx1 = Math.max(sx0 + 1, Math.floor((x + 1) * k))
+      const sy0 = Math.floor(y * k), sy1 = Math.max(sy0 + 1, Math.floor((y + 1) * k))
+      let on = 0, n = 0
+      for (let sy = sy0; sy < sy1 && sy < spr.h; sy++) for (let sx = sx0; sx < sx1 && sx < spr.w; sx++) { n++; if (spr.rgba[(sy * spr.w + sx) * 4 + 3]) on++ }
+      if (n && on / n >= 0.5) { const o = (y * w + x) * 4; out[o] = SILHOUETTE_RGB[0]; out[o + 1] = SILHOUETTE_RGB[1]; out[o + 2] = SILHOUETTE_RGB[2]; out[o + 3] = 255 }
+    }
+  return { w, h, rgba: out }
+}
+
+/** 收藏品圖示（dog_a 29 張＋碎片 F＋cat_a 8 張），每張置中貼到 box×box。回傳 { icons: {名稱: spr}, p 資訊 } */
+async function buildItemIcons(box) {
+  const icons = {}
+  const fringe = {}
+  const dog = await sheet({ file: 'items_dig_a.png', cols: 6, rows: 5, names: DIG_A_NAMES.map((n) => n && 'item_' + n), fitMax: box })
+  const shardDims = []
+  for (const f of dog.frames) {
+    fringe[f.name] = defringePink(f.spr, false, f.name === 'item_L001')
+    icons[f.name] = padCenter(f.spr, box)
+    if (/^item_U002_[1-5]$/.test(f.name)) shardDims.push(Math.max(f.spr.w, f.spr.h))
+  }
+  // 碎片 F：大小以 A～E 的平均長邊為準
+  const avg = shardDims.reduce((a, b) => a + b, 0) / shardDims.length
+  const f6 = await sheet({ file: 'items_dig_frag6.png', cols: 1, rows: 1, names: ['item_U002_6'], fitMax: Math.round(avg) })
+  fringe.item_U002_6 = defringePink(f6.frames[0].spr)
+  icons.item_U002_6 = padCenter(f6.frames[0].spr, box)
+  const cat = await sheet({ file: 'items_cat_a.png', cols: 4, rows: 2, names: CAT_A_NAMES.map((n) => 'item_' + n), fitMax: box })
+  for (const f of cat.frames) {
+    fringe[f.name] = defringePink(f.spr)
+    icons[f.name] = padCenter(f.spr, box)
+  }
+  return { fringe, icons, dogP: dog.p, catP: cat.p, f6P: f6.p, shardAvg: avg }
+}
+
+// ---- 比對鐘樓、住家（停點 A 的檢查用）----
+const woodPx = (r, g, b) => r > g && g > b && r >= 70 && r <= 170 && g >= 40 && g <= 110 && b >= 15 && b <= 80 && r - b >= 40
+function doorBox(s) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1
+  for (let y = Math.floor(s.h * 0.65); y < s.h; y++)
+    for (let x = Math.floor(s.w * 0.3); x < Math.ceil(s.w * 0.7); x++) {
+      const i = (y * s.w + x) * 4
+      if (s.rgba[i + 3] && woodPx(s.rgba[i], s.rgba[i + 1], s.rgba[i + 2])) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+    }
+  return x1 < 0 ? null : { x0, y0, x1, y1 }
+}
+function windowCenters(s) {
+  const m = new Uint8Array(s.w * s.h)
+  for (let i = 0; i < s.w * s.h; i++) { const r = s.rgba[i * 4], g = s.rgba[i * 4 + 1], b = s.rgba[i * 4 + 2]; m[i] = s.rgba[i * 4 + 3] && b > r + 8 && b > 90 && g > 70 ? 1 : 0 }
+  return label(m, s.w, s.h).comps.filter((c) => c.area >= 8).map((c) => ({ x: (c.x0 + c.x1) / 2, y: (c.y0 + c.y1) / 2, a: c.area })).sort((p, q) => p.y - q.y || p.x - q.x)
+}
+function alphaXor(a, b) {
+  let n = 0, tot = 0
+  for (let i = 0; i < a.w * a.h; i++) { const pa = a.rgba[i * 4 + 3] > 0, pb = b.rgba[i * 4 + 3] > 0; if (pa) tot++; if (pa !== pb) n++ }
+  return { xor: n, tot }
+}
+
+/** 把一組素材排成預覽圖（ASCII 標籤；縮放用最近鄰） */
+async function composePreview(file, tiles, { cols, cellW, cellH, scale, bg }) {
+  const rowsN = Math.ceil(tiles.length / cols)
+  const W = cols * cellW, H = rowsN * cellH
+  const comps = []
+  // 每格可有自己的底色（bgColor）：先鋪底色，再放素材，最後放文字
+  const rects = tiles.map((t, i) => (t.bgColor ? `<rect x="${(i % cols) * cellW}" y="${Math.floor(i / cols) * cellH}" width="${cellW}" height="${cellH}" fill="${t.bgColor}"/>` : '')).join('')
+  if (rects) comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${rects}</svg>`), left: 0, top: 0 })
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">`
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i]
+    const cx = (i % cols) * cellW, cy = Math.floor(i / cols) * cellH
+    if (t.spr) {
+      const sc = t.scale ?? scale
+      const buf = await sharp(t.spr.rgba, { raw: { width: t.spr.w, height: t.spr.h, channels: 4 } }).resize(t.spr.w * sc, t.spr.h * sc, { kernel: 'nearest' }).png().toBuffer()
+      comps.push({ input: buf, left: cx + Math.max(2, Math.floor((cellW - t.spr.w * sc) / 2)), top: cy + 14 })
+    }
+    svg += `<text x="${cx + 3}" y="${cy + 11}" font-family="sans-serif" font-size="10" fill="${bg.r > 128 ? '#222' : '#ddd'}">${t.label ?? ''}</text>`
+  }
+  svg += '</svg>'
+  comps.push({ input: Buffer.from(svg), left: 0, top: 0 })
+  await sharp({ create: { width: W, height: H, channels: 3, background: bg } }).composite(comps).png().toFile(join(SHOTS, file))
+  info(`預覽圖：screenshots/${file}（${W}×${H}）`)
+}
 
 async function main() {
   info(`來源：${SRC}`)
@@ -612,9 +787,9 @@ async function main() {
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'], scales: BUILDING_SCALES })
     // 花圃（flowerbed）取消（v3.4.0 不使用）：不輸出，不進圖集
     for (const f of small.frames) if (f.name !== 'flowerbed') addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
-    // 營火（v3.4.0）於 v3.5.1 移除：不輸出 campfire_a、campfire_b、campfire_off；蹺蹺板、蝴蝶也不使用
+    // 營火（v3.4.0）於 v3.5.1 移除：不輸出 campfire_a、campfire_b、campfire_off；蹺蹺板、蝴蝶也不使用；沙坑（v3.6.0 開發期間做過又取消）沒有任何程式使用，不輸出
     const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
-    for (const f of bn.frames) if (f.name !== 'seesaw' && !f.name.startsWith('butterfly') && !f.name.startsWith('campfire')) addFrame('scene', f.name, f.spr)
+    for (const f of bn.frames) if (f.name !== 'seesaw' && f.name !== 'sandbox' && !f.name.startsWith('butterfly') && !f.name.startsWith('campfire')) addFrame('scene', f.name, f.spr)
     // 裝飾物各縮小到目標高度：蘑菇 36、樹樁 36、灌木 40、高草叢 38、石頭堆 34、小花叢 28
     const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], targets: { bush: 40, rocks: 34, flowers: 28, tall_grass: 38, mushroom: 36, stump: 36 } })
     for (const f of dc.frames) addFrame('scene', f.name, f.spr)
@@ -642,6 +817,13 @@ async function main() {
     if (!ballS) throw new Error('找不到小球')
     addFrame('toys', 'toy_ball_s', ballS.spr)
     info('小球 toy_ball_s：' + ballS.spr.w + '×' + ballS.spr.h + '（目標高度 ' + BALL_S_H + '）')
+    // v3.6.0：場景裡的土堆用同一張原圖的土堆依目標寬度重新取樣的小尺寸版（toy_dirt_mound_s，寬約 26）
+    const ms = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_dirt_mound: MOUND_S_W }, solveDim: 'w' })
+    const moundS = ms.frames.find((f) => f.name === 'toy_dirt_mound')
+    if (!moundS) throw new Error('找不到土堆')
+    addFrame('toys', 'toy_dirt_mound_s', moundS.spr)
+    moundSpr = moundS.spr
+    info('土堆 toy_dirt_mound_s：' + moundS.spr.w + '×' + moundS.spr.h + '（目標寬度 ' + MOUND_S_W + '）')
     const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120 })
     for (const f of tc.frames) addFrame('toys', f.name, f.spr)
   }
@@ -694,6 +876,152 @@ async function main() {
       addFrame('terrain', 'far', loop, { ax: 0, ay: loop.h })
       info(`遠景 ${loop.w}×${loop.h}（左右鏡像，可水平重複）`)
     }
+  }
+
+  // 7) v3.6.0：收藏品圖示、錢幣、完整紙張（圖集 items，必載）；金色住家與黃金鐘樓（圖集 skins，解鎖才載）
+  {
+    const built = await buildItemIcons(ITEM_BOX)
+    for (const [k, s] of Object.entries(built.icons)) addFrame('items', k, s, { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    info('收藏品圖示去粉紅殘邊（有移除才列出）：' + (Object.entries(built.fringe).filter(([, n]) => n > 0).map(([k, n]) => k + '=' + n).join('、') || '無'))
+    info(`收藏品圖示：畫布 ${ITEM_BOX}×${ITEM_BOX}，共 ${Object.keys(built.icons).length} 張；狗圖 p=${built.dogP.toFixed(2)}、貓圖 p=${built.catP.toFixed(2)}、碎片 F p=${built.f6P.toFixed(2)}；碎片 A～E 平均長邊 ${built.shardAvg.toFixed(1)}`)
+
+    const db = await sheet({
+      file: 'items_dig_b.png', cols: 3, rows: 2, names: ['coin_bronze', 'coin_silver', 'coin_gold', 'fx_reveal', null, null],
+      targets: { coin_bronze: COIN_H, coin_silver: COIN_H, coin_gold: COIN_H, fx_reveal: REVEAL_H },
+    })
+    for (const f of db.frames) addFrame('items', f.name, f.spr)
+    const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], fitMax: PAPER_MAX })
+    for (const f of papers.frames) { const n = defringePink(f.spr, true); info(f.name + '：移除偏粉紅殘邊 ' + n + ' 個像素'); addFrame('items', f.name, f.spr) }
+
+    // 金色住家：和原住家用同一個 p 規則、貼到同樣大小的畫布
+    const hc = atlases.scene.find((f) => f.key === 'house_closed')
+    const hg = await sheet({ file: 'house_gold.png', cols: 3, rows: 1, names: ['house_gold_closed', 'house_gold_open', 'house_gold_night'], targets: { house_gold_closed: 134 }, solveFrom: 'house_gold_closed' })
+    const goldHouse = {}
+    for (const f of hg.frames) {
+      goldHouse[f.name] = padBottomCenter(f.spr, hc.w, hc.h)
+      addFrame('skins', f.name, goldHouse[f.name])
+    }
+    // 黃金鐘樓：關門、開門都用高度 160，貼到 123×160（和現有開門鐘樓同一做法）
+    const tcl = atlases.scene.find((f) => f.key === 'clocktower')
+    const top = atlases.scene.find((f) => f.key === 'clocktower_open')
+    const tg1 = await sheet({ file: 'scene_clocktower_gold.png', cols: 1, rows: 1, names: ['clocktower_gold'], targets: { clocktower_gold: 160 }, solveFrom: 'clocktower_gold' })
+    const tg2 = await sheet({ file: 'scene_clocktower_open_gold.png', cols: 1, rows: 1, names: ['clocktower_open_gold'], targets: { clocktower_open_gold: 160 }, solveFrom: 'clocktower_open_gold' })
+    const gClosed = padBottomCenter(tg1.frames[0].spr, tcl.w, tcl.h)
+    const gOpen = padBottomCenter(tg2.frames[0].spr, tcl.w, tcl.h)
+    const clockOf = (s) => detectClockFace(s)
+    addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: clockOf(gClosed) } })
+    addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: clockOf(gOpen) } })
+    // 收藏冊的「獎勵剪影」預先烘好放進 items（skins 沒載入時收藏冊也能顯示）
+    addFrame('items', 'sil_house_gold', padCenter(shrinkSilhouette(goldHouse.house_gold_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    addFrame('items', 'sil_tower_gold', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+
+    // ---- 檢查：金色版與原版的鐘面、門、窗、輪廓 ----
+    info('')
+    info('===== v3.6.0 金色外觀對位檢查 =====')
+    for (const [name, orig, gold] of [['關門鐘樓', tcl, gClosed], ['開門鐘樓', top, gOpen]]) {
+      const co = clockOf(orig), cg = clockOf(gold)
+      const dx = cg.cx - co.cx, dy = cg.cy - co.cy, dr = cg.r - co.r
+      const line = `${name}：鐘面 原 (${co.cx},${co.cy}) r=${co.r} → 金 (${cg.cx},${cg.cy}) r=${cg.r}；差 dx=${dx} dy=${dy} dr=${dr}`
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2 || Math.abs(dr) > 2) warn(line + '（超過 2px）')
+      else info(line)
+      const db1 = doorBox(orig), db2 = doorBox(gold)
+      info(`${name}：門（木色像素外框，相對素材）原 ${JSON.stringify(db1)} → 金 ${JSON.stringify(db2)}`)
+      const w1 = windowCenters(orig), w2 = windowCenters(gold)
+      info(`${name}：窗（藍灰玻璃塊）原 ${w1.length} 個、金 ${w2.length} 個`)
+      let worst = 0
+      for (const a of w1) { const d = Math.min(...w2.map((b) => Math.hypot(a.x - b.x, a.y - b.y))); if (d > worst) worst = d }
+      info(`${name}：每個原版窗到金版最近窗的距離，最大 ${worst.toFixed(1)} px`)
+      const x = alphaXor(orig, gold)
+      info(`${name}：輪廓差異（XOR）${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%（原版不透明 ${x.tot}）`)
+    }
+    for (const [n, o, g] of [['住家 關門', 'house_closed', 'house_gold_closed'], ['住家 開門', 'house_open', 'house_gold_open'], ['住家 夜晚', 'house_night', 'house_gold_night']]) {
+      const x = alphaXor(atlases.scene.find((f) => f.key === o), goldHouse[g])
+      info(`${n}：金色版 ${goldHouse[g].w}×${goldHouse[g].h}，與原版輪廓差異 ${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%`)
+    }
+
+    // ---- 預覽圖 ----
+    const bgPrev = { r: 100, g: 118, b: 104 }
+    const small = built.icons
+    const alt = ITEM_BOX === 32 ? await buildItemIcons(48) : await buildItemIcons(32)
+    const i32 = ITEM_BOX === 32 ? small : alt.icons
+    const i48 = ITEM_BOX === 48 ? small : alt.icons
+    const tiles = []
+    for (const k of Object.keys(i32)) {
+      tiles.push({ spr: i32[k], label: k.replace('item_', '') + ' 32', scale: 3 })
+      tiles.push({ spr: i48[k], label: k.replace('item_', '') + ' 48', scale: 3 })
+    }
+    await composePreview('v360-items-32-vs-48.png', tiles, { cols: 6, cellW: 152, cellH: 48 * 3 + 20, scale: 3, bg: bgPrev })
+    const other = [...db.frames, ...papers.frames].map((f) => ({ spr: f.spr, label: f.name + ` ${f.spr.w}x${f.spr.h}`, scale: f.name.startsWith('paper') ? 2 : 4 }))
+    other.push({ spr: moundSpr, label: `mound_s ${moundSpr.w}x${moundSpr.h}`, scale: 4 })
+    other.push({ spr: atlases.toys.find((f) => f.key === 'toy_dirt_mound'), label: 'toy_dirt_mound (old)', scale: 2 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_house_gold'), label: 'sil_house_gold', scale: 4 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_tower_gold'), label: 'sil_tower_gold', scale: 4 })
+    await composePreview('v360-coins-reveal-mound-silhouettes.png', other, { cols: 5, cellW: 210, cellH: 210, scale: 3, bg: bgPrev })
+
+    // 去粉紅殘邊處理後的檢查圖：容易有粉紅光暈的 6 個圖示，放在草地綠底上（48 版，×4）
+    {
+      const keys = ['item_L001', 'item_R004', 'item_U001', 'item_C010', 'item_C008', 'item_R003']
+      const src = ITEM_BOX === 48 ? small : alt.icons
+      await composePreview('v360-defringe-check.png', keys.map((k) => ({ spr: src[k], label: k.replace('item_', '') + ' 48', scale: 4, bgColor: '#5a8f3c' })), { cols: 6, cellW: 48 * 4 + 8, cellH: 48 * 4 + 20, scale: 4, bg: { r: 90, g: 143, b: 60 } })
+    }
+    // 完整紙張：深色、淺色、洋紅三種底；右邊把「偏粉色」的像素標成綠色，看膠帶有沒有被吃掉或留下殘邊
+    const pinkMark = (s) => {
+      const out = Buffer.from(s.rgba)
+      let n = 0
+      for (let i = 0; i < s.w * s.h; i++) {
+        const r = s.rgba[i * 4], g = s.rgba[i * 4 + 1], b = s.rgba[i * 4 + 2]
+        if (s.rgba[i * 4 + 3] && r > 180 && b > 150 && g < Math.min(r, b) - 12) { out[i * 4] = 0; out[i * 4 + 1] = 255; out[i * 4 + 2] = 0; n++ }
+      }
+      return { spr: { w: s.w, h: s.h, rgba: out }, n }
+    }
+    const ptiles = []
+    for (const f of papers.frames) {
+      const pm = pinkMark(f.spr)
+      info(`${f.name}：${f.spr.w}×${f.spr.h}，偏粉色像素 ${pm.n} 個（膠帶或殘邊，標成綠色看位置）`)
+      ptiles.push({ spr: f.spr, label: f.name + ' dark', scale: 4, bgColor: '#22242f' }, { spr: f.spr, label: f.name + ' light', scale: 4, bgColor: '#ececE6' }, { spr: f.spr, label: f.name + ' magenta', scale: 4, bgColor: '#ff00ff' }, { spr: pm.spr, label: f.name + ' pink=green', scale: 4, bgColor: '#22242f' })
+    }
+    await composePreview('v360-items-complete.png', ptiles, { cols: 4, cellW: PAPER_MAX * 4 + 8, cellH: PAPER_MAX * 4 + 20, scale: 4, bg: bgPrev })
+
+    // 碎片 F 與 A～E 並排
+    const shards = [1, 2, 3, 4, 5, 6].map((n) => {
+      const s = small['item_U002_' + n]
+      return { spr: s, label: `U002_${n}`, scale: 6 }
+    })
+    await composePreview('v360-shard-F-vs-A-E.png', shards, { cols: 6, cellW: ITEM_BOX * 6 + 8, cellH: ITEM_BOX * 6 + 20, scale: 6, bg: bgPrev })
+
+    // 黃金鐘樓與現有鐘樓：原版、金色版、疊圖（紅 = 只有原版有；藍 = 只有金色版有；灰 = 兩者都有）
+    const overlay = (a, b) => {
+      const out = Buffer.alloc(a.w * a.h * 4)
+      for (let i = 0; i < a.w * a.h; i++) {
+        const pa = a.rgba[i * 4 + 3] > 0, pb = b.rgba[i * 4 + 3] > 0
+        const c = pa && pb ? [150, 150, 150] : pa ? [230, 40, 40] : pb ? [40, 80, 240] : null
+        if (c) { out[i * 4] = c[0]; out[i * 4 + 1] = c[1]; out[i * 4 + 2] = c[2]; out[i * 4 + 3] = 255 }
+      }
+      return { w: a.w, h: a.h, rgba: out }
+    }
+    const ring = (s, c) => {
+      // 在偵測到的鐘面中心畫十字，確認兩張的鐘面位置
+      const out = Buffer.from(s.rgba)
+      const m = c ? [Math.round(c.cx), Math.round(c.cy)] : null
+      if (m) for (let d = -3; d <= 3; d++) for (const [x, y] of [[m[0] + d, m[1]], [m[0], m[1] + d]]) { const o = (y * s.w + x) * 4; out[o] = 255; out[o + 1] = 0; out[o + 2] = 0; out[o + 3] = 255 }
+      return { w: s.w, h: s.h, rgba: out }
+    }
+    await composePreview('v360-tower-gold-vs-orig.png', [
+      { spr: ring(tcl, clockOf(tcl)), label: 'clocktower (orig)', scale: 4 },
+      { spr: ring(gClosed, clockOf(gClosed)), label: 'clocktower_gold', scale: 4 },
+      { spr: overlay(tcl, gClosed), label: 'overlay red=orig only blue=gold only', scale: 4 },
+      { spr: ring(top, clockOf(top)), label: 'clocktower_open (orig)', scale: 4 },
+      { spr: ring(gOpen, clockOf(gOpen)), label: 'clocktower_open_gold', scale: 4 },
+      { spr: overlay(top, gOpen), label: 'overlay', scale: 4 },
+    ], { cols: 3, cellW: 123 * 4 + 8, cellH: 160 * 4 + 20, scale: 4, bg: bgPrev })
+    await composePreview('v360-house-gold-vs-orig.png', [
+      { spr: atlases.scene.find((f) => f.key === 'house_closed'), label: 'house_closed (orig)', scale: 3 },
+      { spr: goldHouse.house_gold_closed, label: 'house_gold_closed', scale: 3 },
+      { spr: atlases.scene.find((f) => f.key === 'house_open'), label: 'house_open (orig)', scale: 3 },
+      { spr: goldHouse.house_gold_open, label: 'house_gold_open', scale: 3 },
+      { spr: atlases.scene.find((f) => f.key === 'house_night'), label: 'house_night (orig)', scale: 3 },
+      { spr: goldHouse.house_gold_night, label: 'house_gold_night', scale: 3 },
+    ], { cols: 2, cellW: 139 * 3 + 8, cellH: 134 * 3 + 20, scale: 3, bg: bgPrev })
   }
 
   await writeOutputs()

@@ -40,6 +40,9 @@ export interface LoadProgress {
 
 const RETRIES = 2
 
+/** 不在啟動時載入的圖集（解鎖才用到）：外觀（金色住家、黃金鐘樓）。用 assets.loadGroup(名稱) 載入，載入前 assets.get 回傳 null，畫面用預設圖 */
+export const LAZY_ATLASES: readonly string[] = ['skins']
+
 async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   let last: unknown
   for (let i = 0; i <= RETRIES; i++) {
@@ -84,25 +87,11 @@ class Assets {
           if (!res.ok) throw new Error('HTTP ' + res.status)
           return (await res.json()) as Manifest
         })
-        const entries = Object.entries(m.atlases)
+        const entries = Object.entries(m.atlases).filter(([name]) => !LAZY_ATLASES.includes(name))
         const total = entries.length + 1
         let loaded = 1
         this.bump(loaded, total)
-        await Promise.all(
-          entries.map(([name, a]) =>
-            withRetry('素材 ' + a.file, () =>
-              new Promise<HTMLImageElement>((resolve, reject) => {
-                const img = new Image()
-                img.onload = () => resolve(img)
-                img.onerror = () => reject(new Error('無法載入 ' + a.file))
-                img.src = base + a.file
-              }),
-            ).then((img) => {
-              this.images.set(name, img)
-              this.bump(++loaded, total)
-            }),
-          ),
-        )
+        await Promise.all(entries.map(([name]) => this.loadAtlas(base, m, name).then(() => this.bump(++loaded, total))))
         this.manifest = m
         this.ready = true
       })().catch((e) => {
@@ -112,6 +101,44 @@ class Assets {
       })
     }
     return this.loading
+  }
+
+  private loadAtlas(base: string, m: Manifest, name: string): Promise<void> {
+    const a = m.atlases[name]
+    return withRetry('素材 ' + a.file, () =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = () => reject(new Error('無法載入 ' + a.file))
+        img.src = base + a.file
+      }),
+    ).then((img) => {
+      this.images.set(name, img)
+    })
+  }
+
+  private groupLoads = new Map<string, Promise<void>>()
+
+  /** 載入一個延後載入的圖集（例如 skins）；載入完成前 get 回傳 null。重複呼叫只載入一次，失敗後可以再呼叫 */
+  loadGroup(name: string): Promise<void> {
+    let p = this.groupLoads.get(name)
+    if (!p) {
+      p = (async () => {
+        await this.load()
+        if (!this.manifest || !this.manifest.atlases[name] || this.images.has(name)) return
+        await this.loadAtlas(import.meta.env.BASE_URL + 'assets/', this.manifest, name)
+      })().catch((e) => {
+        this.groupLoads.delete(name)
+        throw e
+      })
+      this.groupLoads.set(name, p)
+    }
+    return p
+  }
+
+  /** 這個圖集的圖片已經載入了嗎 */
+  groupLoaded(name: string): boolean {
+    return this.images.has(name)
   }
 
   has(key: string): boolean {
