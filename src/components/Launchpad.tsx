@@ -1,10 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { isOfficialAppId } from '../config/apps'
 import { gameNow } from '../farm/overrides'
 import { earningToday } from '../farm/sim/earning'
 import { useFarmStore } from '../farm/store/farmStore'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { openExternal } from '../lib/openExternal'
+import { officialAppWithUrl } from '../lib/officialApps'
 import { useAppListStore } from '../store/appListStore'
 import { useUIStore } from '../store/uiStore'
 import type { ExternalApp } from '../types'
@@ -43,6 +45,12 @@ function AppTile({ app, onOpen, onMenu }: { app: ExternalApp; onOpen: (a: Extern
   )
 }
 
+/** 新增或編輯時，網址和官方程式完全相同就擋下來（合併規則會把重複的項目拿掉，不如當場告訴使用者） */
+function duplicateOfficialMessage(url: string): string | null {
+  const official = officialAppWithUrl(url)
+  return official ? `這個網址已經是官方程式「${official.name}」，不用重複新增` : null
+}
+
 function ConfirmDialog({ message, confirmLabel, onYes, onNo }: { message: string; confirmLabel: string; onYes: () => void; onNo: () => void }) {
   return (
     <div
@@ -72,7 +80,7 @@ function ConfirmDialog({ message, confirmLabel, onYes, onNo }: { message: string
   )
 }
 
-/** 啟動台：只放使用者自己的程式（內建小遊戲在鐘塔的遊戲館裡） */
+/** 啟動台：官方程式（固定、不能改名或刪除）加上使用者自己新增的程式（內建小遊戲在鐘塔的遊戲館裡） */
 function LaunchpadView() {
   const close = () => useUIStore.getState().setLaunchpadOpen(false)
   const coarse = useMediaQuery('(pointer: coarse)')
@@ -105,6 +113,8 @@ function LaunchpadView() {
   const onMenu = (e: React.MouseEvent, app: ExternalApp) => {
     e.preventDefault()
     e.stopPropagation()
+    // 官方程式不能編輯、不能刪除：不顯示右鍵選單
+    if (isOfficialAppId(app.id)) return
     setMenu({ x: e.clientX, y: e.clientY, app })
   }
 
@@ -210,6 +220,7 @@ function LaunchpadView() {
 
       {dialog?.kind === 'add' && (
         <AppEditorDialog
+          validate={(v) => duplicateOfficialMessage(v.url)}
           onCancel={() => setDialog(null)}
           onSave={(v) => {
             addApp(v)
@@ -220,6 +231,7 @@ function LaunchpadView() {
       {dialog?.kind === 'edit' && (
         <AppEditorDialog
           app={dialog.app}
+          validate={(v) => duplicateOfficialMessage(v.url)}
           onCancel={() => setDialog(null)}
           onSave={(v) => {
             updateApp(dialog.app.id, v)
@@ -240,7 +252,7 @@ function LaunchpadView() {
       )}
       {dialog?.kind === 'restore' && (
         <ConfirmDialog
-          message="要恢復成預設的 5 個程式嗎？你新增與編輯過的程式會被移除。"
+          message="要恢復成只有 7 個官方程式嗎？你新增的程式會被移除。"
           confirmLabel="恢復預設"
           onNo={() => setDialog(null)}
           onYes={() => {

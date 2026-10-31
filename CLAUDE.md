@@ -19,7 +19,10 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 ## 外部程式（啟動台）
 
 - 外部程式清單是使用者自己的，存在瀏覽器（`store/appListStore.ts`，鍵名 `aemc-desktop:app-list`，含 `schemaVersion`），一律透過 `lib/documentStorage.ts` 的儲存層讀寫，不可直接呼叫 localStorage（之後會搬到帳號雲端）。
-- 預設清單在 `src/config/apps.ts` 的 `DEFAULT_APPS`（新使用者與「恢復預設程式」用）。新增預設程式只改這個檔案；圖片圖示放進 `public/icons/<id>.<副檔名>`。
+- **官方程式（v3.4.3 起共 7 個，強制更新給所有人）**：定義在 `src/config/apps.ts` 的 `OFFICIAL_APPS`，順序與穩定 id：`official-filmaster`、`official-specreader`、`official-chemscutter`、`official-elusim`、`official-autoellipso`、`official-moleform`、`official-adsorvia`（Adsorvia 網址是 `…/login`，網址一字不改）。官方程式的名稱、網址、logo 由程式碼決定，不由存檔決定；id 不可改（賺金幣冷卻以 id 為鍵）。新增或改官方程式只改這個檔案，圖示是 `public/icons/official-<小寫程式名>.png`。
+- **合併規則**（`src/lib/officialApps.ts` 的 `mergeOfficialApps`，`appListStore.init` 載入已存清單時與每次修改後都套用，結果和存檔不同才寫回；只動 `apps`，不碰養殖場／設定／備份鍵）：官方 7 個依順序在最前面（少了補回、內容以程式碼為準）；後面接使用者新增的項目，保持相對順序；移除的只有三種：官方 id 的存檔項目（已被取代）、舊預設的確切 id（`LEGACY_DEFAULT_APP_IDS`：`filmaster`、`specreader`、`chemscutter`、`elusim`、`autoellipso`）、與官方網址相同的項目（網址用 `URL.href` 正規化後比對；視為同一個只留官方）。**其他任何項目一律保留，絕對不能刪**；沒有 id 的項目（`parseAppList` 補上由網址＋名稱決定的穩定 id `u-noid-…`）也保留。沒有存檔的新使用者直接得到官方 7 個且不寫入；壞掉或版本不認得的存檔不覆蓋。冪等：重複合併結果相同。
+- 官方程式不能刪除、改名：`Launchpad` 對官方程式不顯示右鍵選單，`updateApp`／`removeApp` 對官方 id 直接忽略；新增或編輯成與官方相同網址由 `AppEditorDialog` 的 `validate` 擋下並說明。「恢復預設程式」= 只留官方 7 個（移除使用者新增的）。以後若有程式要退役，把它的 id 加進 `LEGACY_DEFAULT_APP_IDS` 風格的移除清單，不要用網址或名稱判斷。
+- **logo 處理**：`node scripts/process-logos.mjs <原圖資料夾>`（資料夾內 `<程式名>.png`，不寫死路徑，也可用環境變數 `LOGO_SRC`）→ `public/icons/official-*.png`，一律 144×144 正方形（顯示尺寸 `Launchpad` 的 `ICON_SIZE` 72 的 2 倍，且小於最小來源 175 px，所以都是縮小）：`fit: contain` 保持原比例置中、補透明邊、Lanczos3，不拉伸、不裁切；原圖不進 repo。圖示檔名不在 `assets/` 底下，vite-plugin-pwa 會用內容比對預快取；檔名換新時舊版會載入新圖（升級測試：先載入舊版 dist、切換成新版重新整理，檢查載入與快取的是 `official-*.png`）。注意原圖每個像素都是不透明（背景色畫在圖裡）。
 - 所有外部程式一律用 `openExternal(url)`（`src/lib/openExternal.ts`：`window.open(url, '_blank')`，成功後立刻把 `opener` 設為 null）新分頁開啟，不用 `'noopener,noreferrer'`（加了之後瀏覽器不論成功與否都回傳 null，就無法判斷彈出視窗有沒有被擋，而「開啟成功才給金幣」需要判斷）；不使用 iframe，也沒有 openMode 或「即將推出」機制。視窗系統只給內建程式（小遊戲）。
 - 本網站只支援電腦：可視寬度低於 1024px 顯示提示頁、不載入桌面；不要再加手機介面或觸控虛擬按鈕。不使用全螢幕。
 

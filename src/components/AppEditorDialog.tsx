@@ -8,6 +8,8 @@ interface Props {
   /** 有值 = 編輯這個程式；沒有 = 新增 */
   app?: ExternalApp
   onSave: (v: { name: string; url: string; icon: string }) => void
+  /** 選用：額外檢查（例如網址與官方程式重複），回傳錯誤訊息就不儲存 */
+  validate?: (v: { name: string; url: string; icon: string }) => string | null
   onCancel: () => void
 }
 
@@ -15,7 +17,7 @@ const field =
   'mt-1 w-full rounded-lg border border-white/25 bg-white/15 px-3 py-2 text-sm text-white placeholder-white/45 outline-none focus:bg-white/25'
 
 /** 新增／編輯程式：網址、名稱、圖示（上傳圖片或自動文字圖示） */
-export function AppEditorDialog({ app, onSave, onCancel }: Props) {
+export function AppEditorDialog({ app, onSave, validate, onCancel }: Props) {
   const [url, setUrl] = useState(app?.url ?? '')
   const [name, setName] = useState(app?.name ?? '')
   // 圖示：'' = 自動文字圖示；其他 = 圖片（路徑或 data URL）
@@ -48,7 +50,13 @@ export function AppEditorDialog({ app, onSave, onCancel }: Props) {
       setError('請輸入名稱')
       return
     }
-    onSave({ name: name.trim(), url: finalUrl, icon })
+    const v = { name: name.trim(), url: finalUrl, icon }
+    const problem = validate?.(v)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    onSave(v)
   }
 
   const usingImage = icon !== ''

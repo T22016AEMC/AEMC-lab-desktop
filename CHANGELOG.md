@@ -2,6 +2,20 @@
 
 版本號遵循語意化版本；每次修改程式都要在最上方新增一筆（格式固定，建置時會讀取第一筆的日期）。
 
+## [3.4.3] - 2026-10-31
+
+### 變更
+- **啟動台官方程式改成 7 個（強制更新給所有人，包含已經有自己存清單的人）**，順序：FilMaster、SpecReader、CheMScutter、EluSim、AutoEllipso、MoleForm（新）、Adsorvia（新，網址是 `…/login`）。官方程式有固定的穩定 id（`official-filmaster`、`official-specreader`、`official-chemscutter`、`official-elusim`、`official-autoellipso`、`official-moleform`、`official-adsorvia`），名稱、網址、logo 由程式碼（`src/config/apps.ts` 的 `OFFICIAL_APPS`）決定，不由存檔決定。
+- **合併規則**（`src/lib/officialApps.ts` 的 `mergeOfficialApps`，每次載入清單、每次修改後都套用）：官方 7 個依順序放最前面，少了就補回、名稱／網址／圖示有差就更新；後面接使用者自己新增的程式，保持原本相對順序。舊版 5 個預設程式（以確切 id `filmaster`、`specreader`、`chemscutter`、`elusim`、`autoellipso` 判斷）移除；其他任何項目一律保留。使用者新增的項目網址（正規化後）與官方程式相同時視為同一個，只留官方那筆。合併後重複載入結果相同；沒有存檔的新使用者直接得到官方 7 個（不寫入）；壞掉或版本不認得的存檔不會被覆蓋。
+- 官方程式不能刪除、改名：右鍵不顯示選單（沒有編輯與刪除），store 也再擋一次。新增或編輯成與官方相同的網址會當場提示「這個網址已經是官方程式「…」，不用重複新增」。「恢復預設程式」改成「只留 7 個官方程式、移除你新增的程式」，確認文字同步。
+- **logo**：7 個官方程式改用新的 PNG 圖示（144×144 正方形，保持原比例置中、補透明邊、Lanczos3 縮小；144 = 顯示尺寸 72 px 的 2 倍），由 `scripts/process-logos.mjs <原圖資料夾>` 產生到 `public/icons/official-*.png`；原圖不進 repo。舊的 5 個圖示檔（`filmaster.svg` 等）移除。
+- 沒有 id 的存檔項目（手動編輯或舊格式才可能出現）以前會被丟掉，現在一律保留並補上由網址與名稱決定的穩定 id（名稱缺少就用網址的主機名稱）；網址不是 http／https 的項目仍然捨棄（安全）。
+
+### 其他
+- 存檔格式不變（`app-list` 仍是 schema 1），不升 schema，不重置養殖場；`aemc-desktop:farm`、`aemc-desktop:settings` 與備份鍵都不碰。
+- 賺金幣規則照常（每程式每小時一次、合計每天 10）。因為官方程式換成新 id，升級當下舊 id 的冷卻紀錄對不上，使用者在升級後的那一小時內開官方程式最多多領一次（仍受每日上限 10 限制）；舊紀錄留在存檔裡不影響新紀錄。
+- 已知：7 張原圖的每個像素都是不透明（背景色畫在圖裡，不是透明背景），所以圖示是帶底色的長方形；長寬比不是 1:1 的圖（EluSim 175×152 最扁）會在上下留透明邊，不會拉伸變形。
+
 ## [3.4.2] - 2026-10-31
 
 ### 修正

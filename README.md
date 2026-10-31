@@ -124,11 +124,11 @@ node scripts/process-assets.mjs "<原圖資料夾>"      # 或設定環境變數
 外部程式清單是使用者自己的，存在瀏覽器（`aemc-desktop:app-list`，含 `schemaVersion`，透過 `src/lib/documentStorage.ts` 的可替換儲存層，之後可搬到帳號雲端）。
 
 - 新增：啟動台右上角的「＋」→ 填網址（沒寫 http 會自動補 https，只接受 http／https）、名稱、圖示（上傳圖片會置中裁成正方形並縮成 256×256，或使用文字圖示：名稱前 1～2 個字、顏色依名稱雜湊決定）。
-- 編輯、刪除：在程式圖示上按右鍵（刪除前會確認）。預設的 5 個程式也可以編輯與刪除。啟動台只放你自己的程式；內建的 5 個小遊戲在鐘塔的「遊戲館」。
-- 「恢復預設程式」：還原成預設的 5 個程式。
+- 編輯、刪除：在你自己新增的程式圖示上按右鍵（刪除前會確認）。7 個官方程式（FilMaster、SpecReader、CheMScutter、EluSim、AutoEllipso、MoleForm、Adsorvia）固定排在最前面，不能編輯、刪除或改名；新增與官方相同網址的程式會被提示。內建的 5 個小遊戲在鐘塔的「遊戲館」。
+- 「恢復預設程式」：只留 7 個官方程式，移除你新增的程式。
 - 所有外部程式都用新分頁開啟（`window.open`，成功後把 `opener` 設為 null，見「金幣經濟」），所以不需要檢查網站能不能嵌入。
 
-預設的 5 個程式（FilMaster、SpecReader、CheMScutter、EluSim、AutoEllipso）定義在 [src/config/apps.ts](src/config/apps.ts) 的 `DEFAULT_APPS`；圖片圖示放在 `public/icons/`，`icon` 寫 `'icons/檔名.png'`，寫 `''` 則是文字圖示。
+官方 7 個程式定義在 [src/config/apps.ts](src/config/apps.ts) 的 `OFFICIAL_APPS`（每次載入都會強制合併進使用者的清單，見 `src/lib/officialApps.ts`）；圖示是 `public/icons/official-*.png`，由 `scripts/process-logos.mjs <原圖資料夾>` 產生。
 
 ## 內建程式與小遊戲
 
