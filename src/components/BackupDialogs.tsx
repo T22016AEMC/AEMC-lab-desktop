@@ -100,6 +100,11 @@ export function ImportDialog() {
                   <dt className="text-white/55">啟動台程式</dt>
                   <dd>{state.summary.appCount} 個</dd>
                 </dl>
+                {state.summary.refund > 0 && (
+                  <p data-testid="import-refund" className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs font-semibold leading-relaxed text-amber-100">
+                    此備份含營火，匯入後自動退還 {state.summary.refund} 金幣
+                  </p>
+                )}
                 <p className="mt-3 rounded-lg bg-rose-500/20 px-3 py-2 text-xs font-semibold leading-relaxed text-rose-200">匯入會覆蓋目前的存檔，無法復原</p>
                 <button
                   type="button"

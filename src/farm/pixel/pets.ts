@@ -56,7 +56,13 @@ export interface BathState {
   /** 跳進去、爬出來的起點 */
   fromX: number
   fromY: number
+  /** 走去水池（walk）：到目前為止離站位最近的距離（沿路線算，沒有路線用直線），以及距離上次拉近 WALK_PROGRESS_PX 以上已經過的秒數（v3.5.1 放棄條件用） */
+  bestD: number
+  stall: number
 }
+
+/** 走去水池的放棄條件（v3.5.1）：總共最多走 WALK_MAX_SECONDS 秒；WALK_STALL_SECONDS 秒內離站位沒有再靠近 WALK_PROGRESS_PX 就放棄；離站位 WALK_ARRIVE_PX 以內算到了 */
+export const BATH_WALK = { maxSeconds: 45, stallSeconds: 12, progressPx: 4, arrivePx: 6 } as const
 
 /** 泡澡各階段的時間（秒）；soak 約 4.5 秒 */
 export const BATH_TIMES = { jump: 0.5, soak: 4.5, climb: 0.55, shake: 1.5 } as const
@@ -104,10 +110,6 @@ export interface Actor {
   bld: BuildingUse | null
   /** 去食盆吃之後，至少隔這麼久（秒）才會再去 */
   bowlCool: number
-  /** 營火聚集之後的冷卻（秒） */
-  gatherCool: number
-  /** 聚集期間累積、還沒併進存檔的心情增加量（畫面層每次結算時取走） */
-  moodGain: number
   /** 去建築失敗（走太久、份量被吃完）之後暫時不再嘗試（秒） */
   bldCool: number
   /** 下雨後多久出發去躲雨（秒）；null = 沒在下雨 */
@@ -162,7 +164,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
-    bld: null, bowlCool: 0, gatherCool: 0, moodGain: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null,
+    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -347,7 +349,7 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
     updateBath(a, dt, env)
     return
   }
-  // 玩耍中（丟球）：整個行為交給 play.ts 的狀態機；不去食盆、營火、狗窩，也不躲雨
+  // 玩耍中（丟球）：整個行為交給 play.ts 的狀態機；不去食盆、狗窩，也不躲雨
   if (a.play) {
     updatePlay(a, dt, env, PLAY_OPS)
     return
@@ -511,7 +513,7 @@ export function beginBathWalk(a: Actor, L: Layout): boolean {
   if (a.bath || a.drag || a.fly) return false
   releaseUse(a)
   a.override = null
-  a.bath = { phase: 'walk', t: 0, fromX: a.x, fromY: a.y }
+  a.bath = { phase: 'walk', t: 0, fromX: a.x, fromY: a.y, bestD: Infinity, stall: 0 }
   const st = pondStand(L)
   a.tx = st.x
   a.ty = st.y
@@ -531,9 +533,17 @@ export function cancelBath(a: Actor): void {
 /** 直接跳進水池（拖曳放開在水面上，或走到水池前）。已經通過扣點與占用檢查 */
 export function enterPond(a: Actor): void {
   releaseUse(a)
-  a.bath = { phase: 'jump', t: 0, fromX: a.x, fromY: a.y }
+  a.bath = { phase: 'jump', t: 0, fromX: a.x, fromY: a.y, bestD: 0, stall: 0 }
   a.override = null
   setAction(a, 'sit', 1e9)
+}
+
+/** 沿著目前路線到終點還剩多遠（路線是 A* 的轉折點；沒有路線就用直線距離）。繞過障礙時直線距離會暫時不變，路線剩餘長度會持續變短 */
+function routeLeft(a: Actor, direct: number): number {
+  if (!a.path.length) return direct
+  let sum = Math.hypot(a.path[0].x - a.x, a.path[0].y - a.y)
+  for (let i = 1; i < a.path.length; i++) sum += Math.hypot(a.path[i].x - a.path[i - 1].x, a.path[i].y - a.path[i - 1].y)
+  return sum
 }
 
 function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
@@ -547,7 +557,8 @@ function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
       const st = pondStand(L)
       a.tx = st.x
       a.ty = st.y
-      if (Math.hypot(a.tx - a.x, a.ty - a.y) < 3) {
+      const dist = Math.hypot(a.tx - a.x, a.ty - a.y)
+      if (dist < BATH_WALK.arrivePx) {
         const err = env.requestBath(a)
         if (err) {
           env.notify(err)
@@ -559,8 +570,13 @@ function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
         return
       }
       moveToward(a, dt, sp.speed * 1.6, env)
-      // 走太久（例如被擠開卡住）：放棄
-      if (b.t > 20) {
+      // 放棄：走太久，或一段時間都沒有更靠近站位（例如被擠開卡住）。正常繞路會持續拉近，不會被誤判
+      const left = routeLeft(a, dist)
+      if (left < b.bestD - BATH_WALK.progressPx) {
+        b.bestD = left
+        b.stall = 0
+      } else b.stall += dt
+      if (b.t > BATH_WALK.maxSeconds || b.stall > BATH_WALK.stallSeconds) {
         a.bath = null
         setAction(a, 'idle', 1)
       }

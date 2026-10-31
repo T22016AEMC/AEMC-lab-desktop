@@ -1,5 +1,5 @@
 import { LocalStorageDocument } from '../../lib/documentStorage'
-import { isResetSchema, parseSave } from './migrate'
+import { isResetSchema, legacyRefundOf, parseSave } from './migrate'
 import type { LoadResult, SaveData, SaveStorage } from './types'
 
 const KEY = 'aemc-desktop:farm-save'
@@ -24,7 +24,18 @@ export class LocalStorageAdapter extends LocalStorageDocument<SaveData> implemen
     } catch {
       return { save: null, reset: 'none' }
     }
-    if (!isResetSchema(obj)) return { save: parseSave(obj), reset: 'none' }
+    if (!isResetSchema(obj)) {
+      const save = parseSave(obj)
+      const refund = legacyRefundOf(obj)
+      if (!save || refund <= 0) return { save, reset: 'none' }
+      // 有已移除的建築：退款後的存檔立刻寫回（營火從儲存裡消失，下次載入不會再退）。寫入失敗也照用，下次載入會從同一份原始資料重算（還是退一次）
+      try {
+        await this.saveStrict(save)
+      } catch {
+        /* 忽略 */
+      }
+      return { save, reset: 'none', refund }
+    }
     // 舊格式：先備份（已經有備份就不覆蓋；寫入失敗也不阻擋重置），再換成全新存檔
     if ((await this.backupSlot.snapshot()) === null) await this.backupSlot.restore(raw)
     const fresh = makeFresh()

@@ -51,6 +51,22 @@ function cleanBowl(raw: unknown): BowlState {
   return { date: typeof r.date === 'string' ? r.date : '', used: Math.floor(num(r.used, 0, 0)) }
 }
 
+/**
+ * v3.5.1 移除的建築與退款金幣（舊存檔還擁有時，載入就退款並從 ownedBuildings 拿掉）。
+ * 「只退一次」的依據是這份原始資料裡還有它：載入後立刻寫回（storage.ts），拿掉之後就不會再退；不新增任何存檔欄位。
+ */
+export const REMOVED_BUILDING_REFUNDS: Readonly<Record<string, number>> = { campfire: 20 }
+
+/** 這份原始存檔載入時會退多少金幣（沒有已移除的建築 = 0） */
+export function legacyRefundOf(raw: unknown): number {
+  if (!raw || typeof raw !== 'object') return 0
+  const owned = (raw as Record<string, unknown>).ownedBuildings
+  if (!Array.isArray(owned)) return 0
+  let sum = 0
+  for (const [id, coins] of Object.entries(REMOVED_BUILDING_REFUNDS)) if (owned.includes(id)) sum += coins
+  return sum
+}
+
 function cleanOwned(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return [...new Set(raw.filter(isBuildingId))]
@@ -78,7 +94,7 @@ export function parseSave(raw: unknown): SaveData | null {
   const save: SaveData = {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     pets,
-    points: Math.floor(num(r.points, 0, 0)),
+    points: Math.floor(num(r.points, 0, 0)) + legacyRefundOf(r),
     lastSeen: num(r.lastSeen, now),
     lastDailyClaim: typeof r.lastDailyClaim === 'string' ? r.lastDailyClaim : null,
     gifts: { date: typeof gifts.date === 'string' ? gifts.date : '', count: Math.floor(num(gifts.count, 0, 0)) },

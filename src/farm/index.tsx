@@ -10,6 +10,7 @@ import * as layoutMod from './pixel/layout'
 import { bowlLeft } from './sim/buildings'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
@@ -99,7 +100,7 @@ export function Farm() {
 
   // 數值結算（每 10 秒）與禮物擲骰（每分鐘）。不受動畫暫停影響，用真實時間
   useEffect(() => {
-    const stat = window.setInterval(() => useFarmStore.getState().tick(engine.sleepersAtBuilding(), engine.takeMoodGains()), BALANCE.statTickSeconds * 1000)
+    const stat = window.setInterval(() => useFarmStore.getState().tick(engine.sleepersAtBuilding()), BALANCE.statTickSeconds * 1000)
     const gift = window.setInterval(() => useFarmStore.getState().rollGift(), 60_000)
     return () => {
       window.clearInterval(stat)
@@ -563,6 +564,7 @@ export function Farm() {
 
       {status === 'ready' && assetsReady && needFirst && <AdoptDialog first />}
       {status === 'ready' && assetsReady && <ResetNotice />}
+      {status === 'ready' && assetsReady && <LegacyRefundNotice />}
       {hasSave && !needFirst && adoptOpen && <AdoptDialog />}
 
       {DevPanel && (

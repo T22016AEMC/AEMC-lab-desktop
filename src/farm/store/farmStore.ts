@@ -3,7 +3,7 @@ import { BALANCE } from '../config/balance'
 import { gameNow, worldHour } from '../overrides'
 import { LocalStorageAdapter } from '../save/storage'
 import type { SaveData, SaveStorage } from '../save/types'
-import { applyMoodGains, applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
+import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
@@ -25,6 +25,8 @@ interface FarmState {
   save: SaveData | null
   /** 重置寫入失敗（瀏覽器空間不足）：舊存檔沒有被改動，畫面顯示說明、不能領養，下次載入重試 */
   resetFailed: boolean
+  /** 載入時退還的已移除建築金幣（營火 20），給一次性對話框用；只在記憶體，不進存檔，0 = 沒有 */
+  legacyRefund: number
   /** 還沒被畫面層消化的效果（浮字、動畫） */
   effects: FarmEffect[]
   /** 目前頭上有禮物、等著被點擊的寵物 id（不存檔） */
@@ -43,9 +45,10 @@ interface FarmState {
   /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
   wakeForDrag: (petId: string) => void
   /** 週期性結算：數值下降、跨日的每日獎勵、睡覺的心情回復（atBuilding = 睡在建築旁的寵物 id） */
-  tick: (atBuilding?: ReadonlySet<string>, moodGains?: ReadonlyMap<string, number>) => void
+  tick: (atBuilding?: ReadonlySet<string>) => void
   /** 重置後的一次性提示按「確定」：清掉旗標並存檔 */
   dismissResetNotice: () => void
+  dismissLegacyRefund: () => void
   /** 購買建築（扣金幣、紀錄、存檔）。回傳錯誤訊息或 null */
   buyBuilding: (id: string) => string | null
   /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）。回傳錯誤訊息或 null */
@@ -75,6 +78,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   status: 'loading',
   save: null,
   resetFailed: false,
+  legacyRefund: 0,
   effects: [],
   gifts: [],
 
@@ -89,7 +93,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   initImpl: async () => {
     const now = gameNow()
     // v3.4.0 一次性重置：schema 4 以下的舊存檔在這裡換成全新存檔（已備份）；寫入失敗就不動舊存檔、這次不能用養殖場，下次載入重試
-    const { save: loaded, reset } = await storage.loadOrReset(() => ({ ...newSave(now, todayKey(now)), resetNotice: true as const }))
+    const { save: loaded, reset, refund } = await storage.loadOrReset(() => ({ ...newSave(now, todayKey(now)), resetNotice: true as const }))
     if (reset === 'failed') {
       suspendSaves()
       set({ status: 'ready', save: null, resetFailed: true })
@@ -105,6 +109,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     save = daily.save
     set({ status: 'ready', save })
     if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
+    if (refund) set({ legacyRefund: refund })
   },
 
   adoptPet: (req) => {
@@ -151,7 +156,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
   },
 
-  tick: (atBuilding = NO_PETS, moodGains) => {
+  tick: (atBuilding = NO_PETS) => {
     const save = get().save
     if (!save) return
     const now = gameNow()
@@ -159,12 +164,13 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const elapsedSec = Math.min(120, Math.max(0, (now - save.lastSeen) / 1000))
     let next = advanceSave(save, now, false)
     next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
-    if (moodGains?.size) next = applyMoodGains(next, moodGains)
     const daily = claimDaily(next, todayKey(now))
     next = daily.save
     if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`)
     if (next !== save) set({ save: next })
   },
+
+  dismissLegacyRefund: () => set({ legacyRefund: 0 }),
 
   dismissResetNotice: () => {
     const save = get().save

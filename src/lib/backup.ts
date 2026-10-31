@@ -1,5 +1,5 @@
 import { buildingDef } from '../farm/config/buildings'
-import { isResetSchema, parseSave } from '../farm/save/migrate'
+import { isResetSchema, legacyRefundOf, parseSave } from '../farm/save/migrate'
 import { CURRENT_SCHEMA_VERSION, type SaveData, type SaveStorage } from '../farm/save/types'
 import { APP_LIST_SCHEMA_VERSION, parseAppList, type AppListData } from '../store/appListStore'
 import type { DocumentStorage } from './documentStorage'
@@ -40,6 +40,8 @@ export interface BackupSummary {
   points: number
   buildings: string[]
   appCount: number
+  /** 備份裡有已移除的建築（營火），匯入後自動退還的金幣；沒有 = 0 */
+  refund: number
 }
 
 export type ParseResult = { ok: true; backup: BackupFile; summary: BackupSummary } | { ok: false; error: string }
@@ -54,6 +56,7 @@ export function summarize(b: BackupFile): BackupSummary {
     points: b.data.farm.points,
     buildings: b.data.farm.ownedBuildings.map((id) => buildingDef(id)?.name ?? id),
     appCount: b.data.appList.apps.length,
+    refund: 0,
   }
 }
 
@@ -93,7 +96,7 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
     appVersion: typeof r.appVersion === 'string' ? r.appVersion : '',
     data: { farm, appList },
   }
-  return { ok: true, backup, summary: summarize(backup) }
+  return { ok: true, backup, summary: { ...summarize(backup), refund: legacyRefundOf(farmRaw) } }
 }
 
 /**

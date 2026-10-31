@@ -74,6 +74,8 @@ export interface SaveData {
 export interface LoadResult {
   save: SaveData | null
   reset: 'none' | 'done' | 'failed'
+  /** 載入時退還的已移除建築金幣（v3.5.1 起營火 20）；沒有 = 0 或省略。只給畫面層顯示一次性提示，不進存檔 */
+  refund?: number
 }
 
 export interface SaveStorage {

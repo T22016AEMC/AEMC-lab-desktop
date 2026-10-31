@@ -59,22 +59,12 @@ export const CAT_TREE_W = 72
 export const CAT_TREE_H = 90
 export const BOWLS_W = 57
 export const BOWLS_H = 26
-/** v3.4.0 營火的素材尺寸與錨點 x（A、B、熄滅版同一畫布，要和 manifest 一致，測試會比對） */
-export const CAMPFIRE_W = 96
-export const CAMPFIRE_H = 81
-export const CAMPFIRE_AX = 48
-/** 營火火焰光暈的範圍（相對腳底中心）：水池水花與塔門都不可落在這個範圍內（排位時檢查） */
-export const CAMPFIRE_GLOW = { rx: 40, up: 62, down: 10 }
 /** 食盆水盆緊貼狗窩右緣：食盆水盆的錨點 x = 狗窩的錨點 x + 這個值（兩個素材的不透明像素逐列量過，最窄處只留 1 像素縫，不重疊） */
 export const BOWLS_DX_FROM_KENNEL = 79
 /** 貓跳台中心 = 鐘樓中心 + 這個值（v3.3.1 是 −6，v3.4.0 往右移 12）；右緣離畫面右緣約 30 */
 export const CAT_TREE_DX_FROM_TOWER = 6
 /** 貓跳台右緣離畫面右緣至少這麼遠 */
 export const CAT_TREE_RIGHT_MARGIN = 28
-/** 營火左右兩側聚集位置離營火中心的水平距離（buildingUse 的座位用同一個值） */
-export const CAMPFIRE_SIDE_SEAT_DX = 54
-/** 營火：水平中心對齊右邊那棵樹，腳底比樹腳底低這個範圍（偏好值是中間） */
-export const CAMPFIRE_BELOW_TREE = [40, 60] as const
 /** 貓跳台頂端再往上這麼多（睡在頂層平台的貓比平台高約 10 像素；頂層貓的 ZZZ 畫在頭旁邊，不再往上）要在塔門下緣之下 */
 export const CAT_TREE_HEADROOM = 12
 /**
@@ -297,10 +287,29 @@ export function pondStand(L: Layout): { x: number; y: number } {
   const pd = pondPos(L)
   const st = pondStrip(L)
   const w = waterEllipse(L)
+  // v3.5.1：太矮的視窗（H < 287）沒有洗澡通道，原本的站位落在不可走的區域、寵物走不到。
+  // 備援站位 = 主要活動範圍最左邊（再往右 4）、高度在水面中心偏下；起跳與爬出都用同一個點。H ≥ 287 完全不變。
+  if (!st) return fallbackStand(L, w)
   const x = pd.x - POND_AX + POND_W + POND_STAND_DX
   const y0 = st ? st.y0 + 2 : L.farBottom + BACK_MARGIN
   const y1 = st ? st.y1 : L.house.baseY - HOUSE_H - 4
   return { x, y: Math.max(y0, Math.min(y1, w.cy + 16)) }
+}
+
+const fallbackCache = new WeakMap<Layout, { owned: ReadonlySet<string>; pt: { x: number; y: number } }>()
+function fallbackStand(L: Layout, w: { cy: number }): { x: number; y: number } {
+  const hit = fallbackCache.get(L)
+  if (hit && hit.owned === L.owned) return hit.pt
+  const b = petBounds(L)
+  // 高度在水面中心偏下，但不低於狗窩素材頂端（狗窩的位置不看有沒有買：洗完的寵物不可站在狗窩屋頂後面被蓋住，v3.4.1 修過同樣的問題）
+  const kennel = buildingSlots(L).find((s) => s.id === 'kennel')
+  let y = Math.max(b.y0 + 2, Math.min(b.y1, w.cy + 16))
+  if (kennel) y = Math.max(b.y0 + 2, Math.min(y, kennel.y - KENNEL_H - 1))
+  const want = { x: b.x0 + 4, y }
+  // 極端小的視窗（H 約 226～231）這個點被障礙擋住：換成最近的可站位置
+  const pt = isWalkable(L, want.x, want.y) ? want : nearestWalkable(L, want.x, want.y)
+  fallbackCache.set(L, { owned: L.owned, pt })
+  return pt
 }
 
 /** 所有可走的區域：主要活動範圍＋水池旁那條可走帶 */
@@ -392,7 +401,7 @@ const DECOR_BLOCK_D = 10
 
 const hit = (r: Rect, o: Rect, gx = 0, gy = gx): boolean => r.x0 < o.x1 + gx && r.x1 > o.x0 - gx && r.y0 < o.y1 + gy && r.y1 > o.y0 - gy
 /** 草地上的建築 id（排位時要檢查素材外框） */
-const GRASS_IDS = ['campfire', 'picnicMat', 'sandbox']
+const GRASS_IDS = ['picnicMat', 'sandbox']
 const sceneCache = new WeakMap<Layout, { back: SceneObject[]; slots: BuildingSlot[]; decor: SceneObject[] }>()
 
 /** 草地上的小路上緣（路與草地的交界）；建築空位貼在這條線上 */
@@ -513,12 +522,12 @@ export function footprints(L: Layout): Rect[] {
   return [...backFootprints(L), ...scene(L).decor.map(decorRect)]
 }
 
-export type SlotKind = 'kennel' | 'catTree' | 'small' | 'large'
+export type SlotKind = 'kennel' | 'catTree' | 'small'
 
 /**
  * 建築空位：x、y = 腳底中心（邏輯座標）；w、h = 之後放的素材外框大小（佔位範圍）；
  * fw、fd = 腳下的佔地（寬、深），空位彼此、與固定物件的佔地都不重疊。
- * id 就是專用標記：kennel（狗窩）、bowls（食盆水盆）、catTree（貓跳台）、campfire（營火）、
+ * id 就是專用標記：kennel（狗窩）、bowls（食盆水盆）、catTree（貓跳台）、
  * picnicMat（野餐墊）、sandbox（沙坑）。
  */
 export interface BuildingSlot {
@@ -547,7 +556,6 @@ export const SLOT_SPECS: SlotSpec[] = [
   { id: 'kennel', name: '狗窩', kind: 'kennel', w: KENNEL_W, h: KENNEL_H, fw: 76, fd: 22 },
   { id: 'bowls', name: '食盆水盆', kind: 'small', w: BOWLS_W, h: BOWLS_H, fw: 48, fd: 12 },
   { id: 'catTree', name: '貓跳台', kind: 'catTree', w: CAT_TREE_W, h: CAT_TREE_H, fw: 53, fd: 22 },
-  { id: 'campfire', name: '營火', kind: 'large', w: CAMPFIRE_W, h: CAMPFIRE_H, fw: 74, fd: 20 },
   { id: 'picnicMat', name: '野餐墊', kind: 'small', w: 117, h: 69, fw: 84, fd: 20 },
   { id: 'sandbox', name: '沙坑', kind: 'small', w: 110, h: 65, fw: 84, fd: 16 },
 ]
@@ -586,7 +594,7 @@ export function slotBlockers(slots: BuildingSlot[], owned: ReadonlySet<string>):
 /**
  * 排空位。不手調座標：全部依草地上緣、走道位置、視窗大小算出。
  *  走道上：狗窩（路燈後面，左緣被燈桿蓋住 KENNEL_TUCK 像素，位置固定）→ 食盆水盆（狗窩右邊、素材間隔 BOWLS_GAP）→ 貓跳台（鐘樓正下方偏左，右緣離畫面右緣 > 40）；腳底都在走道上半部。
- *  草地上：野餐墊（鐘樓前面、塔門正下方、貓跳台上方，貼地不遮塔門）→ 遊樂設施（洗澡通道右邊）→ 營火（草地中段偏右）→ 花圃、沙坑（草地中段）。
+ *  草地上：野餐墊（鐘樓前面、塔門正下方、貓跳台上方，貼地不遮塔門）→ 沙坑（草地中段）。
  * 找不到位置的空位不放（回傳的陣列沒有它），由 buildingAvailability 轉成「此視窗大小空間不足」。
  */
 function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
@@ -654,20 +662,6 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
         gap = 10
         break
       }
-      case 'campfire': {
-        // 右邊那棵樹的正下方：水平中心對齊該樹，腳底比樹腳底低 CAMPFIRE_BELOW_TREE（偏好中間），在樹的前面
-        const trees = backRow(L).filter((o) => o.key === 'tree')
-        if (!trees.length) continue
-        const tr = trees.reduce((m, o) => (o.x > m.x ? o : m))
-        x0 = tr.x
-        x1 = tr.x
-        ax = tr.x
-        y0 = tr.y + CAMPFIRE_BELOW_TREE[0]
-        y1 = tr.y + CAMPFIRE_BELOW_TREE[1]
-        ay = (y0 + y1) / 2
-        gap = 8
-        break
-      }
       case 'sandbox':
         // 還沒開放（留給之後的版本）：草地中段偏右
         x0 = b.x0 + 8 + sp.fw / 2
@@ -692,13 +686,6 @@ function computeSlots(L: Layout, obstacles: Rect[]): BuildingSlot[] {
           const box = { x0: x - Math.floor(sp.w / 2), x1: x - Math.floor(sp.w / 2) + sp.w, y0: y - sp.h, y1: y }
           if (avoid.some((q) => hit(box, q))) continue
           if (placed.some((q) => ['kennel', 'bowls', 'catTree'].includes(q.id) ? hit(box, slotBox(q), 4) : hit(box, slotBox(q), 6, 4))) continue
-          // 營火的光暈範圍不可蓋到水池（水花）與塔門
-          if (sp.id === 'campfire') {
-            // 左側的聚集位置（中心左 CAMPFIRE_SIDE_SEAT_DX）要離洗澡通道至少 30 像素
-            if (strip && x - CAMPFIRE_SIDE_SEAT_DX < strip.x1 + 30) continue
-            const g = { x0: x - CAMPFIRE_GLOW.rx, x1: x + CAMPFIRE_GLOW.rx, y0: y - CAMPFIRE_GLOW.up, y1: y + CAMPFIRE_GLOW.down }
-            if (hit(g, avoid[2], 6) || hit(g, avoid[3], 4)) continue
-          }
         }
         // 野餐墊、貓跳台與路燈之外的空位：和已放的空位保持 gap；走道上的空位彼此間隔 12
         if (placed.some((q) => hit(r, slotFootprint(q), gap, Math.max(6, gap / 2)))) continue
