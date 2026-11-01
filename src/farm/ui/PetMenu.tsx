@@ -4,7 +4,7 @@ import { SPECIES, variantOf } from '../config/species'
 import { worldHour } from '../overrides'
 import { PLAY_TOYS, petActions, type PlayToyId } from '../sim/commands'
 import { isSleeping } from '../sim/rules'
-import { stageOf, weightLabel, heightCm } from '../sim/stats'
+import { stageOf, weightLabel, heightCm, weightKg } from '../sim/stats'
 import { useFarmStore } from '../store/farmStore'
 
 /** 像素風的數值條：10 格 */
@@ -99,7 +99,7 @@ export const PetMenu = forwardRef<
         <Bar label="清潔" value={pet.cleanliness} color="#3b9be8" />
       </div>
       <div className="mt-1 text-[10px] text-[#8a5a2b]">
-        身高 {heightCm(pet, v.baseCm, nowMs)} 公分・體重 {Math.round(pet.weight)}（{weightLabel(pet.weight)}）
+        身高 {heightCm(v.baseCm, stageOf(pet, nowMs))} 公分・體重 {weightKg(v.baseKg, pet.weight, stageOf(pet, nowMs)).toFixed(1)} 公斤（{weightLabel(pet.weight)}）
       </div>
       {view === 'toys' ? (
         <div className="mt-2 grid grid-cols-3 gap-1.5" data-testid="toy-list">

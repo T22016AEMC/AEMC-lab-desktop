@@ -6,8 +6,10 @@ export interface Variant {
   name: string
   /** 像素素材的鍵名（public/assets/manifest.json 裡的 dog_<key>_*、cat_<key>_*、front_*） */
   assetKey: string
-  /** 成年、身高係數 1 時的身高（公分，資訊卡顯示用） */
+  /** 成年肩高（公分，資訊卡顯示用；v3.6.1 起由品種決定，不再乘個體的身高係數） */
   baseCm: number
+  /** 成年標準體重（公斤，資訊卡顯示用）：顯示的公斤 = baseKg ×（0.7 + 0.006 × 遊戲體重值） */
+  baseKg: number
 }
 
 export interface SpeciesDef {
@@ -25,21 +27,21 @@ export interface SpeciesDef {
 }
 
 const DOG_VARIANTS: Variant[] = [
-  { id: 'shiba', name: '柴犬', assetKey: 'shiba', baseCm: 38 },
-  { id: 'corgi', name: '柯基', assetKey: 'corgi', baseCm: 28 },
-  { id: 'husky', name: '哈士奇', assetKey: 'husky', baseCm: 58 },
-  { id: 'golden', name: '黃金獵犬', assetKey: 'golden', baseCm: 60 },
-  { id: 'bordercollie', name: '邊牧', assetKey: 'collie', baseCm: 52 },
-  { id: 'poodle', name: '貴賓', assetKey: 'poodle', baseCm: 32 },
+  { id: 'shiba', name: '柴犬', assetKey: 'shiba', baseCm: 38, baseKg: 10 },
+  { id: 'corgi', name: '柯基', assetKey: 'corgi', baseCm: 28, baseKg: 12 },
+  { id: 'husky', name: '哈士奇', assetKey: 'husky', baseCm: 55, baseKg: 21 },
+  { id: 'golden', name: '黃金獵犬', assetKey: 'golden', baseCm: 57, baseKg: 30 },
+  { id: 'bordercollie', name: '邊牧', assetKey: 'collie', baseCm: 52, baseKg: 17 },
+  { id: 'poodle', name: '貴賓', assetKey: 'poodle', baseCm: 33, baseKg: 6 },
 ]
 
 const CAT_VARIANTS: Variant[] = [
-  { id: 'tabby', name: '橘虎斑', assetKey: 'orange', baseCm: 25 },
-  { id: 'black', name: '黑貓', assetKey: 'black', baseCm: 25 },
-  { id: 'calico', name: '三花', assetKey: 'calico', baseCm: 24 },
-  { id: 'siamese', name: '暹羅', assetKey: 'siamese', baseCm: 24 },
-  { id: 'britishblue', name: '英短藍貓', assetKey: 'bluecat', baseCm: 28 },
-  { id: 'ragdoll', name: '布偶貓', assetKey: 'ragdoll', baseCm: 30 },
+  { id: 'tabby', name: '橘虎斑', assetKey: 'orange', baseCm: 25, baseKg: 4.5 },
+  { id: 'black', name: '黑貓', assetKey: 'black', baseCm: 25, baseKg: 4.2 },
+  { id: 'calico', name: '三花', assetKey: 'calico', baseCm: 24, baseKg: 4.0 },
+  { id: 'siamese', name: '暹羅', assetKey: 'siamese', baseCm: 25, baseKg: 4.0 },
+  { id: 'britishblue', name: '英短藍貓', assetKey: 'bluecat', baseCm: 26, baseKg: 5.5 },
+  { id: 'ragdoll', name: '布偶貓', assetKey: 'ragdoll', baseCm: 28, baseKg: 7.0 },
 ]
 
 export const SPECIES: Record<SpeciesId, SpeciesDef> = {

@@ -55,7 +55,7 @@ export function MenuBar() {
           </svg>
         </button>
       </div>
-      <div className="flex shrink-0 items-center gap-3 px-2">
+      <div className="flex shrink-0 items-center gap-3 whitespace-nowrap px-2">
         {petCount !== null && (
           <button
             type="button"
@@ -78,6 +78,16 @@ export function MenuBar() {
             建築
           </button>
         )}
+        {/* 收藏冊（v3.6.1 起從 Logo 選單搬到這裡，和領養、建築排在一起；沒有存檔也能開） */}
+        <button
+          type="button"
+          data-testid="collection-button"
+          onClick={() => useUIStore.getState().setCollectionOpen(true)}
+          className="rounded px-2 py-px font-semibold hover:bg-white/20"
+          title="收藏冊"
+        >
+          收藏冊
+        </button>
         {petCount !== null && (
           <span className="tabular-nums" title="寵物數量" aria-label={`寵物 ${petCount}/${PET_CAPACITY}`}>
             🐾 {petCount}/{PET_CAPACITY}

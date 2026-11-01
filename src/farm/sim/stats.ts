@@ -57,9 +57,23 @@ export function weightLabel(weight: number): string {
   return '偏胖'
 }
 
-/** 資訊卡顯示的身高（公分）：品種基準 × 身高係數 ×（幼年 0.6） */
-export function heightCm(pet: Pet, baseCm: number, nowMs: number): number {
-  return Math.round(baseCm * pet.heightFactor * (stageOf(pet, nowMs) === 'young' ? 0.6 : 1))
+/** 幼年（未滿 adultDays 天）顯示的身高、體重倍率；成年顯示完整 */
+export const YOUNG_HEIGHT_MUL = 0.6
+export const YOUNG_WEIGHT_MUL = 0.3
+
+/** 資訊卡顯示的身高（公分，整數）：品種的成年肩高 ×（幼年 0.6）。由品種決定，不看個體的身高係數、不存檔 */
+export function heightCm(baseCm: number, stage: Stage): number {
+  return Math.round(baseCm * (stage === 'young' ? YOUNG_HEIGHT_MUL : 1))
+}
+
+/**
+ * 資訊卡顯示的體重（公斤，1 位小數）：品種標準體重 ×（0.7 + 0.006 × 遊戲體重值）×（幼年 0.3）。
+ * 遊戲體重值範圍 0～100：50 剛好是標準、0 是 70%、100 是 130%。遊戲內部的體重值、標準／偏瘦／偏胖判斷與存檔欄位都不動。
+ */
+export function weightKg(baseKg: number, weight: number, stage: Stage): number {
+  const w = clamp100(Number.isFinite(weight) ? weight : 50)
+  // + 1e-6：剛好落在 .x5 的數字（例如 5.5 × 1.3 = 7.15）不要被浮點誤差往下捨
+  return Math.round(baseKg * (0.7 + 0.006 * w) * (stage === 'young' ? YOUNG_WEIGHT_MUL : 1) * 10 + 1e-6) / 10
 }
 
 /** 數值低於門檻時要冒出的提示（優先順序：餓、髒、心情差） */

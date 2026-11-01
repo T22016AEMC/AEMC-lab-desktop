@@ -5,8 +5,8 @@ export const BALANCE = {
   dailyBonus: 5,
   /** 領養後滿幾天算成年 */
   adultDays: 3,
-  /** 每小時下降量 */
-  decayPerHour: { satiety: 1.7, mood: 1.3, cleanliness: 1.1 },
+  /** 每小時下降量（v3.6.1：原本 1.7／1.3／1.1） */
+  decayPerHour: { satiety: 3, mood: 2, cleanliness: 2 },
   /** 飽食度很低時，心情額外下降的倍率 */
   moodExtraDecayWhenHungry: 0.5,
   /** 離開網站期間補算的下限（已經低於此值的不再往下掉） */
@@ -65,9 +65,9 @@ export const BALANCE = {
     holdMax: 8,
     autoRevealMs: 600_000,
     /** 結果機率（收藏品的總機率是 rarity 四項的和） */
-    coin: { bronze: 0.18, silver: 0.05, gold: 0.01 },
+    coin: { bronze: 0.12, silver: 0.05, gold: 0.01 },
     coinValue: { bronze: 1, silver: 2, gold: 5 },
-    rarity: { common: 0.34, uncommon: 0.1, rare: 0.035, legendary: 0.005 },
+    rarity: { common: 0.34 * (34 / 48), uncommon: 0.1 * (34 / 48), rare: 0.035 * (34 / 48), legendary: 0.005 * (34 / 48) },
     /** 抽到某稀有度後，這個機率只從尚未收集的項目挑；套組抽到後，分片也用同一個機率偏向缺的那一片 */
     antiDup: 0.7,
     dailyCoinMax: 10,
@@ -153,7 +153,7 @@ export const BALANCE = {
     price: { bowls: 10, kennel: 20, catTree: 20 },
     /** 食盆水盆：飽食度低於 threshold 且沒在睡覺、洗澡、被操作時，自己走去吃 */
     bowls: {
-      threshold: 60,
+      threshold: 40, // v3.6.1：原本 60；頭上「餓了」驚嘆號的門檻是 lowThreshold（30），比這個晚出現
       /** 每隻寵物每天的份量：全部寵物共用一池，今天的上限 = 寵物數 × 這個值（本地日期 00:00 補滿；當天領養新寵物，上限立刻多這麼多） */
       portionsPerPet: 2,
       /** 每份回復的飽食度（手動餵食是 +20，要花 1 金幣） */
@@ -176,7 +176,7 @@ export const BALANCE = {
    * 睡覺時的心情回復（每小時，只在線上即時結算，離線期間不算）：
    * 一般睡覺回復 base（抵銷心情下降），睡在狗窩／貓跳台旁邊乘以 buildingMul。
    */
-  sleepMood: { base: 1.7, buildingMul: 2.5 },
+  sleepMood: { base: 2.7, buildingMul: 2.5 }, // v3.6.1：base 原本 1.7
 
   weatherBlockHours: 4,
   /** 天氣權重：晴、多雲、雨、雪 */
