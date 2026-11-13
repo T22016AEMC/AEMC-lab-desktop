@@ -2,6 +2,15 @@
 
 版本號遵循語意化版本；每次修改程式都要在最上方新增一筆（格式固定，建置時會讀取第一筆的日期）。
 
+## [3.6.2] - 2026-11-13
+
+### 修正
+- **官方程式網址更新**：FilMaster、CheMScutter 的官方網址改成 Cloudflare Pages 的新網址，舊網址不再是官方程式。
+  - FilMaster：`https://t22016aemc.github.io/FilMaster/` → `https://filmaster-pym.pages.dev/`
+  - CheMScutter：`https://t22016aemc.github.io/chemscutter/` → `https://chemscutter.pages.dev/chemscutter/`
+- 其餘 5 個官方程式（SpecReader、EluSim、AutoEllipso、MoleForm、Adsorvia）的名稱、網址、順序，以及全部官方 id、圖示都沒動；存檔格式、schemaVersion、匯出檔格式不變。
+- 已有存檔的使用者載入後，啟動台的官方 7 個會自動換成新網址（合併規則強制更新）；自己新增、網址是舊 GitHub Pages 網址的項目照常保留在「自己新增」區（舊網址已不是官方網址，不會被擋）；新增或編輯成新的官方網址會被擋下並提示。
+
 ## [3.6.1] - 2026-11-01
 
 ### 調整

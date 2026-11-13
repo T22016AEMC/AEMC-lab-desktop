@@ -13,9 +13,9 @@ import type { ExternalApp } from '../types'
  * 由 scripts/process-logos.mjs 從原圖產生，不要手動改。
  */
 export const OFFICIAL_APPS: readonly ExternalApp[] = [
-  { id: 'official-filmaster', name: 'FilMaster', url: 'https://t22016aemc.github.io/FilMaster/', icon: 'icons/official-filmaster.png' },
+  { id: 'official-filmaster', name: 'FilMaster', url: 'https://filmaster-pym.pages.dev/', icon: 'icons/official-filmaster.png' },
   { id: 'official-specreader', name: 'SpecReader', url: 'https://specreader-v1.onrender.com/', icon: 'icons/official-specreader.png' },
-  { id: 'official-chemscutter', name: 'CheMScutter', url: 'https://t22016aemc.github.io/chemscutter/', icon: 'icons/official-chemscutter.png' },
+  { id: 'official-chemscutter', name: 'CheMScutter', url: 'https://chemscutter.pages.dev/chemscutter/', icon: 'icons/official-chemscutter.png' },
   { id: 'official-elusim', name: 'EluSim', url: 'https://elusim-v1.onrender.com/', icon: 'icons/official-elusim.png' },
   { id: 'official-autoellipso', name: 'AutoEllipso', url: 'https://autoellipso.t22016.workers.dev/', icon: 'icons/official-autoellipso.png' },
   { id: 'official-moleform', name: 'MoleForm', url: 'https://t22016aemc.github.io/moleform/', icon: 'icons/official-moleform.png' },
