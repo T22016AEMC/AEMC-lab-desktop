@@ -14,6 +14,7 @@ import { drawEmptyIcon } from './icons'
 import {
   DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
   toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
+  boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
 import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
 import {
@@ -344,6 +345,12 @@ export class PixelEngine {
       },
     })
     const pond = pondPos(L)
+    // v3.7.0：公佈欄（水池上方的遠景區，腳底在草地上緣，排在所有後排物件之前）
+    const board = assets.get('board')
+    if (board) {
+      const bp = boardPos(L)
+      items.push({ y: bp.y, draw: () => drawSprite(ctx, board, bp.x, bp.y) })
+    }
     for (const o of sceneObjects(L)) {
       if (o.key === 'pond') {
         // 水池（靜止，只有一幀）；泡澡中的寵物畫在水池上面（下半身被水面遮住）
@@ -817,6 +824,19 @@ export class PixelEngine {
     const a = toCss(this.layout, d.x0, d.y0)
     const b = toCss(this.layout, d.x1, d.y1)
     return { x0: a.x, y0: a.y, x1: b.x, y1: b.y }
+  }
+
+  /**
+   * v3.7.0 工具包的點擊區（CSS 座標）：窗戶（計算機）、鐘面（碼表與倒數）、塔門（遊戲館）、公佈欄。
+   * 鐘面位置用目前鐘樓圖（含開門版、黃金鐘樓）的 meta.clock；不足 minCss 的點擊區放大（畫面不變）。
+   */
+  toolHits(minCss: number): ToolHits {
+    return toolHitRects(this.layout, this.towerSprite()?.meta?.clock, minCss)
+  }
+
+  /** 公佈欄黑板的綠色範圍（CSS 座標）：疊標題縮圖 */
+  boardGreenCss(): LayoutRect {
+    return rectCss(this.layout, boardGreenRect(this.layout))
   }
 
   /** 開門版鐘樓的招牌中心（CSS 座標）：疊上「遊戲」；scale = 1 個邏輯像素等於幾個 CSS 像素 */

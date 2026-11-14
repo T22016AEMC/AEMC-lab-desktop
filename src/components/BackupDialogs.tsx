@@ -99,6 +99,9 @@ export function ImportDialog() {
                   <dd>{state.summary.buildings.length ? state.summary.buildings.join('、') : '無'}</dd>
                   <dt className="text-white/55">啟動台程式</dt>
                   <dd>{state.summary.appCount} 個</dd>
+                  {/* v3.7.0：公佈欄（格式版本 4 的備份才有；舊格式匯入後公佈欄是空的，也寫出來讓使用者知道） */}
+                  <dt className="text-white/55">公佈欄</dt>
+                  <dd data-testid="import-notes">{state.summary.hasNotes ? `${state.summary.noteCount} 張` : '0 張（這個備份沒有公佈欄資料）'}</dd>
                 </dl>
                 {state.summary.refund > 0 && (
                   <p data-testid="import-refund" className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs font-semibold leading-relaxed text-amber-100">

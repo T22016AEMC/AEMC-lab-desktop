@@ -1067,7 +1067,64 @@ async function main() {
     ], { cols: 2, cellW: 139 * 3 + 8, cellH: 134 * 3 + 20, scale: 3, bg: bgPrev })
   }
 
+  // 8) v3.7.0：工具包（圖集 tools，必載）。另外處理，不動上面任何一張素材（items_dig_b 的錢幣、提示星星照舊）
+  {
+    // 工具圖示 3 個（左→右：計算機、碼表、公佈欄）：整張共用 p、最大那張長邊 = TOOL_ICON，再置中貼到 TOOL_ICON×TOOL_ICON
+    const ti = await sheet({ file: 'tools_icons.png', cols: 3, rows: 1, names: ['tool_calc', 'tool_timer', 'tool_board'], fitMax: TOOL_ICON })
+    for (const f of ti.frames) {
+      const n = defringePink(f.spr)
+      addFrame('tools', f.name, padCenter(f.spr, TOOL_ICON), { ax: TOOL_ICON / 2, ay: TOOL_ICON })
+      info(`${f.name}：內容 ${f.spr.w}×${f.spr.h}，畫布 ${TOOL_ICON}×${TOOL_ICON}（p=${ti.p.toFixed(2)}，去粉紅殘邊 ${n}）`)
+    }
+    // 便條紙 4 色（2×2：黃、粉紅 / 藍、綠）：顏色選擇鈕用的小圖，整張共用 p、置中貼到 NOTE_ICON×NOTE_ICON；同時取樣紙面顏色（介面的 CSS 色塊用）
+    const sn = await sheet({ file: 'sticky_notes.png', cols: 2, rows: 2, names: ['note_yellow', 'note_pink', 'note_blue', 'note_green'], fitMax: NOTE_ICON })
+    for (const f of sn.frames) {
+      addFrame('tools', f.name, padCenter(f.spr, NOTE_ICON), { ax: NOTE_ICON / 2, ay: NOTE_ICON })
+      info(`${f.name}：內容 ${f.spr.w}×${f.spr.h}，紙面中央顏色 ${paperColor(f.spr)}`)
+    }
+    // 公佈欄（items_dig_b 第 5 格：深綠黑板、木框、粉筆槽、三張空白便條）：依目標寬度 BOARD_W 反推 p（整數像素，不是事後縮放）。
+    // 第 6 格（農場告示牌）這版不用。黑板的綠色範圍寫進 meta.board（場景上疊標題縮圖用）
+    const bd = await sheet({ file: 'items_dig_b.png', cols: 3, rows: 2, names: [null, null, null, null, 'board', null], targets: { board: BOARD_W }, solveDim: 'w' })
+    const board = bd.frames.find((f) => f.name === 'board')
+    if (!board) throw new Error('找不到公佈欄')
+    const green = boardGreen(board.spr)
+    addFrame('tools', 'board', board.spr, { meta: { board: green } })
+    info(`公佈欄 board：${board.spr.w}×${board.spr.h}（目標寬度 ${BOARD_W}，p=${board.p.toFixed(2)}），黑板綠色範圍 ${JSON.stringify(green)}`)
+    const bgPrev = { r: 100, g: 118, b: 104 }
+    await composePreview('v370-tools.png', [
+      ...ti.frames.map((f) => ({ spr: padCenter(f.spr, TOOL_ICON), label: f.name, scale: 4 })),
+      ...sn.frames.map((f) => ({ spr: padCenter(f.spr, NOTE_ICON), label: f.name, scale: 4 })),
+      { spr: board.spr, label: `board ${board.spr.w}x${board.spr.h}`, scale: 4 },
+    ], { cols: 4, cellW: 300, cellH: 260, scale: 4, bg: bgPrev })
+  }
+
   await writeOutputs()
+}
+
+/** v3.7.0 工具圖示的畫布邊長、便條紙小圖邊長、場景公佈欄的寬度（邏輯像素；layout.ts 的 BOARD_W/H 要一致，測試會比對） */
+const TOOL_ICON = 48
+const NOTE_ICON = 32
+const BOARD_W = 64
+
+/** 便條紙中央 5×5 的平均顏色（#rrggbb） */
+function paperColor(s) {
+  let r = 0, g = 0, b = 0, n = 0
+  const cx = Math.floor(s.w / 2), cy = Math.floor(s.h / 2)
+  for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) { const i = (y * s.w + x) * 4; if (!s.rgba[i + 3]) continue; r += s.rgba[i]; g += s.rgba[i + 1]; b += s.rgba[i + 2]; n++ }
+  const h = (v) => Math.round(v / Math.max(1, n)).toString(16).padStart(2, '0')
+  return '#' + h(r) + h(g) + h(b)
+}
+
+/** 公佈欄黑板的綠色範圍（深綠：G 明顯高於 R、B，且偏暗）：取「每列綠色像素至少 40%」的列與欄的外框 */
+function boardGreen(s) {
+  const isG = (i) => s.rgba[i + 3] && s.rgba[i + 1] > s.rgba[i] + 12 && s.rgba[i + 1] > s.rgba[i + 2] + 4 && s.rgba[i + 1] < 120
+  const rows = [], cols = []
+  for (let y = 0; y < s.h; y++) { let c = 0; for (let x = 0; x < s.w; x++) if (isG((y * s.w + x) * 4)) c++; rows.push(c) }
+  for (let x = 0; x < s.w; x++) { let c = 0; for (let y = 0; y < s.h; y++) if (isG((y * s.w + x) * 4)) c++; cols.push(c) }
+  const ys = rows.map((c, y) => (c >= s.w * 0.4 ? y : -1)).filter((y) => y >= 0)
+  const xs = cols.map((c, x) => (c >= s.h * 0.3 ? x : -1)).filter((x) => x >= 0)
+  if (!ys.length || !xs.length) return null
+  return { x0: xs[0], y0: ys[0], x1: xs[xs.length - 1] + 1, y1: ys[ys.length - 1] + 1 }
 }
 
 // ---------------------------------------------------------------------------

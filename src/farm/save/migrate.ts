@@ -2,6 +2,7 @@ import { BALANCE } from '../config/balance'
 import { isBuildingId } from '../config/buildings'
 import { isCollectionKey } from '../config/items'
 import { SPECIES, isSpeciesId, isVariantId } from '../config/species'
+import { cleanNotes } from '../../tools/notes'
 import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type Find, type Pet, type SaveData, type SkinState } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
@@ -163,6 +164,8 @@ export function parseSave(raw: unknown): SaveData | null {
     events: cleanEvents(r.events),
     skins: cleanSkins(r.skins),
     dataRev: DATA_REV,
+    // v3.7.0：公佈欄（可缺少；沒有 = 空、壞掉的單張捨棄）
+    notes: cleanNotes(r.notes),
   }
   if (r.resetNotice === true) save.resetNotice = true
   return save

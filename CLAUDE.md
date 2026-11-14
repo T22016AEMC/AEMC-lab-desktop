@@ -165,6 +165,17 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **素材管線**新增（`scripts/process-assets.mjs`）：`sheet({ fitMax })`（整張共用 p、最大那張長邊 = fitMax）、`defringePink`（去粉紅光暈與膠帶殘邊）、圖集 `items`（收藏品圖示 48×48、錢幣、完整紙張、獎勵剪影，必載）與 `skins`（金色住家、黃金鐘樓）；`ITEM_BOX` 環境變數決定圖示邊長（預設 48）。改圖示大小要重跑管線並重新比對舊素材逐像素相同。
 - **測試**：邏輯與引擎測試是 repo 外的 Node 腳本（用 vite 打包 TS 後執行），瀏覽器測試用 Playwright（`page.clock` 與開發版的 `__farm`、`__farmStore`、`__ui`，正式版沒有這些全域物件）。
 
+## v3.7.0：工具包（計算機、碼表與倒數、公佈欄）
+
+- **設定集中在 `src/config/tools.ts`**（`TOOLS`：歷史 50、計次 50、便利貼 8 張／標題 20／內容 200、顯示 15 位有效數字、點擊區至少 24 CSS 像素、各種提示文字；`NOTE_COLORS`／`NOTE_CSS`；`TOOL_LIST`）。數字與訊息不要寫死在別處。
+- **入口**：選單列「工具」（`components/tools/ToolsMenu.tsx`，排在收藏冊之後）；場景上三個 DOM 按鈕疊在畫布上（`farm/index.tsx` 的 `TOOL_SPOTS`，主迴圈每幀用 `engine.toolHits()` 定位）：時鐘上面的窗戶 → 計算機、鐘面 → 碼表與倒數、公佈欄 → 公佈欄。點擊區由 `layout.ts` 的 `toolHitRects()` 算（純函式）：窗戶 `TOWER_WINDOW`（鐘樓素材像素座標，四種鐘樓圖都量過）、鐘面用素材 `meta.clock` + `TOWER_CLOCK_FRAME`、塔門沿用 `TOWER_DOOR`；不足 24 CSS 像素只放大點擊區，放大後碰到下方區域就往上移。三區不可重疊（測試掃 17 視窗 × 4 種鐘樓圖）。`uiStore.toolOpen` 一次只開一個工具，開啟時離開建築模式、結束玩耍、關掉氣泡選單。
+- **工具視窗外框** `components/tools/ToolDialog.tsx`：收藏冊樣式，Esc／右上角「關閉」／點遮罩關閉；在 window 捕捉階段攔下所有 keydown 並停止傳遞（F4、建築模式、玩耍、小遊戲都收不到），keyup 不攔。新增工具視窗一律用它。
+- **計算機**：解析器 `src/tools/calc.ts`（純函式，**禁止 eval／new Function／數學套件**，測試會掃原始碼）。一元負號比冪次低（-3^2 = -9）、冪次右結合、函數後面一定要接括號（√ 例外）、省略乘號（2π、2(3)）。錯誤一律回傳中文訊息（`CALC_ERRORS`），不可出現 NaN／Infinity。狀態在元件裡，關閉就清空。
+- **碼表與倒數**：邏輯 `src/tools/timer.ts`（純函式，時間由呼叫端傳入），狀態 `src/tools/timerStore.ts`（只在記憶體，關視窗後繼續跑、重新整理清掉）；一律用時間戳記差值，不用 setInterval 累加。倒數完成用 `setTimeout` 到結束時間＋`visibilitychange` 檢查，toast「倒數完成」（level `event`），**不給金幣**。時間來源是真實時間（`setTimerClock` 可換），不用 `gameNow()`。
+- **公佈欄**：素材在圖集 `tools` 的 `board`（64×50，`layout.ts` 的 `BOARD_W/H`、`BOARD_GREEN` 要和 manifest 一致）；位置 `boardPos()` = 右緣對齊水池右緣（x 48～112）、腳底在草地上緣（`farBottom`），和視窗寬度、建築購買無關；**x 0～48 的空位留給之後的農場告示牌，不要放東西**。標題縮圖 `farm/ui/BoardThumbs.tsx`（最多 3 張、依大小減少、多的「…共 N 張」）。資料：養殖場存檔的可缺少欄位 `notes`（`tools/notes.ts`：`cleanNotes` 驗證、壞的單張捨棄、最多 8 張新的在前；字數一律 `Array.from`）；操作走 `farmStore.addNote/updateNote/deleteNote`（沒有存檔時不能用）。**顯示一律用 React 文字節點，禁止 innerHTML**（測試會掃）。
+- **存檔與備份**：`DATA_REV` 1 → 2（v3.6.x 舊分頁會停止存檔、不洗掉 notes）；`schemaVersion` 仍 5。匯出檔 `formatVersion` 4（`NOTES_FORMAT_VERSION`），匯入接受 2～4，2、3 的 notes 一律視為空；確認視窗有「公佈欄 N 張」（`summary.noteCount`／`hasNotes`）。
+- **素材**：`process-assets.mjs` 第 8 段，`tools_icons.png`（3×1：計算機、碼表、公佈欄 → `tool_calc`／`tool_timer`／`tool_board`，48×48）、`sticky_notes.png`（2×2：黃、粉紅／藍、綠 → `note_*`，32×32，只用在顏色鈕）、`items_dig_b.png` 第 5 格 → `board`（第 6 格農場告示牌這版不用）。介面上便利貼的顏色用 CSS（`NOTE_CSS`，取樣自便條紙）。選單與視窗標題的 48×48 圖示用 `PixelSprite scale={0.5}`（裝置像素 1:1）。
+
 ## v3.6.1：數值調整、挖寶機率、選單列、身高體重
 
 - **數值**（`balance.ts`）：`decayPerHour` 3／2／2（原 1.7／1.3／1.1）；`buildings.bowls.threshold` 40（原 60）；`sleepMood.base` 2.7（原 1.7）。其餘（每份 +15、每天每隻 2 份、洗澡 +40、玩耍結算、離線下限 20、`lowThreshold` 30）都沒動。**食盆份量追不上每小時 −3**（見 CHANGELOG 3.6.1「已知行為」與模擬數字）：完全不互動 72 小時飽食度平均約 26；要改份量是使用者的決定，不要自己改。

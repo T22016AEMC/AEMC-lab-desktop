@@ -10,6 +10,12 @@ import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKe
 import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { useUIStore } from '../../store/uiStore'
+import { addNote, deleteNote, updateNote } from '../../tools/notes'
+import { TOOLS, type NoteColor } from '../../config/tools'
+
+type NoteDraft = { title: string; body: string; color: NoteColor }
+/** 公佈欄的資料存在養殖場存檔裡：還沒有存檔（還沒領養）時不能用 */
+const NO_SAVE_FOR_NOTES = TOOLS.notes.noSaveMessage
 
 /** 儲存層：目前是瀏覽器 localStorage，之後可換成綁定帳號的雲端存檔 */
 let storage: SaveStorage = new LocalStorageAdapter()
@@ -74,6 +80,10 @@ interface FarmState {
   rollGift: (rand?: () => number) => void
   collectGift: (petId: string) => void
   drainEffects: () => FarmEffect[]
+  /** 公佈欄（v3.7.0）：新增、編輯、刪除便利貼，立刻寫進存檔（節流寫入）。回傳錯誤訊息或 null；沒有存檔時不能用 */
+  addNote: (draft: NoteDraft) => string | null
+  updateNote: (id: string, draft: NoteDraft) => string | null
+  deleteNote: (id: string) => void
   /** 通用的存檔修改入口（測試模式等使用） */
   mutate: (fn: (save: SaveData) => SaveData) => void
   resetAll: () => Promise<void>
@@ -326,6 +336,30 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const e = get().effects
     if (e.length) set({ effects: [] })
     return e
+  },
+
+  addNote: (draft) => {
+    const save = get().save
+    if (!save) return NO_SAVE_FOR_NOTES
+    const r = addNote(save.notes ?? [], draft, Date.now())
+    if (!r.ok) return r.error
+    set({ save: { ...save, notes: r.notes } })
+    return null
+  },
+
+  updateNote: (id, draft) => {
+    const save = get().save
+    if (!save) return NO_SAVE_FOR_NOTES
+    const r = updateNote(save.notes ?? [], id, draft, Date.now())
+    if (!r.ok) return r.error
+    set({ save: { ...save, notes: r.notes } })
+    return null
+  },
+
+  deleteNote: (id) => {
+    const save = get().save
+    if (!save) return
+    set({ save: { ...save, notes: deleteNote(save.notes ?? [], id) } })
   },
 
   mutate: (fn) => {

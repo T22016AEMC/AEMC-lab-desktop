@@ -1,4 +1,5 @@
 import type { SpeciesId } from '../config/species'
+import type { Note } from '../../tools/notes'
 
 /**
  * 目前的存檔格式。v5（v3.4.0）起，舊格式（v4 以前）不再升級，第一次載入時一律重置為全新存檔（見 storage.ts 的 loadOrReset）。
@@ -8,7 +9,9 @@ export const CURRENT_SCHEMA_VERSION = 5
  * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
  * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
  */
-export const DATA_REV = 1
+export const DATA_REV = 2
+// DATA_REV 歷史：1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）。
+// 升到 2 的用意：v3.6.0～v3.6.3 的舊分頁讀到 dataRev 2 會停止自動存檔並提示重新整理，不會把 notes 洗掉。
 
 export interface Pet {
   id: string
@@ -102,6 +105,11 @@ export interface SaveData {
   skins: SkinState
   /** 資料修訂（見 DATA_REV）；舊存檔沒有 = 0 */
   dataRev: number
+  /**
+   * 公佈欄的便利貼（v3.7.0，可缺少：v3.6.x 的存檔沒有這個欄位，讀進來視為空）。最多 8 張、新的在前。
+   * 驗證在 tools/notes.ts 的 cleanNotes（壞掉的單張捨棄）。
+   */
+  notes?: Note[]
   /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
   resetNotice?: true
 }

@@ -10,6 +10,7 @@ import { Dock } from './components/Dock'
 import { Launchpad } from './components/Launchpad'
 import { MenuBar } from './components/MenuBar'
 import { Toast } from './components/Toast'
+import { ToolsLayer } from './components/tools/ToolsLayer'
 import { useViewportSync } from './hooks/useViewportSync'
 import { useLaunchpadHotkey } from './hooks/useLaunchpadHotkey'
 import { MIN_DESKTOP_WIDTH } from './lib/layout'
@@ -50,6 +51,7 @@ function DesktopApp() {
       <Launchpad />
       <AboutDialog />
       <CollectionDialog />
+      <ToolsLayer />
       <ImportDialog />
       <BackupReminder />
       <Toast />

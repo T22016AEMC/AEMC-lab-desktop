@@ -17,7 +17,7 @@ export interface Frame {
   ay: number
   unused?: boolean
   /** 素材附帶的資料（例如鐘樓的鐘面中心與半徑） */
-  meta?: { clock?: { cx: number; cy: number; r: number } | null }
+  meta?: { clock?: { cx: number; cy: number; r: number } | null; board?: { x0: number; y0: number; x1: number; y1: number } | null }
 }
 
 interface Manifest {

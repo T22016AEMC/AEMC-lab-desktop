@@ -21,6 +21,15 @@ import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
 import { ballCursor } from './ui/ballCursor'
 import { toyOf, type PlayToyId } from './sim/commands'
+import { TOOLS } from '../config/tools'
+import { BoardThumbs } from './ui/BoardThumbs'
+
+/** 工具包入口在場景上的提示文字（滑鼠移上去時顯示） */
+const TOOL_SPOTS = [
+  { key: 'window', label: '計算機', tool: 'calc', testid: 'tower-window' },
+  { key: 'clock', label: '碼表與倒數', tool: 'timer', testid: 'tower-clock' },
+  { key: 'board', label: '公佈欄', tool: 'notes', testid: 'bulletin-board' },
+] as const
 
 // 測試模式面板：只在開發環境載入。正式 build 時 import.meta.env.DEV 會被替換成 false，
 // 這個分支連同動態 import 的內容都會被整段移除。
@@ -39,6 +48,10 @@ export function Farm() {
   const lastInvalidToast = useRef(0)
   const towerDoorRef = useRef<HTMLButtonElement | null>(null)
   const towerSignRef = useRef<HTMLDivElement | null>(null)
+  /** v3.7.0：窗戶（計算機）、鐘面（碼表與倒數）、公佈欄的點擊區；公佈欄上的標題縮圖 */
+  const toolBtns = useRef<Record<'window' | 'clock' | 'board', HTMLButtonElement | null>>({ window: null, clock: null, board: null })
+  const boardThumbRef = useRef<HTMLDivElement | null>(null)
+  const [toolHover, setToolHover] = useState<'window' | 'clock' | 'board' | null>(null)
   /** 按住寵物的過程：按住約 150 ms 或移動超過 4 px 就開始拖曳；沒拖就是點擊（開氣泡選單） */
   const gesture = useRef<{ id: string; startX: number; startY: number; curX: number; curY: number; dragging: boolean; timer: number } | null>(null)
   const engine = useMemo(() => new PixelEngine(), [])
@@ -60,6 +73,7 @@ export function Farm() {
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const aboutOpen = useUIStore((s) => s.aboutOpen)
   const collectionOpen = useUIStore((s) => s.collectionOpen)
+  const toolOpen = useUIStore((s) => s.toolOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
   /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
@@ -221,6 +235,28 @@ export function Farm() {
           menu.style.visibility = 'visible'
         }
       }
+      // v3.7.0 工具包的入口：時鐘上面的窗戶、鐘面、公佈欄（點擊區不足 24 CSS 像素就放大，畫面不變）
+      if (toolBtns.current.window) {
+        const hits = engine.toolHits(TOOLS.minHitCss)
+        for (const k of ['window', 'clock', 'board'] as const) {
+          const el = toolBtns.current[k]
+          if (!el) continue
+          const r = hits[k]
+          el.style.left = `${Math.round(r.x0)}px`
+          el.style.top = `${Math.round(r.y0)}px`
+          el.style.width = `${Math.round(r.x1 - r.x0)}px`
+          el.style.height = `${Math.round(r.y1 - r.y0)}px`
+          el.style.visibility = 'visible'
+        }
+        const th = boardThumbRef.current
+        if (th) {
+          const g = engine.boardGreenCss()
+          th.style.left = `${Math.round(g.x0)}px`
+          th.style.top = `${Math.round(g.y0)}px`
+          th.style.width = `${Math.round(g.x1 - g.x0)}px`
+          th.style.height = `${Math.round(g.y1 - g.y0)}px`
+        }
+      }
       const tdoor = towerDoorRef.current
       if (tdoor) {
         const d = engine.towerDoorCss()
@@ -272,8 +308,12 @@ export function Farm() {
   }, [petCount, selected])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
-    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || importState) engine.endPlay('window')
-  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, importState])
+    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
+  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, toolOpen, importState])
+  // 開工具視窗：關掉氣泡選單（建築模式由 setToolOpen 自己關）
+  useEffect(() => {
+    if (toolOpen) setSelected(null)
+  }, [toolOpen])
   useEffect(() => {
     if (covered) engine.endPlay('window')
   }, [engine, covered])
@@ -569,6 +609,45 @@ export function Farm() {
           >
             遊戲
           </div>
+          {/* v3.7.0 公佈欄上的標題縮圖（不擋點擊；點擊由下面的公佈欄按鈕處理） */}
+          <div ref={boardThumbRef} aria-hidden className="pointer-events-none absolute overflow-hidden" data-testid="board-thumbs">
+            <BoardThumbs engine={engine} layoutVersion={layoutVersion} />
+          </div>
+          {/* v3.7.0 工具包入口：時鐘上面的窗戶 → 計算機、鐘面 → 碼表與倒數、公佈欄 → 公佈欄。滑鼠移上去游標變手指並顯示名稱 */}
+          {TOOL_SPOTS.map((t) => (
+            <button
+              key={t.key}
+              ref={(el) => {
+                toolBtns.current[t.key] = el
+              }}
+              type="button"
+              aria-label={t.label}
+              title={t.label}
+              data-testid={t.testid}
+              className="absolute cursor-pointer bg-transparent outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#ffe28a]"
+              style={{ visibility: 'hidden' }}
+              onMouseEnter={() => setToolHover(t.key)}
+              onMouseLeave={() => setToolHover((h) => (h === t.key ? null : h))}
+              onFocus={() => setToolHover(t.key)}
+              onBlur={() => setToolHover((h) => (h === t.key ? null : h))}
+              onClick={() => useUIStore.getState().setToolOpen(t.tool)}
+            >
+              <span
+                aria-hidden
+                data-testid={`${t.testid}-label`}
+                className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap border-2 border-[#3b2a1c] px-1.5 py-px text-xs font-bold leading-tight"
+                style={{
+                  visibility: toolHover === t.key ? 'visible' : 'hidden',
+                  background: '#ffe28a',
+                  color: '#5a3410',
+                  boxShadow: '0 0 10px 3px rgba(255,214,102,0.9), 2px 2px 0 rgba(0,0,0,0.4)',
+                  fontFamily: "'Microsoft JhengHei','PingFang TC',monospace",
+                }}
+              >
+                {t.label}
+              </span>
+            </button>
+          ))}
         </>
       )}
 

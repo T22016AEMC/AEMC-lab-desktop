@@ -7,6 +7,7 @@ import { getApp } from '../config/registry'
 import { useUIStore } from '../store/uiStore'
 import { useActiveApp, useWindowStore } from '../store/windowStore'
 import { LogoMenu } from './LogoMenu'
+import { ToolsMenu } from './tools/ToolsMenu'
 
 export function MenuBar() {
   const now = useClock()
@@ -88,6 +89,8 @@ export function MenuBar() {
         >
           收藏冊
         </button>
+        {/* 工具（v3.7.0）：計算機、碼表與倒數、公佈欄 */}
+        <ToolsMenu />
         {petCount !== null && (
           <span className="tabular-nums" title="寵物數量" aria-label={`寵物 ${petCount}/${PET_CAPACITY}`}>
             🐾 {petCount}/{PET_CAPACITY}

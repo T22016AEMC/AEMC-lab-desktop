@@ -9,8 +9,14 @@ import type { DocumentStorage } from './documentStorage'
  * 個人存檔，不做防竄改。檔案是一個 JSON：養殖場存檔＋啟動台程式清單（含使用者上傳的圖示）。
  */
 export const BACKUP_FORMAT = 'aemc-desktop-backup'
-/** 匯出檔的格式版本：v3.6.0 起是 3（多了寶物收藏、外觀、事件等欄位）。匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受，2 的檔案缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 3 會顯示「較新版本」） */
-export const BACKUP_FORMAT_VERSION = 3
+/**
+ * 匯出檔的格式版本：v3.6.0 是 3（多了寶物收藏、外觀、事件等欄位）；v3.7.0 起是 4（養殖場存檔多了公佈欄 notes）。
+ * 匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受：2、3 的檔案沒有 notes（就算檔案裡有也不讀，一律視為空），
+ * 其他缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 4 會顯示「較新版本」）。
+ */
+export const BACKUP_FORMAT_VERSION = 4
+/** 從這個格式版本起，備份裡的 notes 才會被讀取 */
+export const NOTES_FORMAT_VERSION = 4
 export const MIN_BACKUP_FORMAT_VERSION = 2
 export const PRE_RESET_MESSAGE = '這個備份來自重置前的版本，無法匯入'
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024
@@ -44,6 +50,10 @@ export interface BackupSummary {
   appCount: number
   /** 備份裡有已移除的建築（營火），匯入後自動退還的金幣；沒有 = 0 */
   refund: number
+  /** 公佈欄便利貼張數（驗證後；格式版本 2、3 一律 0） */
+  noteCount: number
+  /** 備份是否帶有公佈欄資料（格式版本 4 以上） */
+  hasNotes: boolean
 }
 
 export type ParseResult = { ok: true; backup: BackupFile; summary: BackupSummary } | { ok: false; error: string }
@@ -59,6 +69,8 @@ export function summarize(b: BackupFile): BackupSummary {
     buildings: b.data.farm.ownedBuildings.map((id) => buildingDef(id)?.name ?? id),
     appCount: b.data.appList.apps.length,
     refund: 0,
+    noteCount: b.data.farm.notes?.length ?? 0,
+    hasNotes: b.formatVersion >= NOTES_FORMAT_VERSION,
   }
 }
 
@@ -87,7 +99,8 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   if (!listRaw || typeof listRaw !== 'object') return fail('備份檔裡的啟動台程式清單無法辨識')
   if (farmRaw.schemaVersion > CURRENT_SCHEMA_VERSION || isNewerData(farmRaw) || (typeof listRaw.schemaVersion === 'number' && listRaw.schemaVersion > APP_LIST_SCHEMA_VERSION)) return fail(NEWER_VERSION_MESSAGE)
   if (isResetSchema(farmRaw)) return fail(PRE_RESET_MESSAGE)
-  const farm = parseSave(farmRaw)
+  // 格式版本 2、3 沒有公佈欄：就算檔案裡有 notes 也不讀（視為空）
+  const farm = parseSave(r.formatVersion >= NOTES_FORMAT_VERSION ? farmRaw : { ...farmRaw, notes: undefined })
   if (!farm) return fail('備份檔裡的養殖場存檔無法辨識或已損毀')
   const appList = parseAppList(listRaw)
   if (!appList) return fail('備份檔裡的啟動台程式清單無法辨識或已損毀')

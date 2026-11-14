@@ -113,6 +113,16 @@ export const TRUNK_H = 12
 /** 鐘樓的門（相對於鐘樓素材外框的比例）與招牌中心：滑鼠移上去開門、點擊開啟遊戲館 */
 export const TOWER_DOOR = { x0: 0.4, x1: 0.6, y0: 0.74, y1: 0.97 }
 export const TOWER_SIGN = { x: 0.655, y: 0.84 }
+/**
+ * v3.7.0：鐘樓上的另外兩個點擊區（相對鐘樓素材左上角的像素座標；關門版、開門版、黃金鐘樓都適用，測試用圖集像素比對）。
+ *  - TOWER_WINDOW：時鐘上面的窗戶（藍灰玻璃與窗框，x 56～68、y 38～53），點擊開計算機
+ *  - 鐘面：中心與半徑用素材的 meta.clock（管線偵測），外框再加 TOWER_CLOCK_FRAME（程式畫的金框），點擊開碼表與倒數
+ * 和塔門（TOWER_DOOR，y ≥ 118）三個區域各自獨立、不重疊。
+ */
+export const TOWER_WINDOW = { x0: 56, y0: 38, x1: 69, y1: 54 }
+export const TOWER_CLOCK_FRAME = 3
+/** 管線偵測不到鐘面時的備用值（目前 clocktower 的 meta.clock） */
+export const TOWER_CLOCK_FALLBACK = { cx: 62, cy: 82, r: 17 }
 /** 鐘樓離右邊緣的邊距 */
 export const TOWER_MARGIN = 10
 /** 鐘樓周圍不放裝飾物的範圍：約 1.5 倍鐘樓寬（左右各 0.75 倍） */
@@ -720,6 +730,106 @@ export function slotUnavailableMessage(L: Layout, id: string): string {
     }
   cache.set(id, msg)
   return msg
+}
+
+// ---------------------------------------------------------------------------
+// v3.7.0：公佈欄、鐘樓的窗戶與鐘面（工具包的入口）
+// ---------------------------------------------------------------------------
+
+/** 公佈欄素材（tools 圖集的 board）的尺寸與黑板綠色範圍（相對素材左上角），要和 manifest 一致（測試會比對） */
+export const BOARD_W = 64
+export const BOARD_H = 50
+export const BOARD_GREEN = { x0: 8, y0: 7, x1: 56, y1: 39 }
+
+/**
+ * 公佈欄的位置：水池上方的遠景區（草地上緣之上、蘑菇左邊那段空地）的右半邊：
+ * 右緣對齊水池素材右緣（x = POND_LEFT + POND_W = 112），腳底在草地上緣（farBottom），所以在水池（頂端 farBottom + 2）的上面、不重疊；
+ * 左邊 x 0～48 那段較小的空位留給之後的農場告示牌。位置只由水池與草地上緣決定（和視窗寬度、建築購買都無關）。
+ * x = 水平中心（素材錨點）、y = 腳底。
+ */
+export function boardPos(L: Layout): { x: number; y: number } {
+  return { x: POND_LEFT + POND_W - BOARD_W / 2, y: L.farBottom }
+}
+
+/** 公佈欄素材外框（邏輯座標） */
+export function boardRect(L: Layout): Rect {
+  const p = boardPos(L)
+  return { x0: p.x - BOARD_W / 2, x1: p.x + BOARD_W / 2, y0: p.y - BOARD_H, y1: p.y }
+}
+
+/** 黑板綠色範圍（邏輯座標）：場景上疊標題縮圖的地方 */
+export function boardGreenRect(L: Layout): Rect {
+  const r = boardRect(L)
+  return { x0: r.x0 + BOARD_GREEN.x0, x1: r.x0 + BOARD_GREEN.x1, y0: r.y0 + BOARD_GREEN.y0, y1: r.y0 + BOARD_GREEN.y1 }
+}
+
+/** 時鐘上面的窗戶（邏輯座標） */
+export function towerWindowRect(L: Layout): Rect {
+  const t = towerTopLeft(L)
+  return { x0: t.x + TOWER_WINDOW.x0, x1: t.x + TOWER_WINDOW.x1, y0: t.y + TOWER_WINDOW.y0, y1: t.y + TOWER_WINDOW.y1 }
+}
+
+/** 鐘面（含程式畫的金框）外接正方形（邏輯座標）；clock = 目前鐘樓素材的 meta.clock（相對素材左上角） */
+export function towerClockRect(L: Layout, clock: { cx: number; cy: number; r: number } | null | undefined): Rect {
+  const t = towerTopLeft(L)
+  const c = clock ?? TOWER_CLOCK_FALLBACK
+  const r = c.r + TOWER_CLOCK_FRAME
+  return { x0: t.x + c.cx - r, x1: t.x + c.cx + r + 1, y0: t.y + c.cy - r, y1: t.y + c.cy + r + 1 }
+}
+
+/** 邏輯座標的矩形 → CSS 座標 */
+export function rectCss(L: Layout, r: Rect): Rect {
+  const a = toCss(L, r.x0, r.y0)
+  const b = toCss(L, r.x1, r.y1)
+  return { x0: a.x, y0: a.y, x1: b.x, y1: b.y }
+}
+
+/** 點擊區不足 min CSS 像素的那一邊，以中心為準放大到 min（只放大點擊區，畫面不變） */
+export function growHit(r: Rect, min: number): Rect {
+  const out = { ...r }
+  const w = r.x1 - r.x0
+  const h = r.y1 - r.y0
+  if (w < min) {
+    out.x0 = r.x0 - (min - w) / 2
+    out.x1 = out.x0 + min
+  }
+  if (h < min) {
+    out.y0 = r.y0 - (min - h) / 2
+    out.y1 = out.y0 + min
+  }
+  return out
+}
+
+export interface ToolHits {
+  /** 時鐘上面的窗戶 → 計算機 */
+  window: Rect
+  /** 鐘面 → 碼表與倒數 */
+  clock: Rect
+  /** 塔門 → 遊戲館（沿用 v3.1.0 的範圍，不放大） */
+  door: Rect
+  /** 公佈欄 → 公佈欄視窗 */
+  board: Rect
+}
+
+/**
+ * 四個點擊區（CSS 座標）。窗戶、鐘面、公佈欄不足 minCss 就放大點擊區；窗戶放大後如果碰到鐘面，整個往上移（保持大小、和鐘面留 1 像素），
+ * 鐘面放大後如果碰到塔門，往上移。塔門維持原本的範圍（v3.1.0 起的行為不變）。
+ */
+export function toolHitRects(L: Layout, clock: { cx: number; cy: number; r: number } | null | undefined, minCss: number): ToolHits {
+  const door = rectCss(L, towerDoorRect(L))
+  const clk = growHit(rectCss(L, towerClockRect(L, clock)), minCss)
+  if (clk.y1 > door.y0 - 1) {
+    const d = clk.y1 - (door.y0 - 1)
+    clk.y0 -= d
+    clk.y1 -= d
+  }
+  const win = growHit(rectCss(L, towerWindowRect(L)), minCss)
+  if (win.y1 > clk.y0 - 1) {
+    const d = win.y1 - (clk.y0 - 1)
+    win.y0 -= d
+    win.y1 -= d
+  }
+  return { window: win, clock: clk, door, board: growHit(rectCss(L, boardRect(L)), minCss) }
 }
 
 export interface BuildingAvailability {

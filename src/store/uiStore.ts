@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BackupFile, BackupSummary } from '../lib/backup'
 import type { Size } from '../types'
+import type { ToolId } from '../config/tools'
 
 /** 匯入存檔視窗：錯誤原因，或通過檢查、等使用者確認 */
 export type ImportState = { kind: 'error'; message: string } | { kind: 'confirm'; backup: BackupFile; summary: BackupSummary; fileName: string }
@@ -53,6 +54,9 @@ interface UIState {
   /** 收藏冊 */
   collectionOpen: boolean
   setCollectionOpen: (v: boolean) => void
+  /** v3.7.0 工具包：目前開著的工具視窗（一次只開一個；null = 都沒開） */
+  toolOpen: ToolId | null
+  setToolOpen: (v: ToolId | null) => void
   setLaunchpadOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
   setAdoptOpen: (v: boolean) => void
@@ -69,6 +73,9 @@ export const useUIStore = create<UIState>((set) => ({
   toastQueue: [],
   collectionOpen: false,
   setCollectionOpen: (collectionOpen) => set({ collectionOpen }),
+  toolOpen: null,
+  // 開工具視窗時離開建築模式（Esc 只關工具視窗，不會同時離開建築模式）
+  setToolOpen: (toolOpen) => set(toolOpen ? { toolOpen, buildMode: false } : { toolOpen }),
   launchpadOpen: false,
   aboutOpen: false,
   adoptOpen: false,
