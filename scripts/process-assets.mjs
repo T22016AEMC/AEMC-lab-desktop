@@ -412,6 +412,25 @@ const P_GUESS = 6.1
 /** 貓 extra 原圖是縮小後再放大的：像素格 = 同一隻貓 core 的 p × 這個倍率（沿用先前與 core 的相對取樣關係） */
 const CAT_EXTRA_RATIO = 0.56
 
+/**
+ * v3.6.3：換圖的貓 core 格。cat_orange_core_fix.png 是 3 隻橫排（睡覺、吃東西〔碗畫在圖裡〕、開心舔爪），對應 core 的 sleep、eat、groom（第 6、7、8 格）。
+ * 三隻共用同一個像素格 p（和同一張圖集其他格一樣是整張共用的規則）；p 由「輸出尺寸對齊舊格」求出：
+ * sleep、eat 的寬度 = 舊 sleep、eat 的寬度；groom 的高度 = 舊 sit_a 的高度（頭頂高度與坐姿相近）。
+ * 錨點沿用 addFrame 預設（水平中心、外框底邊），和舊格同一規則。
+ */
+const CAT_CORE_FIX = { orange: { file: 'cat_orange_core_fix.png', names: ['sleep', 'eat', 'groom'] } }
+async function catCoreFix(id, core) {
+  const cfg = CAT_CORE_FIX[id]
+  const oldOf = (n) => core.frames.find((f) => f.name === n).spr
+  const group = { sleep: ['w', oldOf('sleep').w], eat: ['w', oldOf('eat').w], groom: ['h', oldOf('sit_a').h] }
+  const r = await sheet({ file: cfg.file, cols: 3, rows: 1, names: cfg.names, solveGroup: group })
+  for (const f of r.frames) {
+    const o = oldOf(f.name)
+    info('  橘貓換圖 ' + f.name + '：新 ' + f.spr.w + '×' + f.spr.h + '（舊 ' + o.w + '×' + o.h + '），錨點 ax=' + Math.round(f.spr.w / 2) + ' ay=' + f.spr.h)
+  }
+  return r
+}
+
 const pCache = {}
 /** 建築素材的縮放係數（v3.3.1）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
 /** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
@@ -429,8 +448,9 @@ const POND_W = 110
  *  - solveFrom：以這一幀的目標高度求出 p，整張圖的所有幀共用（同一隻動物的所有姿勢大小不會跳）
  *    沒有 solveFrom 時，targets 裡的每一幀各自求自己的 p（例如裝飾物、特效圖示）
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
+ *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup }) {
   const img = await load(file)
   const mask = fgMask(img)
   const { lab, comps: all } = label(mask, img.W, img.H)
@@ -470,6 +490,23 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     if (!cell?.length) throw new Error(file + ' 找不到 ' + solveFrom)
     animalP = solve(cell, targets[solveFrom], base)
   }
+  // solveGroup（v3.6.3）：多幀共用同一個 p，使各幀的輸出尺寸同時盡量接近各自的目標（取對數誤差平方和最小者）
+  let groupLog = null
+  if (solveGroup) {
+    const items = Object.entries(solveGroup).map(([name, [dim, target]]) => ({ name, dim, target, cell: cells[names.indexOf(name)] }))
+    for (const it of items) if (!it.cell?.length) throw new Error(file + ' 找不到 ' + it.name)
+    let pp = base
+    let best = { pp, cost: Infinity, got: [] }
+    for (let k = 0; k < 14; k++) {
+      const got = items.map((it) => { const s = render(it.cell, pp); return s ? (it.dim === 'w' ? s.w : s.h) : 0 })
+      const logs = got.map((g, i) => Math.log(g / items[i].target))
+      const cost = logs.reduce((t, v) => t + v * v, 0)
+      if (cost < best.cost) best = { pp, cost, got }
+      pp *= Math.exp(logs.reduce((t, v) => t + v, 0) / logs.length)
+    }
+    animalP = best.pp
+    groupLog = items.map((it, i) => it.name + ' ' + it.dim + '=' + best.got[i] + '（目標 ' + it.target + '）').join('、')
+  }
   // fitMax（v3.6.0 收藏品圖示）：整張圖共用同一個 p（保留圖示之間的相對大小），p 取到「最大的那張長邊 = fitMax」
   if (fitMax) {
     const live = cells.filter((c) => c.length)
@@ -487,6 +524,7 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
   }
   info(
     file + ': ' + img.W + '×' + img.H + '，連通塊 ' + comps.length + '（原 ' + all.length + '），像素格估算 p=' + e.p.toFixed(2) + '（強度 ' + e.amp.toFixed(2) + '）' +
+      (groupLog ? '，共用 p=' + animalP.toFixed(2) + '：' + groupLog : '') +
       (solveFrom || Object.keys(targets).length ? '，依目標高度求出 p=' + (solveFrom ? animalP.toFixed(2) : '各幀不同') : pFixed ? '，採用 p=' + base.toFixed(2) : ''),
   )
   const frames = []
@@ -718,7 +756,12 @@ async function main() {
     const key = 'cat_' + id
     const core = await sheet({ file: key + '_core.png', cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
     animalP[key] = core.p
-    for (const f of core.frames) addFrame(key, key + '_' + f.name, f.spr, f.name === 'unused_back' ? { unused: true } : {})
+    // v3.6.3：橘貓的 sleep／eat／groom 三格換成新圖（cat_orange_core_fix.png，3 隻橫排）；其他格、core.p（extra 的取樣基準）不動
+    const fix = CAT_CORE_FIX[id] ? await catCoreFix(id, core) : null
+    for (const f of core.frames) {
+      const swap = fix?.frames.find((g) => g.name === f.name)
+      addFrame(key, key + '_' + f.name, swap ? swap.spr : f.spr, f.name === 'unused_back' ? { unused: true } : {})
+    }
     const extra = await sheet({ file: key + '_extra.png', cols: 2, rows: 2, names: CAT_EXTRA, pFixed: core.p * CAT_EXTRA_RATIO })
     for (const f of extra.frames) addFrame(key, key + '_' + f.name, f.spr)
   }
