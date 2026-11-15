@@ -1,5 +1,6 @@
 import { BALANCE } from '../config/balance'
 import { SPECIES, variantOf, type SpeciesId } from '../config/species'
+import { personalityMul, rollPersonality } from '../config/personality'
 import type { Pet, SaveData } from '../save/types'
 import { clamp100 } from './stats'
 import { adoptCheck, isSleeping } from './rules'
@@ -151,15 +152,17 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
   // 互動之後保持清醒；若仍在睡覺時間內，閒置超過 idleMinutes 就會自己回去睡
   const stayAwakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
   if (!(action === 'pet' && sleeping)) awakeUntil = stayAwakeUntil
+  const mul = personalityMul(pet)
   switch (action) {
     case 'feed': {
       const b = BALANCE.feed
-      delta = { satiety: b.satiety, mood: b.mood, weight: pet.satiety >= b.fatAbove ? b.fatGain : 0 }
+      // v3.8.0 貪吃：吃東西的心情加成 × eatMood
+      delta = { satiety: b.satiety, mood: b.mood * mul.eatMood, weight: pet.satiety >= b.fatAbove ? b.fatGain : 0 }
       break
     }
     case 'pet':
-      // 睡夢中被摸：不會醒來（awakeUntil 不變），心情只小幅上升
-      delta = { mood: sleeping ? BALANCE.petSleeping.mood : BALANCE.pet.mood }
+      // 睡夢中被摸：不會醒來（awakeUntil 不變），心情只小幅上升。v3.8.0 黏人：× petMood
+      delta = { mood: (sleeping ? BALANCE.petSleeping.mood : BALANCE.pet.mood) * mul.petMood }
       break
     case 'bath':
       delta = {
@@ -178,7 +181,8 @@ export function execute(save: SaveData, ctx: Ctx, action: ActionId, petId: strin
       break
   }
   const anim = action === 'feed' ? 'eat' : action
-  const r = applyDelta({ ...pet, awakeUntil }, delta)
+  // v3.8.0：記下上次互動時間（黏人個性「久沒互動」用）
+  const r = applyDelta({ ...pet, awakeUntil, lastInteract: ctx.nowMs }, delta)
   next = replacePet(next, r.pet)
   return { save: next, effects: [{ kind: 'anim', petId: pet.id, anim }, ...r.floats] }
 }
@@ -198,7 +202,7 @@ export function startPlay(save: SaveData, ctx: Ctx, petId: string, toy: PlayToyI
   if (noRoom) return fail(noRoom)
   if (save.points < def.cost) return fail(`金幣不足（需要 ${def.cost} 金幣，目前 ${save.points} 金幣）`)
   const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
-  return { save: replacePet({ ...save, points: save.points - def.cost }, { ...pet, awakeUntil }), effects: [] }
+  return { save: replacePet({ ...save, points: save.points - def.cost }, { ...pet, awakeUntil, lastInteract: ctx.nowMs }), effects: [] }
 }
 
 /** 撿回 n 次的結算數值（0 次 = 空；次數夾在 0～maxCatches） */
@@ -213,13 +217,13 @@ export function playDelta(catches: number): Delta {
   }
 }
 
-/** 挖寶、尋寶留下 n 個寶物的結算數值（0 個 = 空） */
-export function digDelta(finds: number): Delta {
+/** 挖寶、尋寶留下 n 個寶物的結算數值（0 個 = 空）。moodMul：個性的心情倍率（v3.8.0 活潑；上限 mood.max 也一起乘） */
+export function digDelta(finds: number, moodMul = 1): Delta {
   const b = BALANCE.dig
   const n = Math.max(0, Math.min(b.maxFinds, Math.floor(Number.isFinite(finds) ? finds : 0)))
   if (n === 0) return {}
   return {
-    mood: Math.min(b.mood.max, b.mood.base + b.mood.perFind * n),
+    mood: Math.min(b.mood.max, b.mood.base + b.mood.perFind * n) * moodMul,
     weight: Math.max(b.weight.min, b.weight.perFind * n),
     satiety: Math.max(b.satiety.min, b.satiety.perFind * n),
   }
@@ -228,7 +232,7 @@ export function digDelta(finds: number): Delta {
 /** 玩耍結算（時間到或提前結束）：撿回／留下 0 次完全不加；不扣金幣。數值夾在 0～100 */
 export function settlePlay(save: SaveData, ctx: Ctx, petId: string, catches: number, toy: PlayToyId = 'ball'): ExecResult {
   const pet = save.pets.find((p) => p.id === petId)
-  const delta = toy === 'ball' ? playDelta(catches) : digDelta(catches)
+  const delta = toy === 'ball' ? playDelta(catches) : digDelta(catches, personalityMul(pet).digMood)
   if (!pet || Object.keys(delta).length === 0) return { save, effects: [] }
   const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
   const r = applyDelta({ ...pet, awakeUntil: Math.max(pet.awakeUntil ?? 0, awakeUntil) }, delta)
@@ -243,7 +247,8 @@ export function wakeForDrag(save: SaveData, ctx: Ctx, petId: string): ExecResult
   const pet = save.pets.find((p) => p.id === petId)
   if (!pet || !isSleeping(pet, ctx.hour, ctx.nowMs)) return { save, effects: [] }
   const awakeUntil = ctx.nowMs + BALANCE.sleep.idleMinutes * 60_000
-  const r = applyDelta({ ...pet, awakeUntil }, { mood: pet.species === 'cat' ? BALANCE.wake.moodCat : BALANCE.wake.moodDog })
+  // v3.8.0 膽小：被拖曳的心情下降 × dragMood（狗的基準是 0，乘了還是 0）
+  const r = applyDelta({ ...pet, awakeUntil }, { mood: (pet.species === 'cat' ? BALANCE.wake.moodCat : BALANCE.wake.moodDog) * personalityMul(pet).dragMood })
   return { save: replacePet(save, r.pet), effects: r.floats }
 }
 
@@ -279,6 +284,9 @@ export function adopt(save: SaveData, ctx: Ctx, req: AdoptRequest, rand: () => n
     satiety: 75 + rand() * 10,
     mood: 75 + rand() * 10,
     cleanliness: 75 + rand() * 10,
+    // v3.8.0：個性隨機（5 種平均）、上次互動 = 領養當下
+    personality: rollPersonality(rand),
+    lastInteract: ctx.nowMs,
   }
   return {
     save: {

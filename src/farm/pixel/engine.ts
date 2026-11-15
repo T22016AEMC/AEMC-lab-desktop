@@ -1,4 +1,6 @@
-import type { Find, Pet } from '../save/types'
+import type { Find, Pet, PicnicActive } from '../save/types'
+import { picnicEligible } from '../sim/picnic'
+import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, cameraRect, picnicMatRect, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
 import { skinDef } from '../config/skins'
 import type { RevealResult } from '../sim/dig'
@@ -133,6 +135,11 @@ export class PixelEngine {
   private giftT = 0
   private lastFrame: FrameInfo = { nowMs: Date.now(), hour: 12, weather: 'sunny', gifts: [] }
   rand: () => number = Math.random
+  /**
+   * 野餐（v3.8.0）：存檔裡進行中的那一場（active，由 syncPicnic 同步）、墊子飛下來的時間、是否已落地。
+   * 墊子落地後才把座位分給參加的寵物（a.picnic）；存檔的 active 消失（結束）就收掉墊子、放掉所有座位。
+   */
+  private picnicState: { active: PicnicActive; key: number; dropT: number; landed: boolean } | null = null
 
   /** 設定畫布大小（裝置像素）；既有寵物依新範圍夾回 */
   setSize(backW: number, backH: number, dpr: number): void {
@@ -300,6 +307,7 @@ export class PixelEngine {
   update(dt: number, f: FrameInfo): void {
     this.time += dt
     this.lastFrame = f
+    this.updatePicnic(dt)
     const list = [...this.actors.values()]
     // 被拖著、飛回去、洗澡中的寵物不參與避讓（也不會被別人推開）
     const free = list.filter((a) => !a.drag && !a.fly && !a.bath)
@@ -311,6 +319,7 @@ export class PixelEngine {
       weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id), settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
       finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
       fixed: list.filter((a) => !a.drag && !a.fly && !a.bath && (a.action === 'sleep' || a.bld?.phase === 'at')).map((a) => ({ id: a.id, x: a.x, y: a.y })),
+      picnicMat: this.picnicState?.landed ? picnicMatRect(this.layout) : null,
     }
     for (const a of list) updateActor(a, dt, env)
     for (const an of this.anims) an.t += dt
@@ -339,14 +348,18 @@ export class PixelEngine {
   // 繪製
   // ---------------------------------------------------------------------
 
-  render(ctx: CanvasRenderingContext2D): void {
+  /**
+   * 畫整個場景。view（v3.8.0 拍照用）：改用指定的放大倍率、平移與畫布大小，例如 { scale: 1, offsetY: 0, w: W, h: H } = 1 個邏輯像素畫成 1 個畫布像素；
+   * 沒給就用版面（畫在主畫布上）。
+   */
+  render(ctx: CanvasRenderingContext2D, view?: { scale: number; offsetY: number; w: number; h: number }): void {
     const L = this.layout
     const f = this.lastFrame
     if (!assets.ready) return
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.imageSmoothingEnabled = false
-    ctx.clearRect(0, 0, L.backW, L.backH)
-    ctx.setTransform(L.S, 0, 0, L.S, 0, L.offsetY)
+    ctx.clearRect(0, 0, view?.w ?? L.backW, view?.h ?? L.backH)
+    ctx.setTransform(view?.scale ?? L.S, 0, 0, view?.scale ?? L.S, 0, view?.offsetY ?? L.offsetY)
 
     const night = this.isHouseLit(f.hour)
     drawSky(ctx, L, f.hour, f.weather)
@@ -356,6 +369,11 @@ export class PixelEngine {
     drawFar(ctx, L)
     drawGrass(ctx, L)
     drawPath(ctx, L)
+    // v3.8.0 野餐墊（落地後）：平鋪在地上，畫在所有物件與寵物之前（墊子頂端在後排景物腳底之下，所以不會蓋到樹與裝飾）
+    const pst = this.picnicState
+    const mat = pst ? picnicMatRect(L) : null
+    const matSpr = pst ? assets.get(MAT_KEYS[pst.active.mat] ?? MAT_KEYS[0]) : null
+    if (pst?.landed && mat && matSpr) drawSprite(ctx, matSpr, mat.x0 + matSpr.ax, mat.y1)
 
     // 物件與寵物依「腳底 y」排前後
     type Item = { y: number; draw: () => void }
@@ -418,6 +436,16 @@ export class PixelEngine {
         },
       })
     }
+    // 野餐墊上的籃子與食物（只是裝飾）：依腳底 y 和寵物排前後
+    if (pst?.landed && mat) {
+      const bk = assets.get(BASKET_KEYS[pst.active.basket] ?? BASKET_KEYS[0])
+      if (bk) items.push({ y: mat.y0 + MAT_BASKET[1], draw: () => drawSprite(ctx, bk, mat.x0 + MAT_BASKET[0], mat.y0 + MAT_BASKET[1]) })
+      pst.active.foods.forEach((fi, i) => {
+        const fs = assets.get(FOOD_KEYS[fi] ?? FOOD_KEYS[0])
+        const spot = MAT_FOODS[i]
+        if (fs && spot) items.push({ y: mat.y0 + spot[1], draw: () => drawSprite(ctx, fs, mat.x0 + spot[0], mat.y0 + spot[1]) })
+      })
+    }
     // 玩耍中的球（飛行、落地彈跳、放在腳邊）；叼著的球畫在狗的嘴邊（drawActor）
     for (const a of this.actors.values()) {
       const b = a.play?.ball
@@ -425,6 +453,17 @@ export class PixelEngine {
     }
     items.sort((p, q) => p.y - q.y)
     for (const it of items) it.draw()
+    // 野餐墊飛下來（落地前）：從畫面上方落到位置，地上的影子越來越大；在所有東西的上面
+    if (pst && !pst.landed && mat && matSpr) {
+      const k = Math.min(1, pst.dropT / BALANCE.picnic.dropSeconds)
+      const e = 1 - (1 - k) * (1 - k) * (1 - k)
+      const fromY = -4
+      const y = Math.round(fromY + (mat.y1 - fromY) * e)
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'
+      const sw = Math.round((mat.x1 - mat.x0) * 0.8 * (0.3 + 0.7 * e))
+      ctx.fillRect(Math.round((mat.x0 + mat.x1) / 2 - sw / 2), Math.round((mat.y0 + mat.y1) / 2) - 2, sw, 4)
+      drawSprite(ctx, matSpr, mat.x0 + matSpr.ax, y)
+    }
 
     // 水花與漣漪
     for (const an of this.anims) {
@@ -887,6 +926,7 @@ export class PixelEngine {
       a.y = v.y
     }
     releaseUse(a, false)
+    a.picnic = null // v3.8.0：被拖走 = 離開野餐
     if (isSleeping(a.pet, this.lastFrame.hour, this.lastFrame.nowMs)) this.hooks.wake(id)
     const p = fromCss(this.layout, cssX, cssY)
     this.dragOff = { dx: a.x - p.x, dy: a.y - p.y }
@@ -1034,6 +1074,141 @@ export class PixelEngine {
   /** 正在玩的是丟球（點畫面才丟球）；挖寶、尋寶是寵物自己去，點畫面沒有作用 */
   isPlayingBall(): boolean {
     return this.playingActor()?.play?.toy === 'ball'
+  }
+
+  // ---------------------------------------------------------------------
+  // 野餐（v3.8.0）
+  // ---------------------------------------------------------------------
+
+  /** 和存檔同步：有進行中的那一場就讓墊子飛下來（同一場不重來）；沒有就收掉墊子、放掉所有座位 */
+  syncPicnic(active: PicnicActive | undefined): void {
+    if (!active) {
+      if (this.picnicState) this.clearPicnic()
+      return
+    }
+    if (this.picnicState?.key === active.startedAt) return
+    if (this.picnicState) this.clearPicnic()
+    this.picnicState = { active, key: active.startedAt, dropT: 0, landed: false }
+  }
+
+  private clearPicnic(): void {
+    this.picnicState = null
+    for (const a of this.actors.values()) {
+      if (!a.picnic) continue
+      a.picnic = null
+      a.tx = a.x
+      a.ty = a.y
+      a.action = 'idle'
+      a.t = 0
+      a.dur = 1 + this.rand()
+    }
+  }
+
+  /** 墊子飛下來的計時；落地時把座位分給參加的寵物（場景上還有空的才坐：被拖著、洗澡、玩耍中的不參加） */
+  private updatePicnic(dt: number): void {
+    const st = this.picnicState
+    if (!st || st.landed) return
+    st.dropT += dt
+    if (st.dropT < BALANCE.picnic.dropSeconds) return
+    st.landed = true
+    st.active.pets.forEach((id, i) => {
+      const a = this.actors.get(id)
+      if (!a || !this.picnicFree(a)) return
+      releaseUse(a)
+      a.override = null
+      a.seek = null
+      a.path = []
+      a.pathKey = ''
+      a.picnic = { seat: i, arrived: false, t: 0, cheer: 0 } satisfies PicnicSeat
+    })
+  }
+
+  /** 場景上有空參加野餐嗎：沒被拖、沒在飛、沒在洗澡（含走去水池）、沒在玩耍 */
+  private picnicFree(a: Actor): boolean {
+    return !a.drag && !a.fly && !a.bath && !a.play
+  }
+
+  /** 野餐墊這個視窗放得下嗎（放不下就不能開始） */
+  picnicMatFits(): boolean {
+    return picnicMatRect(this.layout) !== null
+  }
+
+  /**
+   * 可以參加野餐的寵物 id（最多 6 隻）：存檔的數值符合（醒著、心情不差、清潔 >= 20，sim/picnic.ts 的 picnicEligible），
+   * 而且場景上有空（沒被拖曳、沒在洗澡或走去洗澡、沒在玩耍）。睡在座位上的寵物一定是睡著的，所以不會被選到。
+   */
+  picnicCandidates(pets: readonly Pet[], ctx: { nowMs: number; hour: number }): string[] {
+    const out: string[] = []
+    for (const p of pets) {
+      const a = this.actors.get(p.id)
+      if (!a || !this.picnicFree(a) || !picnicEligible(p, ctx)) continue
+      out.push(p.id)
+      if (out.length >= 6) break
+    }
+    return out
+  }
+
+  /** 目前還在野餐的寵物數（走過去中＋坐在墊上）；墊子還在飛 = null（還沒分座位） */
+  picnicParticipants(): number | null {
+    if (!this.picnicState?.landed) return null
+    let n = 0
+    for (const a of this.actors.values()) if (a.picnic) n++
+    return n
+  }
+
+  /** 墊子上已經坐好的寵物數（相機提示：至少 1 隻才顯示） */
+  picnicSeated(): number {
+    let n = 0
+    for (const a of this.actors.values()) if (a.picnic?.arrived) n++
+    return n
+  }
+
+  /** 拍照：墊子上坐好的寵物全部換成開心姿勢（不加心情）。回傳有幾隻 */
+  picnicCheer(): number {
+    let n = 0
+    for (const a of this.actors.values()) {
+      if (!a.picnic?.arrived) continue
+      a.picnic.cheer = BALANCE.picnic.cheerSeconds
+      a.action = 'happy'
+      a.t = 0
+      a.animT = 0
+      n++
+    }
+    return n
+  }
+
+  /** 墊子（落地後）的外框（邏輯座標）；沒在野餐或還在飛 = null */
+  picnicMat(): LayoutRect | null {
+    return this.picnicState?.landed ? picnicMatRect(this.layout) : null
+  }
+
+  /** 相機提示的位置（CSS 座標）；不能拍（沒在野餐、墊子還在飛、墊上沒有寵物）= null */
+  cameraCss(): LayoutRect | null {
+    const mat = this.picnicMat()
+    if (!mat || this.picnicSeated() === 0) return null
+    return rectCss(this.layout, cameraRect(this.layout, mat))
+  }
+
+  /**
+   * 拍照用：把整個場景以 1 個邏輯像素 = 1 個畫布像素畫到一張新畫布（W×H），不含疊在畫布上的 DOM（選單、相機提示）、不畫選取標記。
+   * 回傳 null = 素材還沒好或瀏覽器不支援
+   */
+  snapshot(): HTMLCanvasElement | null {
+    const L = this.layout
+    if (!assets.ready || typeof document === 'undefined') return null
+    const c = document.createElement('canvas')
+    c.width = L.W
+    c.height = L.H
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    const sel = this.selectedId
+    this.selectedId = null
+    try {
+      this.render(ctx, { scale: 1, offsetY: 0, w: L.W, h: L.H })
+    } finally {
+      this.selectedId = sel
+    }
+    return c
   }
 
   houseSize(): { w: number; h: number } {

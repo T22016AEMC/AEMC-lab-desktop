@@ -1,5 +1,5 @@
 import { LocalStorageDocument } from '../../lib/documentStorage'
-import { isNewerData, isResetSchema, legacyRefundOf, parseSave } from './migrate'
+import { isNewerData, isResetSchema, legacyRefundOf, needsPersonalityFill, parseSave } from './migrate'
 import type { LoadResult, SaveData, SaveStorage } from './types'
 
 const KEY = 'aemc-desktop:farm-save'
@@ -53,14 +53,16 @@ export class LocalStorageAdapter extends LocalStorageDocument<SaveData> implemen
     if (!isResetSchema(obj)) {
       const save = parseSave(obj)
       const refund = legacyRefundOf(obj)
-      if (!save || refund <= 0) return { save, reset: 'none' }
+      // v3.8.0：有寵物缺個性欄位（v3.7.1 以前的存檔）→ 補上的固定個性也立刻寫回（同一個 id 算出來永遠一樣，所以寫入失敗、下次重算也是同一種）
+      const fill = needsPersonalityFill(obj)
+      if (!save || (refund <= 0 && !fill)) return { save, reset: 'none' }
       // 有已移除的建築：退款後的存檔立刻寫回（營火從儲存裡消失，下次載入不會再退）。寫入失敗也照用，下次載入會從同一份原始資料重算（還是退一次）
       try {
         await this.saveStrict(save)
       } catch {
         /* 忽略 */
       }
-      return { save, reset: 'none', refund }
+      return refund > 0 ? { save, reset: 'none', refund } : { save, reset: 'none' }
     }
     // 舊格式：先備份（已經有備份就不覆蓋；寫入失敗也不阻擋重置），再換成全新存檔
     if ((await this.backupSlot.snapshot()) === null) await this.backupSlot.restore(raw)

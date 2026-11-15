@@ -1,4 +1,5 @@
 import { BALANCE } from '../config/balance'
+import { NEUTRAL_MUL, personalityMul } from '../config/personality'
 import type { Pet, SaveData } from '../save/types'
 
 export type Stage = 'young' | 'adult'
@@ -9,16 +10,37 @@ export const DAY_MS = 86_400_000
 export const clamp100 = (v: number): number => Math.min(100, Math.max(0, v))
 
 /**
+ * 黏人個性（v3.8.0）：從 fromMs 起經過 hours 小時，其中「距離上次互動超過 lonelyAfterHours」的那一段有幾小時。
+ * 沒有 fromMs 或沒有 lastInteract 時當作 0（不算久沒互動）。
+ */
+export function lonelyHours(pet: Pet, fromMs: number | undefined, hours: number): number {
+  if (fromMs === undefined || pet.lastInteract === undefined) return 0
+  const startLonely = pet.lastInteract + BALANCE.personality.lonelyAfterHours * HOUR_MS
+  const endMs = fromMs + hours * HOUR_MS
+  return Math.max(0, Math.min(hours, (endMs - Math.max(fromMs, startLonely)) / HOUR_MS))
+}
+
+/**
  * 結算一隻寵物經過 elapsedMs 之後的數值。
  * offline 為 true（離開網站期間補算）時，數值最低不會被拉到 20 以下
  * （原本就低於 20 的維持原值，不再往下掉）。
+ * v3.8.0：下降速度乘上個性倍率（貪吃 飽食、懶散 心情、黏人 久沒互動後的心情）；fromMs = 這段時間的起點（黏人判斷「久沒互動」用）。
+ * 沒有個性（全部倍率 1）時，計算式與 v3.7.1 完全相同。
  */
-export function advancePet(pet: Pet, elapsedMs: number, offline: boolean): Pet {
+export function advancePet(pet: Pet, elapsedMs: number, offline: boolean, fromMs?: number): Pet {
   if (elapsedMs <= 0) return pet
   const hours = elapsedMs / HOUR_MS
   const d = BALANCE.decayPerHour
   const hungry = pet.satiety < BALANCE.lowThreshold
-  const moodRate = d.mood * (hungry ? 1 + BALANCE.moodExtraDecayWhenHungry : 1)
+  const mul = personalityMul(pet)
+  let moodRate = d.mood * (hungry ? 1 + BALANCE.moodExtraDecayWhenHungry : 1)
+  let satietyRate = d.satiety
+  if (mul !== NEUTRAL_MUL) {
+    satietyRate *= mul.satietyDecay
+    moodRate *= mul.moodDecay
+    // 久沒互動：超過門檻的那一段再乘 lonelyMoodDecay（換算成整段的平均速度）
+    if (mul.lonelyMoodDecay !== 1) moodRate *= (hours + lonelyHours(pet, fromMs, hours) * (mul.lonelyMoodDecay - 1)) / hours
+  }
 
   const drop = (value: number, rate: number): number => {
     const next = value - rate * hours
@@ -28,7 +50,7 @@ export function advancePet(pet: Pet, elapsedMs: number, offline: boolean): Pet {
 
   return {
     ...pet,
-    satiety: drop(pet.satiety, d.satiety),
+    satiety: drop(pet.satiety, satietyRate),
     mood: drop(pet.mood, moodRate),
     cleanliness: drop(pet.cleanliness, d.cleanliness),
   }
@@ -38,7 +60,7 @@ export function advancePet(pet: Pet, elapsedMs: number, offline: boolean): Pet {
 export function advanceSave(save: SaveData, nowMs: number, offline: boolean): SaveData {
   const elapsed = nowMs - save.lastSeen
   if (elapsed <= 0) return save
-  return { ...save, pets: save.pets.map((p) => advancePet(p, elapsed, offline)), lastSeen: nowMs }
+  return { ...save, pets: save.pets.map((p) => advancePet(p, elapsed, offline, save.lastSeen)), lastSeen: nowMs }
 }
 
 export function ageDays(pet: Pet, nowMs: number): number {

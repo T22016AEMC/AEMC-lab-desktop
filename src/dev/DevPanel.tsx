@@ -21,6 +21,7 @@ function shiftTime(save: SaveData, ms: number): SaveData {
       ...p,
       adoptedAt: p.adoptedAt - ms,
       awakeUntil: p.awakeUntil !== undefined ? p.awakeUntil - ms : undefined,
+      lastInteract: p.lastInteract !== undefined ? p.lastInteract - ms : undefined,
     })),
   }
   if (ms >= DAY_MS && save.lastDailyClaim) {
@@ -36,6 +37,16 @@ function shiftTime(save: SaveData, ms: number): SaveData {
     lastAward: Object.fromEntries(Object.entries(save.earning.lastAward).map(([k, v]) => [k, v - ms])),
   }
   shifted.bowl = { ...save.bowl, date: shiftDate(save.bowl.date) }
+  // v3.8.0 野餐：次數的日期、冷卻、進行中那一場的時間也一起往前推
+  if (save.picnic) {
+    const a = save.picnic.active
+    shifted.picnic = {
+      ...save.picnic,
+      date: shiftDate(save.picnic.date),
+      lastEnd: save.picnic.lastEnd > 0 ? save.picnic.lastEnd - ms : 0,
+      ...(a ? { active: { ...a, startedAt: a.startedAt - ms, until: a.until - ms } } : {}),
+    }
+  }
   return advanceSave(shifted, gameNow(), false)
 }
 

@@ -17,7 +17,14 @@ export interface Frame {
   ay: number
   unused?: boolean
   /** 素材附帶的資料（例如鐘樓的鐘面中心與半徑） */
-  meta?: { clock?: { cx: number; cy: number; r: number } | null; board?: { x0: number; y0: number; x1: number; y1: number } | null }
+  meta?: {
+    clock?: { cx: number; cy: number; r: number } | null
+    board?: { x0: number; y0: number; x1: number; y1: number } | null
+    /** v3.8.0 拍立得相框的窗口（管線偵測的透明區塊外框，x1、y1 不含） */
+    window?: { x0: number; y0: number; x1: number; y1: number }
+    /** v3.8.0 野餐墊的墊面（每 4 列一筆 [y, 左緣, 右緣)） */
+    mat?: { top: number; bottom: number; rows: [number, number, number][] }
+  }
 }
 
 interface Manifest {
@@ -41,7 +48,7 @@ export interface LoadProgress {
 const RETRIES = 2
 
 /** 不在啟動時載入的圖集（解鎖才用到）：外觀（金色住家、黃金鐘樓）。用 assets.loadGroup(名稱) 載入，載入前 assets.get 回傳 null，畫面用預設圖 */
-export const LAZY_ATLASES: readonly string[] = ['skins']
+export const LAZY_ATLASES: readonly string[] = ['skins', 'polaroid'] // v3.8.0：拍立得相框在野餐開始時才載入
 
 async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   let last: unknown

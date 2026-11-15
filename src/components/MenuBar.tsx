@@ -8,6 +8,7 @@ import { useUIStore } from '../store/uiStore'
 import { useActiveApp, useWindowStore } from '../store/windowStore'
 import { LogoMenu } from './LogoMenu'
 import { ToolsMenu } from './tools/ToolsMenu'
+import { PicnicButton } from './PicnicButton'
 
 export function MenuBar() {
   const now = useClock()
@@ -79,6 +80,8 @@ export function MenuBar() {
             建築
           </button>
         )}
+        {/* 野餐（v3.8.0）：排在建築旁 */}
+        {petCount !== null && <PicnicButton />}
         {/* 收藏冊（v3.6.1 起從 Logo 選單搬到這裡，和領養、建築排在一起；沒有存檔也能開） */}
         <button
           type="button"

@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { SPECIES, variantOf } from '../config/species'
+import { PERSONALITY_ICONS, PERSONALITY_NAMES, personalityFromId } from '../config/personality'
+import { PixelSprite } from './PixelSprite'
 import { worldHour } from '../overrides'
 import { PLAY_TOYS, petActions, type PlayToyId } from '../sim/commands'
 import { isSleeping } from '../sim/rules'
@@ -60,6 +62,8 @@ export const PetMenu = forwardRef<
   const v = variantOf(pet.species, pet.variant)
   const sleeping = isSleeping(pet, worldHour(nowMs), nowMs)
   const stage = stageOf(pet, nowMs) === 'young' ? '幼年' : '成年'
+  /** v3.8.0 個性（存檔讀進來一定有；萬一沒有就用 id 算出來的那一種，和存檔補上的一樣） */
+  const pers = pet.personality ?? personalityFromId(pet.id)
   /** 最後一隻不能找新主人：按鈕停用並顯示原因 */
   const rehomeWhy = rehomeBlock(save, pet.id)
 
@@ -97,6 +101,11 @@ export const PetMenu = forwardRef<
           {v.name}・{stage}
           {sleeping ? '・睡覺中' : ''}
         </div>
+      </div>
+      {/* v3.8.0 個性：圖示＋名稱 */}
+      <div className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-[#5a3410]" data-testid="pet-personality" data-personality={pers}>
+        <PixelSprite frame={PERSONALITY_ICONS[pers]} scale={1} title={PERSONALITY_NAMES[pers]} />
+        <span>個性：{PERSONALITY_NAMES[pers]}</span>
       </div>
       <div className="mt-1.5 space-y-1">
         <Bar label="飽食" value={pet.satiety} color="#e8892b" />

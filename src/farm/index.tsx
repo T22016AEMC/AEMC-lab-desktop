@@ -25,6 +25,11 @@ import { ballCursor } from './ui/ballCursor'
 import { toyOf, type PlayToyId } from './sim/commands'
 import { TOOLS } from '../config/tools'
 import { BoardThumbs } from './ui/BoardThumbs'
+import { PICNIC_TEXT, picnicBlock, picnicEndDue, rollDecor } from './sim/picnic'
+import { photoCrop } from './pixel/picnic'
+import { POLAROID_KEYS, DOWNLOAD_SCALE, canvasBlob, composePolaroid, cropSizeFor, photoFileName, upscale } from './ui/photo'
+import { PolaroidDialog, type PolaroidShot } from './ui/PolaroidDialog'
+import { PixelSprite } from './ui/PixelSprite'
 
 /** 工具包入口在場景上的提示文字（滑鼠移上去時顯示） */
 const TOOL_SPOTS = [
@@ -66,6 +71,14 @@ export function Farm() {
   const [lit, setLit] = useState(false)
   const litRef = useRef(false)
   const [assetError, setAssetError] = useState<string | null>(null)
+  /** v3.8.0 野餐：相機提示按鈕、拍照閃光、拍立得成品（只在記憶體，關掉就沒了） */
+  const cameraRef = useRef<HTMLButtonElement | null>(null)
+  const flashRef = useRef<HTMLDivElement | null>(null)
+  const shootingRef = useRef(false)
+  const [shot, setShot] = useState<PolaroidShot | null>(null)
+  const shotRef = useRef<PolaroidShot | null>(null)
+  shotRef.current = shot
+  const picnicReq = useUIStore((s) => s.picnicReq)
   const [progress, setProgress] = useState(assets.progress)
 
   const status = useFarmStore((s) => s.status)
@@ -207,8 +220,34 @@ export function Farm() {
       }
       const effects = st.drainEffects()
       if (effects.length) engine.applyEffects(effects)
+      // v3.8.0 野餐：和存檔同步（開始 → 墊子飛下來；結束 → 收掉）
+      const pact = st.save?.picnic?.active
+      engine.syncPicnic(pact)
       engine.update(dt, frame)
       engine.render(ctx)
+      // 野餐該結束了嗎：時間到、下雨、天黑（存檔判斷）；寵物都離開了、視窗太小放不下墊子（場景判斷）
+      if (pact && st.save) {
+        const due = picnicEndDue(st.save, frame)
+        if (due) st.endPicnic(due)
+        else if (!engine.picnicMatFits()) st.endPicnic('resize')
+        else if (engine.picnicParticipants() === 0) st.endPicnic('empty')
+      }
+      // 相機提示：墊子上有寵物坐好才出現（拍照中、拍立得開著時不顯示）；點擊區至少 24 CSS 像素
+      const cam = cameraRef.current
+      if (cam) {
+        const r = shootingRef.current || shotRef.current ? null : engine.cameraCss()
+        if (r) {
+          const w = Math.max(TOOLS.minHitCss, r.x1 - r.x0)
+          const h = Math.max(TOOLS.minHitCss, r.y1 - r.y0)
+          const cx = (r.x0 + r.x1) / 2
+          const cy = (r.y0 + r.y1) / 2
+          cam.style.left = `${Math.round(cx - w / 2)}px`
+          cam.style.top = `${Math.round(cy - h / 2 + Math.sin(performance.now() / 300) * 1.5)}px`
+          cam.style.width = `${Math.round(w)}px`
+          cam.style.height = `${Math.round(h)}px`
+          cam.style.visibility = 'visible'
+        } else cam.style.visibility = 'hidden'
+      }
 
       // 玩耍：游標換成球、HUD 顯示剩餘秒數與撿回次數（不擋輸入）
       const hud = engine.playHud()
@@ -512,6 +551,76 @@ export function Farm() {
     ui.showToast(toy === 'ball' ? `點草地或走道把球丟出去・${BALANCE.play.seconds} 秒・Esc 或右鍵結束` : toy === 'dig' ? `狗狗開始挖寶・${BALANCE.dig.seconds} 秒・點土堆揭曉・Esc 或右鍵結束` : `貓咪出門尋寶・${BALANCE.dig.seconds} 秒・點布包揭曉・Esc 或右鍵結束`, 3200)
   }
 
+  /** 選單列按了「野餐」：檢查條件 → 引擎挑參加的寵物 → 存檔開始（次數、清潔、心情）→ 墊子在下一個影格飛下來 */
+  useEffect(() => {
+    if (picnicReq === 0) return
+    const ui = useUIStore.getState()
+    const st = useFarmStore.getState()
+    const nowMs = gameNow()
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const why = picnicBlock(st.save, ctx)
+    if (why) {
+      ui.showToast(why)
+      return
+    }
+    if (!engine.picnicMatFits()) {
+      ui.showToast(PICNIC_TEXT.noRoom)
+      return
+    }
+    const ids = engine.picnicCandidates(st.save!.pets, ctx)
+    if (ids.length === 0) {
+      ui.showToast(PICNIC_TEXT.busy)
+      return
+    }
+    const err = st.startPicnic(ids, rollDecor())
+    if (err) {
+      ui.showToast(err)
+      return
+    }
+    setSelected(null)
+    ui.setBuildMode(false)
+    assets.loadGroup('polaroid').catch(() => {}) // 相框先載入，拍照時不用等
+    ui.showToast(`野餐開始！${ids.length} 隻寵物參加・${BALANCE.picnic.seconds / 60} 分鐘・寵物坐好後點相機拍照`, 3600)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picnicReq])
+
+  /** 點相機：墊上的寵物換開心姿勢 → 閃光 → 場景快照、裁切、放進隨機一款相框 → 跳出拍立得（可下載 PNG）。不加心情、不存檔 */
+  const shoot = async (): Promise<void> => {
+    if (shootingRef.current) return
+    const mat = engine.picnicMat()
+    if (!mat || engine.picnicCheer() === 0) return
+    shootingRef.current = true
+    try {
+      const scene = engine.snapshot()
+      const el = flashRef.current
+      if (el?.animate) el.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 450, easing: 'ease-out' })
+      await assets.loadGroup('polaroid')
+      const key = POLAROID_KEYS[Math.floor(Math.random() * POLAROID_KEYS.length)]
+      const frame = assets.get(key)
+      const win = frame?.meta?.window
+      if (!scene || !frame || !win) throw new Error('相框還沒載入')
+      const { w, h } = cropSizeFor(win)
+      const crop = photoCrop(engine.layout, mat, w, h)
+      const photo = composePolaroid(scene, crop, frame, win)
+      const [b1, b2] = await Promise.all([canvasBlob(photo), canvasBlob(upscale(photo, DOWNLOAD_SCALE))])
+      if (!b1 || !b2) throw new Error('瀏覽器無法產生圖片')
+      setShot({ url: URL.createObjectURL(b1), downloadUrl: URL.createObjectURL(b2), fileName: photoFileName(new Date(gameNow())), w: photo.width, h: photo.height, frame: key })
+    } catch (e) {
+      useUIStore.getState().showToast('拍照失敗：' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      shootingRef.current = false
+    }
+  }
+  const closeShot = (): void => {
+    setShot((s) => {
+      if (s) {
+        URL.revokeObjectURL(s.url)
+        URL.revokeObjectURL(s.downloadUrl)
+      }
+      return null
+    })
+  }
+
   const openHall = (): void => {
     const hall = getApp('game-hall')
     if (hall) useWindowStore.getState().openApp(hall)
@@ -707,6 +816,24 @@ export function Farm() {
           </button>
         </div>
       )}
+
+      {/* v3.8.0 野餐：相機提示（墊子上有寵物坐好才出現，點了拍照）與拍照閃光（白色、0.45 秒淡出、不擋點擊） */}
+      {assetsReady && (
+        <button
+          ref={cameraRef}
+          type="button"
+          aria-label="拍照"
+          title="拍照"
+          data-testid="picnic-camera"
+          className="absolute z-20 flex cursor-pointer items-center justify-center bg-transparent outline-none focus-visible:outline-2 focus-visible:outline-[#ffe28a]"
+          style={{ visibility: 'hidden' }}
+          onClick={() => void shoot()}
+        >
+          <PixelSprite frame="picnic_camera" scale={engine.layout.S / engine.layout.dpr} title="相機" />
+        </button>
+      )}
+      <div ref={flashRef} aria-hidden data-testid="picnic-flash" className="pointer-events-none absolute inset-0 z-40 bg-white" style={{ opacity: 0 }} />
+      {shot && <PolaroidDialog shot={shot} onClose={closeShot} />}
 
       {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 

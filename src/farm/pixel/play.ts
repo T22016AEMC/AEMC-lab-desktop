@@ -123,6 +123,7 @@ export const isCarrying = (p: PlayState): boolean => p.phase === 'grab' || p.pha
 /** 開始玩耍：狗留在原地（home），清掉建築使用、躲雨倒數與指令動作。layout 用來確認 home 站得住 */
 export function beginPlay(a: Actor, L: Layout, setAction: PlayOps['setAction'], hour: number, toy: PlayToyId = 'ball'): void {
   releaseUse(a)
+  a.picnic = null // v3.8.0：野餐中開始玩耍 = 離開野餐
   // 座位旁的位置是坐下時算的：之後換過視窗大小，同一個座標可能已經落在別的建築裡，離開座位時要確認站得住
   if (!isWalkable(L, a.x, a.y)) {
     const p = nearestWalkable(L, a.x, a.y)

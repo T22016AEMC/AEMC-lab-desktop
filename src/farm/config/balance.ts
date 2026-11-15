@@ -191,6 +191,51 @@ export const BALANCE = {
   /** 天氣權重：晴、多雲、雨、雪（v3.7.1：原本 40／25／20／15） */
   weatherWeights: { sunny: 54, cloudy: 30, rain: 15, snow: 1 },
 
+  /**
+   * 個性（v3.8.0）：每隻寵物一種（領養時隨機；舊存檔沒有的用寵物 id 算出固定的一種）。
+   * 表內是「倍率」：1 = 和沒有個性時一樣（全部 1 的「平均」個性，數值與 v3.7.1 完全相同，有測試證明）。
+   *  - digMood：挖寶／尋寶結算的心情加成（丟球不算）
+   *  - satietyDecay、moodDecay：每小時下降量（線上與離線補算都套用；離線下限 offlineFloor 照舊）
+   *  - eatMood：手動餵食的心情加成（食盆自己吃沒有心情加成，所以不受影響）
+   *  - wander：閒晃時「起身走動」的機率
+   *  - petMood：撫摸的心情加成（醒著與睡夢中都算）
+   *  - lonelyMoodDecay：距離上次互動超過 lonelyAfterHours 小時後，心情下降再乘這個倍率（只算超過的那一段）
+   *    互動 = 氣泡選單的操作（餵食、撫摸、洗澡、散步、梳毛、叫醒）、開始玩耍、參加野餐
+   *  - shelterDelay：下雨後出發去躲雨前的等待時間（越小越快；只有買了狗窩／貓跳台才會躲雨）
+   *  - dragMood：被拖曳造成的心情下降（目前只有「睡覺中被拖起來」會扣心情：貓 −15、狗 0）
+   */
+  personality: {
+    lively: { digMood: 1.25 },
+    greedy: { satietyDecay: 1.25, eatMood: 1.25 },
+    lazy: { moodDecay: 0.75, wander: 0.75 },
+    clingy: { petMood: 1.25, lonelyMoodDecay: 1.25 },
+    timid: { shelterDelay: 0.4, dragMood: 1.3 },
+    /** 黏人：多久沒互動算「久沒互動」（小時） */
+    lonelyAfterHours: 6,
+  },
+
+  /**
+   * 野餐（v3.8.0）：選單列「野餐」→ 野餐墊從上方飛下來，白天、醒著、沒下雨、心情不差、清潔夠的寵物走過去坐著，點相機拍照。
+   * 不收金幣；每隻參加的寵物在「開始時」一次扣清潔 cleanliness、加心情 mood（之後拍照、結束都不再加減）。
+   * 每天（本機日期 00:00 切日，和其他每日機制相同）最多 dailyMax 次、每次 seconds 秒、結束後冷卻 cooldownMs。
+   * minMood：心情低於這個（= 頭上冒「心情差」的門檻 lowThreshold）不參加；minCleanliness：清潔低於這個不參加。
+   * 下雨、夜晚（phaseOf = night，19:30～5:00）或睡覺時間（23:00～6:00）不能開始；進行中變成下雨或夜晚就提前結束。
+   */
+  picnic: {
+    dailyMax: 3,
+    seconds: 300,
+    cooldownMs: 30 * 60_000,
+    cleanliness: -8,
+    mood: 5,
+    minMood: 30,
+    minCleanliness: 20,
+    /** 墊子飛下來的時間（秒）；走到墊上超過 walkStuckSeconds 還沒到就直接出現在位置上（保險） */
+    dropSeconds: 0.9,
+    walkStuckSeconds: 12,
+    /** 拍照時開心姿勢維持幾秒 */
+    cheerSeconds: 1.6,
+  },
+
   /** 存檔節流（毫秒）與數值結算間隔（秒） */
   saveDebounceMs: 600,
   statTickSeconds: 10,

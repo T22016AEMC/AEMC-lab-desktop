@@ -1,4 +1,5 @@
 import { SPECIES, variantOf, type SpeciesId } from '../config/species'
+import { personalityMul } from '../config/personality'
 import type { Find, Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Weather } from '../sim/worldTime'
@@ -7,6 +8,8 @@ import type { BuildingSlot, Layout } from './layout'
 import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
 import { findPath, lineClear, type FixedPet, type Pt } from './nav'
 import { updatePlay, type PlayState, type PlayToyId } from './play'
+import { updatePicnicSeat, type PicnicSeat } from './picnic'
+import type { Rect } from './layout'
 
 /**
  * 寵物的行為（邏輯）。這一層只決定「現在在做什麼（動作名稱）」與位置，不管怎麼畫：
@@ -130,6 +133,8 @@ export interface Actor {
   play: PlayState | null
   /** 睡覺時間到了、但周圍太擠，正在找個不擠的地方睡（已經找了幾秒）；null = 沒在找 */
   seek: number | null
+  /** 野餐（v3.8.0）：參加中的座位與狀態；null = 沒參加。被拖曳、洗澡、開始玩耍、散步、找新主人時清掉（中途離開） */
+  picnic: PicnicSeat | null
 }
 
 export interface BehaviorEnv {
@@ -164,6 +169,8 @@ export interface BehaviorEnv {
   addFind: (a: Actor, kind: 'mound' | 'bundle', x: number, y: number) => boolean
   /** 睡著或坐在座位上、不會動的寵物（尋路時繞開） */
   fixed: readonly FixedPet[]
+  /** 野餐墊（落地後的外框）；沒在野餐或還在飛 = null */
+  picnicMat?: Rect | null
 }
 
 const rr = (rand: () => number, a: number, b: number): number => a + rand() * (b - a)
@@ -177,7 +184,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
-    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null,
+    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null, picnic: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -367,6 +374,8 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
     updatePlay(a, dt, env, PLAY_OPS)
     return
   }
+  // 野餐中（v3.8.0）：走到墊子上坐著；不去食盆、狗窩，也不躲雨（下雨時整場野餐會提前結束）
+  if (a.picnic && updatePicnicSeat(a, dt, env, env.picnicMat ?? null, PICNIC_OPS)) return
 
   // 選取中（氣泡選單開著）：停在原地等你選，但指令的動作（吃、開心…）照樣演出
   const frozen = env.selectedId === a.id
@@ -484,7 +493,8 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
       if (a.t >= a.dur) {
         const cat = a.pet.species === 'cat'
         const r = env.rand()
-        if (a.action === 'idle' && r < (cat ? 0.45 : 0.7)) {
+        // v3.8.0 懶散：起身走動的機率 × wander（沒有個性 = 1，和以前一樣）
+        if (a.action === 'idle' && r < (cat ? 0.45 : 0.7) * personalityMul(a.pet).wander) {
           pickTarget(a, env)
           setAction(a, 'walk', 0)
           a.stuckT = 0
@@ -525,6 +535,7 @@ export function soakSpot(L: Layout): { x: number; y: number } {
 export function beginBathWalk(a: Actor, L: Layout): boolean {
   if (a.bath || a.drag || a.fly) return false
   releaseUse(a)
+  a.picnic = null // 野餐中去洗澡：離開野餐
   a.override = null
   a.bath = { phase: 'walk', t: 0, fromX: a.x, fromY: a.y, bestD: Infinity, stall: 0 }
   const st = pondStand(L)
@@ -546,6 +557,7 @@ export function cancelBath(a: Actor): void {
 /** 直接跳進水池（拖曳放開在水面上，或走到水池前）。已經通過扣點與占用檢查 */
 export function enterPond(a: Actor): void {
   releaseUse(a)
+  a.picnic = null
   a.bath = { phase: 'jump', t: 0, fromX: a.x, fromY: a.y, bestD: 0, stall: 0 }
   a.override = null
   setAction(a, 'sit', 1e9)
@@ -663,6 +675,7 @@ function updateBath(a: Actor, dt: number, env: BehaviorEnv): void {
 
 export const PLAY_OPS = { setAction, moveToward: (a: Actor, dt: number, speed: number, env: BehaviorEnv) => moveToward(a, dt, speed, env), clampActor }
 const BUILDING_OPS = { setAction, moveToward: (a: Actor, dt: number, speed: number, env: BehaviorEnv) => moveToward(a, dt, speed, env) }
+const PICNIC_OPS = BUILDING_OPS
 
 /** 朝目標走。目標前面有障礙（購買後的建築形成的牆）就先規劃繞行路線，一個路徑點一個路徑點走 */
 function moveToward(a: Actor, dt: number, speed: number, env: BehaviorEnv): void {
@@ -706,6 +719,8 @@ export function computeSeparation(actors: Actor[]): void {
       const B = actors[j]
       // 兩隻都在使用建築（走去座位或已在座位上）：各有各的目標位置，互相推開會把彼此卡在座位旁邊（座位旁邊的位置靠得很近），不推
       if (A.bld && B.bld) continue
+      // 兩隻都在野餐（v3.8.0）：墊子上的座位靠得很近，不互推
+      if (A.picnic && B.picnic) continue
       // 坐在建築座位上、睡著的不會動：別的寵物要離牠們更遠一點（範圍放大 1.4 倍）
       const k = A.bld?.phase === 'at' || B.bld?.phase === 'at' || A.action === 'sleep' || B.action === 'sleep' ? 1.4 : 1
       const rx = 50 * k
@@ -724,8 +739,8 @@ export function computeSeparation(actors: Actor[]): void {
       const uy = dy / (ry * ry) / gl
       const push = s * 60
       // 睡著的、在建築座位上的不動，由別的寵物讓開
-      const fa = A.action === 'sleep' || A.bld?.phase === 'at'
-      const fb = B.action === 'sleep' || B.bld?.phase === 'at'
+      const fa = A.action === 'sleep' || A.bld?.phase === 'at' || !!A.picnic?.arrived
+      const fb = B.action === 'sleep' || B.bld?.phase === 'at' || !!B.picnic?.arrived
       // 正在走去座位的寵物不被座位上的寵物推開（否則走不到座位）
       let wa = 0.5
       if (fa && !fb) wa = B.bld?.phase === 'walk' ? 1 : 0

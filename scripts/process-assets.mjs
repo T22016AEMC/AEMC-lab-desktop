@@ -51,6 +51,14 @@ const isBg = (r, g, b) => {
   // 偏玫瑰紅的洋紅陰影／邊緣（例如貓 extra 腳下的暗粉紅影子）：G 極低、B 明顯高於 G
   return r >= 120 && g < r * 0.4 && b > g + 55 && b > 60 && b < r - 25 && r - b < 120 && b > r * 0.35 && g < 60
 }
+/**
+ * v3.8.0：嚴格的洋紅背景（只有 R、B 接近、G 明顯偏低的那一條，不含上面「玫瑰紅陰影」那條）。
+ * 粉色野餐墊的深粉紅滾邊（約 236,43,129）會被 isBg 的第二條當成陰影吃掉，所以 picnic_mats.png 用這個判斷
+ */
+const isBgStrict = (r, g, b) => {
+  const m = Math.min(r, b)
+  return m >= 80 && g <= m - 45 && Math.abs(r - b) < 45
+}
 
 async function load(file) {
   const path = join(SRC, file)
@@ -59,10 +67,10 @@ async function load(file) {
   return { data, W: i.width, H: i.height, file }
 }
 
-function fgMask(img) {
+function fgMask(img, bg = isBg) {
   const { data, W, H } = img
   const m = new Uint8Array(W * H)
-  for (let i = 0; i < W * H; i++) m[i] = isBg(data[i * 3], data[i * 3 + 1], data[i * 3 + 2]) ? 0 : 1
+  for (let i = 0; i < W * H; i++) m[i] = bg(data[i * 3], data[i * 3 + 1], data[i * 3 + 2]) ? 0 : 1
   return m
 }
 
@@ -294,11 +302,12 @@ function depixelate(img, mask, lab, keep, box, p, phases) {
 }
 
 /** 裁到不透明內容的外框，並清掉殘留的洋紅色像素、孤立的單點 */
-function cleanSprite(s) {
+function cleanSprite(s, bg = isBg) {
+  if (!s) return null
   const { w, h, rgba } = s
   // 殘留的洋紅色（邊緣混色）→ 透明
   for (let i = 0; i < w * h; i++) {
-    if (rgba[i * 4 + 3] && isBg(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2])) rgba[i * 4 + 3] = 0
+    if (rgba[i * 4 + 3] && bg(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2])) rgba[i * 4 + 3] = 0
   }
   // 孤立單點（上下左右都沒有鄰居）→ 移除
   const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rgba[(y * w + x) * 4 + 3] === 255
@@ -450,9 +459,10 @@ const POND_W = 110
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false }) {
   const img = await load(file)
-  const mask = fgMask(img)
+  const bgFn = strictBg ? isBgStrict : isBg
+  const mask = fgMask(img, bgFn)
   const { lab, comps: all } = label(mask, img.W, img.H)
   const comps = keepComps(all, minArea)
   const cells = groupCells(comps, cols, rows)
@@ -466,7 +476,7 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     // 相位：每格各自估算（避開 AI 圖的整體漂移）
     const clip = [Math.max(0, box[0] - 4), Math.max(0, box[1] - 4), Math.min(img.W - 2, box[2] + 4), Math.min(img.H - 2, box[3] + 4)]
     const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
-    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases))
+    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), bgFn)
   }
   /** 反推 p，讓這一格輸出的高度等於 target（高度是整數，會在 ±1 內收斂） */
   const solve = (cell, target, p0) => {
@@ -1098,7 +1108,127 @@ async function main() {
     ], { cols: 4, cellW: 300, cellH: 260, scale: 4, bg: bgPrev })
   }
 
+  // 9) v3.8.0：個性圖示（圖集 ui）、野餐（圖集 picnic，必載）、拍立得相框（圖集 polaroid，拍照時才載入）。
+  //    只讀下面列的英文檔名；polaroid_frames_a/c、picnic_decor、stickers_* 不處理、不輸出。
+  //    各張原圖的像素顆粒大小不同：每張「整張共用一個 p」（同一張裡的格子大小關係不變），p 由該張的目標尺寸反推（不是事後縮放，仍是 1 格 = 1 像素）
+  {
+    const bgPrev = { r: 110, g: 160, b: 90 }
+    const tiles = []
+    const pi = await sheet({ file: 'personality_icons.png', cols: 3, rows: 2, names: PERSONALITY_ICON_NAMES, fitMax: PERSONALITY_ICON })
+    for (const f of pi.frames) {
+      const n = defringePink(f.spr)
+      addFrame('ui', f.name, padCenter(f.spr, PERSONALITY_ICON), { ax: PERSONALITY_ICON / 2, ay: PERSONALITY_ICON })
+      info(`${f.name}：內容 ${f.spr.w}×${f.spr.h}，畫布 ${PERSONALITY_ICON}×${PERSONALITY_ICON}（p=${pi.p.toFixed(2)}，去粉紅殘邊 ${n}）`)
+      tiles.push({ spr: padCenter(f.spr, PERSONALITY_ICON), label: f.name, scale: 4 })
+    }
+    // 野餐墊 3 款（紅格、藍格、粉色）：整張共用 p，紅格的寬度 = PICNIC_MAT_W
+    const mats = await sheet({ file: 'picnic_mats.png', cols: 3, rows: 1, names: ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'], targets: { picnic_mat_red: PICNIC_MAT_W }, solveFrom: 'picnic_mat_red', solveDim: 'w', strictBg: true })
+    for (const f of mats.frames) {
+      const spr = padBottomCenter(f.spr, PICNIC_MAT_W, Math.max(...mats.frames.map((g) => g.spr.h)))
+      addFrame('picnic', f.name, spr, { meta: { mat: matShape(spr) }, strictBg: true })
+      info(`${f.name}：內容 ${f.spr.w}×${f.spr.h} → 畫布 ${spr.w}×${spr.h}（p=${mats.p.toFixed(2)}），墊面 ${JSON.stringify(matShape(spr))}`)
+      tiles.push({ spr, label: f.name, scale: 3 })
+    }
+    // 野餐籃 2 格（闔上、打開）：共用 p，闔上的高度 = PICNIC_BASKET_H
+    const bk = await sheet({ file: 'picnic_basket.png', cols: 2, rows: 1, names: ['picnic_basket_closed', 'picnic_basket_open'], targets: { picnic_basket_closed: PICNIC_BASKET_H }, solveFrom: 'picnic_basket_closed' })
+    for (const f of bk.frames) {
+      addFrame('picnic', f.name, f.spr)
+      info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${bk.p.toFixed(2)}）`)
+      tiles.push({ spr: f.spr, label: f.name, scale: 4 })
+    }
+    // 食物 4 種（2×2：三明治、水果盤 / 草莓蛋糕、柳橙汁）：共用 p，最大那張長邊 = PICNIC_FOOD
+    const fd = await sheet({ file: 'picnic_food.png', cols: 2, rows: 2, names: ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'], fitMax: PICNIC_FOOD })
+    for (const f of fd.frames) {
+      addFrame('picnic', f.name, f.spr)
+      info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${fd.p.toFixed(2)}）`)
+      tiles.push({ spr: f.spr, label: f.name, scale: 4 })
+    }
+    // 寵物點心 2 格（狗餅乾、貓小魚乾）：本版只打包，場景沒有使用
+    const sk = await sheet({ file: 'picnic_pet_snacks.png', cols: 2, rows: 1, names: ['picnic_snack_dog', 'picnic_snack_cat'], fitMax: PICNIC_SNACK })
+    for (const f of sk.frames) {
+      addFrame('picnic', f.name, f.spr)
+      info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${sk.p.toFixed(2)}）`)
+      tiles.push({ spr: f.spr, label: f.name, scale: 4 })
+    }
+    // 相機圖示（相機提示按鈕）
+    const cam = await sheet({ file: 'picnic_camera.png', cols: 1, rows: 1, names: ['picnic_camera'], fitMax: PICNIC_CAMERA })
+    for (const f of cam.frames) {
+      addFrame('picnic', f.name, f.spr)
+      info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${cam.p.toFixed(2)}）`)
+      tiles.push({ spr: f.spr, label: f.name, scale: 4 })
+    }
+    // 拍立得相框 3 款（polaroid_frames_b：愛心＋腳印、花朵＋野餐籃、星星＋貓咪）：共用 p，最大那張長邊 = POLAROID_MAX。
+    // 中間的洋紅窗口去背後是透明的：用程式找「被相框圍住、碰不到外框的透明區塊」，外框寫進 meta.window（照片放在這個矩形裡，相框疊在上面）
+    const pf = await sheet({ file: 'polaroid_frames_b.png', cols: 3, rows: 1, names: ['polaroid_hearts', 'polaroid_flowers', 'polaroid_stars'], fitMax: POLAROID_MAX })
+    for (const f of pf.frames) {
+      // 不做 defringePink：愛心款的愛心本身是粉紅色、又貼著外緣，會被當成殘邊削掉（實測 149 格）
+      const n = 0
+      const win = detectWindow(f.spr)
+      if (!win) throw new Error(f.name + ' 找不到相框窗口')
+      addFrame('polaroid', f.name, f.spr, { meta: { window: win } })
+      info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${pf.p.toFixed(2)}），窗口 ${JSON.stringify(win)}（${win.x1 - win.x0}×${win.y1 - win.y0}）`)
+      tiles.push({ spr: f.spr, label: f.name, scale: 2 })
+    }
+    await composePreview('v380-assets.png', tiles, { cols: 5, cellW: 300, cellH: 300, scale: 3, bg: bgPrev })
+  }
+
   await writeOutputs()
+}
+
+/** v3.8.0：個性圖示（順序 = 原圖左到右、上到下：活潑、貪吃、懶散 / 黏人、膽小；第 6 格是空的） */
+const PERSONALITY_ICON_NAMES = ['pers_lively', 'pers_greedy', 'pers_lazy', 'pers_clingy', 'pers_timid', null]
+const PERSONALITY_ICON = Number(process.env.PERSONALITY_ICON ?? 20)
+/** 野餐墊寬度、籃子高度、食物長邊、點心長邊、相機長邊、相框長邊（邏輯像素；layout／picnic.ts 的常數要一致，測試會比對） */
+const PICNIC_MAT_W = Number(process.env.PICNIC_MAT_W ?? 104)
+const PICNIC_BASKET_H = Number(process.env.PICNIC_BASKET_H ?? 22)
+const PICNIC_FOOD = Number(process.env.PICNIC_FOOD ?? 16)
+const PICNIC_SNACK = 16
+const PICNIC_CAMERA = 20
+const POLAROID_MAX = Number(process.env.POLAROID_MAX ?? 80)
+
+/**
+ * 野餐墊的墊面形狀（平行四邊形，素材座標）：每一列不透明像素的左右緣。回傳 { top, bottom, rows: [[y, x0, x1], …] } 中只取幾個代表值：
+ * top / bottom = 不透明的第一列與最後一列；left / right = 每列左緣與右緣的最小、最大值；寫進 meta.mat（站位用，避免手寫座標）
+ */
+function matShape(s) {
+  const rows = []
+  for (let y = 0; y < s.h; y++) {
+    let x0 = -1, x1 = -1
+    for (let x = 0; x < s.w; x++) if (s.rgba[(y * s.w + x) * 4 + 3]) { if (x0 < 0) x0 = x; x1 = x + 1 }
+    if (x0 >= 0) rows.push([y, x0, x1])
+  }
+  // 每 4 列取一筆，夠用來判斷一個點在不在墊面上
+  return { top: rows[0][0], bottom: rows[rows.length - 1][0] + 1, rows: rows.filter((r, i) => i % 4 === 0 || i === rows.length - 1) }
+}
+
+/** 相框窗口：碰不到素材外緣的透明連通塊中最大的那一個，回傳它的外框 { x0, y0, x1, y1 }（x1、y1 不含） */
+function detectWindow(s) {
+  const { w, h, rgba } = s
+  const seen = new Uint8Array(w * h)
+  let best = null
+  for (let i0 = 0; i0 < w * h; i0++) {
+    if (seen[i0] || rgba[i0 * 4 + 3]) continue
+    const stack = [i0]
+    seen[i0] = 1
+    let x0 = w, y0 = h, x1 = -1, y1 = -1, area = 0, edge = false
+    while (stack.length) {
+      const p = stack.pop()
+      const x = p % w, y = (p / w) | 0
+      area++
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) edge = true
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+      for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1])
+        if (q >= 0 && !seen[q] && !rgba[q * 4 + 3]) { seen[q] = 1; stack.push(q) }
+    }
+    if (!edge && (!best || area > best.area)) best = { x0, y0, x1: x1 + 1, y1: y1 + 1, area }
+  }
+  if (!best) return null
+  // 窗口內必須全部透明（是矩形）：外框裡有不透明像素就回報
+  let solid = 0
+  for (let y = best.y0; y < best.y1; y++) for (let x = best.x0; x < best.x1; x++) if (rgba[(y * w + x) * 4 + 3]) solid++
+  // 窗口邊緣是手繪的、有幾格不齊：外框裡的不透明像素是相框本身（照片畫在下面、相框疊在上面，所以不影響）
+  if (solid) info(`相框窗口外框內有 ${solid} 個相框像素（窗口邊緣不齊；照片在下、相框在上，不影響）`)
+  return { x0: best.x0, y0: best.y0, x1: best.x1, y1: best.y1 }
 }
 
 /** v3.7.0 工具圖示的畫布邊長、便條紙小圖邊長、場景公佈欄的寬度（邏輯像素；layout.ts 的 BOARD_W/H 要一致，測試會比對） */
@@ -1196,8 +1326,15 @@ async function writeOutputs() {
   for (const frames of Object.values(atlases))
     for (const f of frames) {
       let magenta = 0
-      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && isBg(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) magenta++
+      const bgFn = f.strictBg ? isBgStrict : isBg
+      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) magenta++
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
+      // v3.8.0 新素材：逐張列出洋紅殘留（嚴格判斷＝純洋紅；一般判斷＝含玫瑰紅陰影，粉色墊的滾邊本來就是粉紅色，所以墊子只看嚴格判斷）
+      if (/^(pers_|picnic_|polaroid_)/.test(f.key)) {
+        let strict = 0
+        for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && isBgStrict(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) strict++
+        info(`洋紅殘留檢查 ${f.key}（${f.w}×${f.h}）：嚴格 ${strict}、${f.strictBg ? '（此圖用嚴格判斷去背）' : '一般 ' + magenta}`)
+      }
       if (f.w < 6 || f.h < 6) warn(`${f.key} 太小（${f.w}×${f.h}）`)
     }
   // 前後尺寸對照表

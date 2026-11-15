@@ -1,4 +1,5 @@
 import { BALANCE } from '../config/balance'
+import { personalityMul } from '../config/personality'
 import type { BuildingId } from '../config/buildings'
 import { KENNEL_AX, KENNEL_H, CAT_TREE_H, petMinX, type BuildingSlot } from './layout'
 import type { Action, Actor, BehaviorEnv } from './pets'
@@ -218,7 +219,8 @@ export function updateBuildingUse(a: Actor, dt: number, env: BehaviorEnv, st: { 
   if (a.bowlCool > 0) a.bowlCool = Math.max(0, a.bowlCool - dt)
   // 躲雨的出發倒數：下雨後每隻隨機等一下才出發；雨停就清掉
   if (raining) {
-    if (a.rainIn === null) a.rainIn = rr(env.rand, cfg.shelter.startDelay[0], cfg.shelter.startDelay[1])
+    // v3.8.0 膽小：出發前的等待 × shelterDelay（更快去躲雨）
+    if (a.rainIn === null) a.rainIn = rr(env.rand, cfg.shelter.startDelay[0], cfg.shelter.startDelay[1]) * personalityMul(a.pet).shelterDelay
     else if (a.rainIn > 0) a.rainIn -= dt
   } else a.rainIn = null
 

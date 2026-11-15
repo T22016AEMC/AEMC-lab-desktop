@@ -40,6 +40,9 @@ interface UIState {
   adoptOpen: boolean
   /** 建築模式：場景上顯示可購買的虛線空位 */
   buildMode: boolean
+  /** v3.8.0 野餐：選單列按了「野餐」就遞增（養殖場畫面接手，開始條件與場景由養殖場判斷） */
+  picnicReq: number
+  requestPicnic: () => void
   /** 選單列 Logo 的下拉選單 */
   logoMenuOpen: boolean
   importState: ImportState | null
@@ -106,6 +109,8 @@ export const useUIStore = create<UIState>((set) => ({
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
   setBuildMode: (buildMode) => set({ buildMode }),
+  picnicReq: 0,
+  requestPicnic: () => set((s) => ({ picnicReq: s.picnicReq + 1 })),
   setLogoMenuOpen: (logoMenuOpen) => set({ logoMenuOpen }),
   setImportState: (importState) => set({ importState }),
   setPersisted: (persisted) => set({ persisted }),

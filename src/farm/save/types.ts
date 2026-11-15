@@ -1,5 +1,6 @@
 import type { SpeciesId } from '../config/species'
 import type { Note } from '../../tools/notes'
+import type { PersonalityId } from '../config/personality'
 
 /**
  * 目前的存檔格式。v5（v3.4.0）起，舊格式（v4 以前）不再升級，第一次載入時一律重置為全新存檔（見 storage.ts 的 loadOrReset）。
@@ -9,8 +10,9 @@ export const CURRENT_SCHEMA_VERSION = 5
  * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
  * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
  */
-export const DATA_REV = 2
-// DATA_REV 歷史：1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）。
+export const DATA_REV = 3
+// DATA_REV 歷史：1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+// 升到 3 的用意：v3.7.x 的舊分頁讀到 dataRev 3 會停止自動存檔並提示重新整理，不會把個性與野餐紀錄洗掉。
 // 升到 2 的用意：v3.6.0～v3.6.3 的舊分頁讀到 dataRev 2 會停止自動存檔並提示重新整理，不會把 notes 洗掉。
 
 export interface Pet {
@@ -30,6 +32,13 @@ export interface Pet {
   cleanliness: number
   /** 被叫醒後保持清醒到這個時間（毫秒時間戳），夜晚才有意義 */
   awakeUntil?: number
+  /**
+   * 個性（v3.8.0）。領養時隨機；舊存檔沒有這個欄位的由 parseSave 用 id 算出固定的一種（personalityFromId）並寫回存檔。
+   * 型別上可省略只是為了測試（沒有個性 = 所有倍率 1，數值與 v3.7.1 相同）；存檔讀進來一定有。
+   */
+  personality?: PersonalityId
+  /** 上次互動時間（毫秒時間戳，v3.8.0；黏人個性「久沒互動」用）。舊存檔沒有的由 parseSave 補成存檔的 lastSeen */
+  lastInteract?: number
 }
 
 /**
@@ -78,6 +87,28 @@ export interface BowlState {
   used: number
 }
 
+/**
+ * 野餐（v3.8.0）的每日次數與冷卻。date = 次數所屬的本機日期（換日就從 0 算）；lastEnd = 上一場結束的時間（冷卻從這裡算，跨日也有效）；
+ * active = 進行中的那一場（重新整理或離線回來時一律直接結束，見 sim/picnic.ts 的 settlePicnicOnLoad）。
+ */
+export interface PicnicActive {
+  startedAt: number
+  /** 預定結束時間（startedAt + BALANCE.picnic.seconds） */
+  until: number
+  /** 參加的寵物 id（開始時已經扣清潔、加心情） */
+  pets: string[]
+  /** 墊子顏色（0 紅、1 藍、2 粉）、籃子（0 闔上、1 打開）、食物（picnic_food 的索引，1～2 樣） */
+  mat: number
+  basket: number
+  foods: number[]
+}
+export interface PicnicState {
+  date: string
+  count: number
+  lastEnd: number
+  active?: PicnicActive
+}
+
 /** 存檔：單一物件，包含 schemaVersion 以便未來升級資料格式 */
 export interface SaveData {
   schemaVersion: number
@@ -110,6 +141,8 @@ export interface SaveData {
    * 驗證在 tools/notes.ts 的 cleanNotes（壞掉的單張捨棄）。
    */
   notes?: Note[]
+  /** 野餐的每日次數與冷卻（v3.8.0，可缺少：沒有 = 今天還沒野餐過、沒有冷卻） */
+  picnic?: PicnicState
   /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
   resetNotice?: true
 }

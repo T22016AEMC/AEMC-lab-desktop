@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { BALANCE } from '../config/balance'
-import { gameNow, worldHour } from '../overrides'
+import { gameNow, worldHour, worldWeather } from '../overrides'
+import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, type PicnicDecor, type PicnicEndReason } from '../sim/picnic'
 import { LocalStorageAdapter, setNewerDataHandler } from '../save/storage'
 import type { Find, SaveData, SaveStorage } from '../save/types'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
@@ -90,6 +91,13 @@ interface FarmState {
   addNote: (draft: NoteDraft) => string | null
   updateNote: (id: string, draft: NoteDraft) => string | null
   deleteNote: (id: string) => void
+  /**
+   * 野餐（v3.8.0）開始：participants = 引擎挑出來的寵物（場景上有空、數值符合）。次數 +1、參加的寵物清潔 −8、心情 +5，立刻寫入。
+   * 回傳錯誤訊息或 null
+   */
+  startPicnic: (participants: readonly string[], decor: PicnicDecor) => string | null
+  /** 野餐結束（時間到、下雨、天黑、寵物都離開）：冷卻從現在起算、顯示提示，立刻寫入。沒在野餐就不動 */
+  endPicnic: (reason: PicnicEndReason) => void
   /** 通用的存檔修改入口（測試模式等使用） */
   mutate: (fn: (save: SaveData) => SaveData) => void
   resetAll: () => Promise<void>
@@ -153,8 +161,10 @@ export const useFarmStore = create<FarmState>((set, get) => ({
       set({ status: 'ready', save: null })
       return
     }
+    // v3.8.0：重新整理、離線回來時還有進行中的野餐 → 直接結束（墊子不會出現、不補償；冷卻從離開網頁的時間起算）。要在補算數值（會更新 lastSeen）之前
+    const hadPicnic = !!loaded.picnic?.active
     // 離開網站期間補算數值（下限 20），再看今天有沒有每日獎勵
-    let save = advanceSave(loaded, now, true)
+    let save = advanceSave(settlePicnicOnLoad(loaded), now, true)
     const daily = claimDaily(save, todayKey(now))
     save = daily.save
     // 離線期間到期的寶物一次揭曉（揭曉後從清單拿掉，所以同一天載入多次不會重複結算）
@@ -164,6 +174,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (due.revealed.length) announceAuto(due.revealed, save, now)
     if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (refund) set({ legacyRefund: refund })
+    if (hadPicnic) flushSave()
   },
 
   adoptPet: (req) => {
@@ -270,8 +281,31 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     next = daily.save
     if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (next !== save) set({ save: next })
+    // v3.8.0：野餐時間到、下雨、天黑 → 結束（主迴圈每個影格也會檢查；這裡是分頁被蓋住或在背景時的備援）
+    const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) })
+    if (due) get().endPicnic(due)
     // 到期（10 分鐘）的寶物自動揭曉
     get().revealDueNow()
+  },
+
+  startPicnic: (participants, decor) => {
+    const save = get().save
+    if (!save) return PICNIC_TEXT.noSave
+    const now = gameNow()
+    const r = startPicnic(save, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) }, participants, decor)
+    if (r.error) return r.error
+    set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
+    flushSave()
+    return null
+  },
+
+  endPicnic: (reason) => {
+    const save = get().save
+    if (!save?.picnic?.active) return
+    set({ save: endPicnic(save, gameNow()) })
+    flushSave()
+    const msg = reason === 'rain' ? PICNIC_TEXT.endRain : reason === 'night' ? PICNIC_TEXT.endNight : reason === 'empty' ? PICNIC_TEXT.endEmpty : reason === 'resize' ? PICNIC_TEXT.endResize : PICNIC_TEXT.endTime
+    useUIStore.getState().showToast(msg, 3200)
   },
 
   dismissLegacyRefund: () => set({ legacyRefund: 0 }),

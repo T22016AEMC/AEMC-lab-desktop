@@ -14,7 +14,10 @@ export const BACKUP_FORMAT = 'aemc-desktop-backup'
  * 匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受：2、3 的檔案沒有 notes（就算檔案裡有也不讀，一律視為空），
  * 其他缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 4 會顯示「較新版本」）。
  */
-export const BACKUP_FORMAT_VERSION = 4
+export const BACKUP_FORMAT_VERSION = 5
+// v3.8.0：5 = 寵物多了個性（personality）、上次互動（lastInteract），存檔多了野餐紀錄（picnic）。
+// 讀取舊格式（2～4）：這些欄位本來就不在檔案裡，parseSave 照一般存檔的規則補上（個性 = 用寵物 id 算出的固定那一種，和直接載入舊存檔得到的一樣；
+// lastInteract = 備份的 lastSeen；沒有野餐紀錄 = 今天還沒野餐過）。v3.7.x 的舊程式讀到 5 會顯示「較新版本」並拒絕（不會把個性默默丟掉）。
 /** 從這個格式版本起，備份裡的 notes 才會被讀取 */
 export const NOTES_FORMAT_VERSION = 4
 export const MIN_BACKUP_FORMAT_VERSION = 2
