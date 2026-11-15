@@ -21,7 +21,7 @@ export function buyBuilding(save: SaveData, id: string): BuyResult {
   return { save: { ...save, points: save.points - def.price, ownedBuildings: [...save.ownedBuildings, id] } }
 }
 
-/** 食盆今天的份量上限：寵物數 × 每隻 2 份（上限是查詢時即時算的，所以隔天補滿用當時的寵物數，當天領養新寵物就多 2 份） */
+/** 食盆今天的份量上限：寵物數 × 每隻每天 portionsPerPet 盆（上限是查詢時即時算的，所以隔天補滿用當時的寵物數；當天領養新寵物就多幾盆，找新主人就少幾盆，已用掉的不變） */
 export function bowlCapacity(save: SaveData): number {
   return save.pets.length * BALANCE.buildings.bowls.portionsPerPet
 }
@@ -56,15 +56,15 @@ export function eatAtBowl(save: SaveData, ctx: Ctx, petId: string): EatResult {
 }
 
 /**
- * 睡覺中的心情回復（每次結算約 10 秒，只在線上即時算）：一般睡覺每小時 +base，
- * 睡在狗窩／貓跳台旁邊乘以 buildingMul。atBuilding = 目前睡在建築旁的寵物 id。
+ * 睡覺中的心情回復（每次結算約 10 秒，只在線上即時算）：睡在狗窩／貓跳台的真座位每小時 +base × buildingMul，
+ * 其他地方（地上、座位坐滿時建築前方的位置）每小時 +base × groundMul（v3.7.1）。atBuilding = 目前睡在建築真座位上的寵物 id。
  */
 export function applySleepRecovery(save: SaveData, ctx: Ctx, elapsedSec: number, atBuilding: ReadonlySet<string>): SaveData {
   if (elapsedSec <= 0) return save
   let changed = false
   const pets = save.pets.map((p) => {
     if (!isSleeping(p, ctx.hour, ctx.nowMs) || p.mood >= 100) return p
-    const rate = BALANCE.sleepMood.base * (atBuilding.has(p.id) ? BALANCE.sleepMood.buildingMul : 1)
+    const rate = BALANCE.sleepMood.base * (atBuilding.has(p.id) ? BALANCE.sleepMood.buildingMul : BALANCE.sleepMood.groundMul)
     changed = true
     return { ...p, mood: Math.min(100, p.mood + (rate * elapsedSec) / 3600) }
   })

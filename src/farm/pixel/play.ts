@@ -29,7 +29,7 @@ export type PlayToyId = 'ball' | 'dig' | 'hunt'
  */
 export type PlayPhase = 'ready' | 'flight' | 'chase' | 'grab' | 'return' | 'drop' | 'cheer' | 'search' | 'go' | 'work' | 'pounce' | 'back' | 'put' | 'mark'
 /** 結束的原因：time／user 演 cheer；其他只結算數值 */
-export type PlayEnd = 'time' | 'user' | 'drag' | 'window' | 'sleep' | 'resize'
+export type PlayEnd = 'time' | 'user' | 'drag' | 'window' | 'sleep' | 'resize' | 'rehome'
 
 /** 球：從 (fromX, fromY, 高 fromZ) 飛到地面 (toX, toY)；t 是出手後的時間，dur 是飛行時間（dur 之後是落地彈跳） */
 export interface PlayBall {
@@ -235,7 +235,7 @@ function toIdle(a: Actor, ops: PlayOps): void {
 }
 
 /**
- * 結束玩耍。time／user：演 cheer（結算在進入 cheer 時）；其他原因（拖曳、開視窗、睡覺時間、視窗大小改變）
+ * 結束玩耍。time／user：演 cheer（結算在進入 cheer 時）；其他原因（拖曳、開視窗、睡覺時間、視窗大小改變、找新主人）
  * 直接結算數值並回到一般行為，不演 cheer。已經在 cheer（數值結算過了）就只是結束，不會重複結算。
  */
 export function endPlay(a: Actor, reason: PlayEnd, env: PlayEnv, ops: PlayOps): void {

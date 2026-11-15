@@ -4,6 +4,7 @@ import { SPECIES, variantOf } from '../config/species'
 import { worldHour } from '../overrides'
 import { PLAY_TOYS, petActions, type PlayToyId } from '../sim/commands'
 import { isSleeping } from '../sim/rules'
+import { rehomeBlock } from '../sim/rehome'
 import { stageOf, weightLabel, heightCm, weightKg } from '../sim/stats'
 import { useFarmStore } from '../store/farmStore'
 
@@ -36,8 +37,10 @@ export const PetMenu = forwardRef<
     playBlock?: string | null
     /** 某個玩具現在不能玩的原因（例如寶物已滿：先點開土堆）；可以玩 = null */
     toyBlock?: (toy: PlayToyId) => string | null
+    /** 按了「找新主人」：開二次確認對話框（由 Farm 負責） */
+    onRehome?: (petId: string) => void
   }
->(function PetMenu({ petId, onBath, onPlay, playBlock, toyBlock }, ref) {
+>(function PetMenu({ petId, onBath, onPlay, playBlock, toyBlock, onRehome }, ref) {
   const save = useFarmStore((s) => s.save)
   const runAction = useFarmStore((s) => s.runAction)
   const [tick, setTick] = useState(0)
@@ -57,6 +60,8 @@ export const PetMenu = forwardRef<
   const v = variantOf(pet.species, pet.variant)
   const sleeping = isSleeping(pet, worldHour(nowMs), nowMs)
   const stage = stageOf(pet, nowMs) === 'young' ? '幼年' : '成年'
+  /** 最後一隻不能找新主人：按鈕停用並顯示原因 */
+  const rehomeWhy = rehomeBlock(save, pet.id)
 
   const run = (id: (typeof actions)[number]['id']) => {
     // 玩耍：先挑玩具（扣金幣在挑了玩具之後）
@@ -149,6 +154,27 @@ export const PetMenu = forwardRef<
               </button>
             )
           })}
+        </div>
+      )}
+      {view === 'main' && onRehome && (
+        // v3.7.1 找新主人：放在選單最後、和一般操作分開（分隔線＋上方留空），避免誤觸；按了先出二次確認
+        <div className="mt-2 border-t-2 border-dashed border-[#3b2a1c]/30 pt-1.5" data-testid="rehome-section">
+          <button
+            type="button"
+            disabled={rehomeWhy !== null}
+            title={rehomeWhy ?? '找新主人（返還金幣，無法找回）'}
+            onClick={() => onRehome(pet.id)}
+            className="px-btn w-full px-1 py-0.5 text-[11px] disabled:opacity-60"
+            style={rehomeWhy ? { background: '#cfc3a8', color: '#8a7d66', boxShadow: 'none', cursor: 'not-allowed' } : undefined}
+            data-testid="action-rehome"
+          >
+            找新主人
+          </button>
+          {rehomeWhy && (
+            <div className="mt-0.5 text-center text-[10px] text-[#8a5a2b]" data-testid="rehome-why">
+              {rehomeWhy}
+            </div>
+          )}
         </div>
       )}
       {/* 氣泡的小尾巴 */}

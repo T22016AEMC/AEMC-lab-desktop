@@ -196,6 +196,29 @@ export class PixelEngine {
   }
 
   /**
+   * 找新主人（v3.7.1）：把寵物從場景移除，要在存檔移除牠「之前」呼叫（玩耍結算需要寵物還在存檔裡）。
+   *  - 正在玩耍：提前結算（和開視窗一樣只結算數值，不演開心跳；已經留下的寶物保留，進行到一半的那一次作廢）；
+   *  - 走去水池的路上或在水池裡、被拖曳、飛回去：一起清掉（水池「使用中」是由場景上的寵物算出來的，移除後就空出來）；
+   *  - 睡在狗窩／貓跳台座位上、在食盆吃東西：放掉座位（座位與食盆位置都是由場景上的寵物算出來的，別隻可以馬上用）；
+   *  - 被氣泡選單選中：取消選取。頭上的狀態圖示、選取標記是畫寵物時一起畫的，寵物不見就不會再畫。
+   * 回傳 false = 場景上沒有這隻（仍然可以照常移除存檔）。
+   */
+  removePet(id: string): boolean {
+    const a = this.actors.get(id)
+    if (!a) return false
+    if (a.play) endPlay(a, 'rehome', this.playEnv(), PLAY_OPS)
+    cancelBath(a)
+    releaseUse(a, false)
+    if (this.draggingId === id) this.draggingId = null
+    a.drag = false
+    a.fly = null
+    a.bath = null
+    this.actors.delete(id)
+    if (this.selectedId === id) this.selectedId = null
+    return true
+  }
+
+  /**
    * 設定已購買的建築（存檔變動時呼叫）。購買後建築的腳下佔地加入障礙，寵物繞行；
    * 站在新建築障礙裡的寵物（例如剛買下去、寵物剛好站在那裡）會被推出來。
    */

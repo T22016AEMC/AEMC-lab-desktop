@@ -19,6 +19,8 @@ import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { PetMenu } from './ui/PetMenu'
+import { RehomeDialog } from './ui/RehomeDialog'
+import { rehomeBlock } from './sim/rehome'
 import { ballCursor } from './ui/ballCursor'
 import { toyOf, type PlayToyId } from './sim/commands'
 import { TOOLS } from '../config/tools'
@@ -56,6 +58,8 @@ export function Farm() {
   const gesture = useRef<{ id: string; startX: number; startY: number; curX: number; curY: number; dragging: boolean; timer: number } | null>(null)
   const engine = useMemo(() => new PixelEngine(), [])
   const [selected, setSelected] = useState<string | null>(null)
+  /** 找新主人的二次確認對話框：對象寵物 id（null = 沒開） */
+  const [rehomeId, setRehomeId] = useState<string | null>(null)
   const [assetsReady, setAssetsReady] = useState(assets.ready)
   const [doorHover, setDoorHover] = useState(false)
   const [towerHover, setTowerHover] = useState(false)
@@ -306,6 +310,10 @@ export function Farm() {
   useEffect(() => {
     if (selected && !useFarmStore.getState().save?.pets.some((p) => p.id === selected)) setSelected(null)
   }, [petCount, selected])
+  // 找新主人的確認對話框只跟著目前選取的寵物：選單被關掉（開領養、啟動台、工具、建築模式…）或換了寵物就一起關掉，不執行
+  useEffect(() => {
+    if (rehomeId && rehomeId !== selected) setRehomeId(null)
+  }, [rehomeId, selected])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
     if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
@@ -458,6 +466,28 @@ export function Farm() {
       useUIStore.getState().hideToast()
       setSelected(null)
     }
+  }
+
+  /**
+   * 找新主人（確認對話框按了「確認」）：先檢查能不能（最後一隻不行），再讓引擎清掉場景上的狀態（玩耍提前結算、座位、洗澡、拖曳、選取），
+   * 最後才從存檔移除、返還金幣（玩耍結算要在寵物還在存檔裡的時候做）。
+   */
+  const confirmRehome = (): void => {
+    const id = rehomeId
+    setRehomeId(null)
+    if (!id) return
+    const ui = useUIStore.getState()
+    const save = useFarmStore.getState().save
+    const name = save?.pets.find((p) => p.id === id)?.name ?? ''
+    const why = save ? rehomeBlock(save, id) : '尚未開始'
+    if (why) {
+      ui.showToast(why)
+      return
+    }
+    engine.removePet(id)
+    const err = useFarmStore.getState().rehomePet(id)
+    setSelected(null)
+    ui.showToast(err ?? `已幫${name}找到新主人，返還 ${BALANCE.rehome.refund} 金幣`)
   }
 
   /** 氣泡選單選了玩具：先確認引擎現在能玩，再扣金幣，最後開始 */
@@ -680,7 +710,8 @@ export function Farm() {
 
       {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
-      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} />}
+      {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}
+      {rehomeId && <RehomeDialog petId={rehomeId} onCancel={() => setRehomeId(null)} onConfirm={confirmRehome} />}
 
       {status === 'ready' && assetsReady && needFirst && <AdoptDialog first />}
       {status === 'ready' && assetsReady && <ResetNotice />}

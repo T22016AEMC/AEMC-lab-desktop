@@ -101,6 +101,12 @@ export const BALANCE = {
     /** 揭曉動畫（秒） */
     revealSeconds: 1.1,
   },
+  /**
+   * 找新主人（v3.7.1）：寵物從場景與存檔移除、返還 refund 金幣，無法找回。至少要留 minPets 隻（最後一隻不能找新主人：
+   * 沒有寵物時公佈欄等功能會被當成「還沒有存檔」，而且「第一隻免費」會重新觸發，變成可以靠領養再找新主人賺金幣）。
+   * 領養一隻 15 金幣、找新主人返還 10 → 每一輪淨花 5 金幣，沒有淨賺的循環。
+   */
+  rehome: { refund: 10, minPets: 1 },
   /** 叫醒：貓醒來不開心（心情下降），狗醒來很開心（心情不變） */
   wake: { moodCat: -15, moodDog: 0 },
   /**
@@ -153,11 +159,11 @@ export const BALANCE = {
     price: { bowls: 10, kennel: 20, catTree: 20 },
     /** 食盆水盆：飽食度低於 threshold 且沒在睡覺、洗澡、被操作時，自己走去吃 */
     bowls: {
-      threshold: 40, // v3.6.1：原本 60；頭上「餓了」驚嘆號的門檻是 lowThreshold（30），比這個晚出現
-      /** 每隻寵物每天的份量：全部寵物共用一池，今天的上限 = 寵物數 × 這個值（本地日期 00:00 補滿；當天領養新寵物，上限立刻多這麼多） */
-      portionsPerPet: 2,
-      /** 每份回復的飽食度（手動餵食是 +20，要花 1 金幣） */
-      satiety: 15,
+      threshold: 60, // v3.7.1：原本 40（v3.6.1 以前 60）；頭上「餓了」驚嘆號的門檻是 lowThreshold（30），比這個晚出現
+      /** 每隻寵物每天的份量（盆）：全部寵物共用一池，今天的上限 = 寵物數 × 這個值（本地日期 00:00 補滿；當天領養新寵物，上限立刻多這麼多）。v3.7.1：原本 2 */
+      portionsPerPet: 3,
+      /** 每盆回復的飽食度（手動餵食也是 +20，但要花 1 金幣）。v3.7.1：原本 15 */
+      satiety: 20,
       /** 同時最多幾隻在吃 */
       capacity: 2,
       /** 吃一份的時間（秒） */
@@ -174,13 +180,16 @@ export const BALANCE = {
   },
   /**
    * 睡覺時的心情回復（每小時，只在線上即時結算，離線期間不算）：
-   * 一般睡覺回復 base（抵銷心情下降），睡在狗窩／貓跳台旁邊乘以 buildingMul。
+   * 睡在狗窩／貓跳台的真座位 = base × buildingMul（6.75，一天睡 7 小時 +47，約抵銷一天的下降 48）；
+   * 其他地方（地上、座位坐滿時建築前方的位置、走去座位的路上）= base × groundMul。
+   * v3.7.1 加 groundMul（原本等於 1，地上睡 7 小時只有 +18.9，24 小時不互動心情約 −30）：1.9 → +35.9，24 小時約 −12。
+   * base 與 buildingMul 不動，所以座位上的回復和以前完全一樣。
    */
-  sleepMood: { base: 2.7, buildingMul: 2.5 }, // v3.6.1：base 原本 1.7
+  sleepMood: { base: 2.7, buildingMul: 2.5, groundMul: 1.9 }, // v3.6.1：base 原本 1.7；v3.7.1：新增 groundMul
 
   weatherBlockHours: 4,
-  /** 天氣權重：晴、多雲、雨、雪 */
-  weatherWeights: { sunny: 40, cloudy: 25, rain: 20, snow: 15 },
+  /** 天氣權重：晴、多雲、雨、雪（v3.7.1：原本 40／25／20／15） */
+  weatherWeights: { sunny: 54, cloudy: 30, rain: 15, snow: 1 },
 
   /** 存檔節流（毫秒）與數值結算間隔（秒） */
   saveDebounceMs: 600,

@@ -9,6 +9,7 @@ import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/e
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
 import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
+import { rehomePet } from '../sim/rehome'
 import { useUIStore } from '../../store/uiStore'
 import { addNote, deleteNote, updateNote } from '../../tools/notes'
 import { TOOLS, type NoteColor } from '../../config/tools'
@@ -63,6 +64,11 @@ interface FarmState {
   dismissEvent: () => void
   /** 睡覺中的寵物被拖起來：醒來（免費，規則同叫醒） */
   wakeForDrag: (petId: string) => void
+  /**
+   * 找新主人（v3.7.1）：寵物從存檔移除、返還金幣，立刻寫入。回傳錯誤訊息或 null。
+   * 場景上的狀態（玩耍提前結算、座位、洗澡、拖曳、選取）要先由引擎的 removePet 處理，再呼叫這個
+   */
+  rehomePet: (petId: string) => string | null
   /** 週期性結算：數值下降、跨日的每日獎勵、睡覺的心情回復（atBuilding = 睡在建築旁的寵物 id） */
   tick: (atBuilding?: ReadonlySet<string>) => void
   /** 重置後的一次性提示按「確定」：清掉旗標並存檔 */
@@ -239,6 +245,17 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (!save) return
     const r = wakeForDrag(save, ctxNow(), petId)
     if (r.save !== save) set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
+  },
+
+  rehomePet: (petId) => {
+    const save = get().save
+    if (!save) return '尚未開始'
+    const r = rehomePet(save, petId)
+    if (r.error) return r.error
+    // 頭上的禮物、還沒消化的浮字與動畫都跟著拿掉（禮物的每日次數已經算過，不退）
+    set((s) => ({ save: r.save, gifts: s.gifts.filter((g) => g !== petId), effects: s.effects.filter((e) => e.petId !== petId) }))
+    flushSave() // 無法找回的操作：立刻寫入（不等節流）
+    return null
   },
 
   tick: (atBuilding = NO_PETS) => {

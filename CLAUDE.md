@@ -82,7 +82,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 ## 金幣經濟與建築（v3.2.0）
 
-- 介面上一律叫「金幣」，內部欄位仍叫 `points`（不改名）。新存檔初始 50（`BALANCE.startPoints`；已有存檔不補發）、每日 +5、日常活動 −1、領養 15／25／35。
+- 介面上一律叫「金幣」，內部欄位仍叫 `points`（不改名）。新存檔初始 50（`BALANCE.startPoints`；已有存檔不補發）、每日 +5、日常活動 −1、領養狗貓都是 15（`species.ts` 的 `cost`；15／25／35 是 v3.0.0 前含海洋生物時的舊價格），第一隻免費（`farmStore.adoptPet` 的 `isFirst` = 沒有存檔或 0 隻寵物）。
 - 賺金幣的規則是 `sim/earning.ts` 的純函式，數值在 `balance.ts`（`BALANCE.earn`、`gameGoals`）：啟動台開啟使用者的程式 +3（每程式每小時一次、合計每天 +10，開啟成功才給、管理清單不給）；遊戲達標 +1（合計每天 5，遊戲結束時判定一次，達標條件見 `gameGoals`）。**冷卻與每日上限的時間一律用遊戲時間來源 `gameNow()`**（`farm/overrides.ts`，測試模式可平移），每日進度以本地日期 00:00 重置；不可直接用 `Date.now()`。純前端、存在瀏覽器，**無法防作弊**（程式註解有寫），帳號與雲端階段再處理，不要為此加複雜機制。遊戲用 `games/shared/hooks.ts` 的 `useRoundReward` 在每局結束時回報成績。
 - **空位專用標記**：建築空位的 id 就是專用標記，也是存檔 `ownedBuildings` 的值與 `config/buildings.ts` 的建築 id：`kennel` 狗窩、`bowls` 食盆水盆、`catTree` 貓跳台（走道上半部）、`picnicMat`（草地，留給之後的版本；沙坑在 v3.6.0 開發期間做過又取消、沒有發布，認不得的 `sandbox` 由 `parseSave` 過濾，素材也不輸出）。**可購買的建築由 `PURCHASABLE` 決定**（`buyBuilding` 擋掉其他的）：有食盆水盆、狗窩、貓跳台（營火 v3.4.0 加入、v3.5.1 移除）；野餐墊不顯示、不開放，資料與 `buildingAvailability` 保留（留給之後的版本）。價格在 `BALANCE.buildings.price`（食盆水盆 10、狗窩／貓跳台各 20）。
 - **購買規則**：建築選單列「建築」按鈕進入建築模式（`uiStore.buildMode`，再按一次或 Esc 離開），`ui/BuildLayer.tsx` 在可購買而未購買的空位顯示虛線框與價格，點開小卡片購買；金幣不足停用。窄視窗放不下的建築（`buildingAvailability` 的 `available` 為 false）不顯示空位，建築模式改顯示放大視窗的提示（見 v3.4.2）；已購買但放不下的建築，紀錄保留、畫面與障礙都隱藏（`engine.buildings()` 只回傳已購買且放得下的），放大後自動恢復，不退款不刪除。
@@ -175,6 +175,13 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **公佈欄**：素材在圖集 `tools` 的 `board`（64×50，`layout.ts` 的 `BOARD_W/H`、`BOARD_GREEN` 要和 manifest 一致）；位置 `boardPos()` = 右緣對齊水池右緣（x 48～112）、腳底在草地上緣（`farBottom`），和視窗寬度、建築購買無關；**x 0～48 的空位留給之後的農場告示牌，不要放東西**。標題縮圖 `farm/ui/BoardThumbs.tsx`（最多 3 張、依大小減少、多的「…共 N 張」）。資料：養殖場存檔的可缺少欄位 `notes`（`tools/notes.ts`：`cleanNotes` 驗證、壞的單張捨棄、最多 8 張新的在前；字數一律 `Array.from`）；操作走 `farmStore.addNote/updateNote/deleteNote`（沒有存檔時不能用）。**顯示一律用 React 文字節點，禁止 innerHTML**（測試會掃）。
 - **存檔與備份**：`DATA_REV` 1 → 2（v3.6.x 舊分頁會停止存檔、不洗掉 notes）；`schemaVersion` 仍 5。匯出檔 `formatVersion` 4（`NOTES_FORMAT_VERSION`），匯入接受 2～4，2、3 的 notes 一律視為空；確認視窗有「公佈欄 N 張」（`summary.noteCount`／`hasNotes`）。
 - **素材**：`process-assets.mjs` 第 8 段，`tools_icons.png`（3×1：計算機、碼表、公佈欄 → `tool_calc`／`tool_timer`／`tool_board`，48×48）、`sticky_notes.png`（2×2：黃、粉紅／藍、綠 → `note_*`，32×32，只用在顏色鈕）、`items_dig_b.png` 第 5 格 → `board`（第 6 格農場告示牌這版不用）。介面上便利貼的顏色用 CSS（`NOTE_CSS`，取樣自便條紙）。選單與視窗標題的 48×48 圖示用 `PixelSprite scale={0.5}`（裝置像素 1:1）。
+
+## v3.7.1：找新主人、食盆與天氣、睡覺心情
+
+- **找新主人**（`sim/rehome.ts` 純函式 `rehomePet`／`rehomeBlock`、文字 `REHOME_TEXT`、數值 `BALANCE.rehome`：返還 10、`minPets` 1）：只動 `pets` 與 `points`，其他欄位（`finds`、`collection`、`events`、`notes`、`ownedBuildings`、`bowl`、`earning`、`nextPetId`）一律不動；**最後一隻不能找新主人**（沒有寵物會讓公佈欄等功能當成沒有存檔，而且會重新觸發「第一隻免費」→ 領養再找新主人變成賺錢）。領養 15、返還 10 → 每輪淨 −5，不要讓返還 ≥ 領養價。
+- **順序**（`farm/index.tsx` 的 `confirmRehome`）：先 `rehomeBlock` 檢查 → `engine.removePet(id)`（玩耍用 `endPlay(a, 'rehome')` 提前結算、清洗澡／拖曳／座位、取消選取；座位、食盆位置、水池占用都是由場景上的寵物算出來的，刪掉 actor 就空出來）→ `farmStore.rehomePet(id)`（拿掉頭上禮物與還沒消化的效果，`flushSave` 立刻寫入）。玩耍結算要在寵物還在存檔裡時做，所以引擎一定要先。寶物 `Find` 只記物種（`by`），沒有寵物 id，移除寵物後照常揭曉。
+- **介面**：`PetMenu` 最下面虛線分隔的「找新主人」（`data-testid="action-rehome"`；停用時下方顯示原因 `rehome-why`）→ `ui/RehomeDialog.tsx` 二次確認（`fixed z-[9900]` 蓋在所有視窗之上；捕捉階段攔 keydown、Esc＝取消、預設焦點在取消）。選取的寵物換了或選單被關掉，確認框一起關掉、不執行。
+- **數值**（`balance.ts`）：`weatherWeights` 54／30／15／1；`buildings.bowls` 門檻 60、每盆 +20、`portionsPerPet` 3（份量仍是全部寵物共用一池）；`sleepMood.groundMul` 1.9（不在真座位上睡覺的回復 = base × groundMul，座位仍是 base × buildingMul，兩者與白天衰減都不要順手改）。模擬數字見 CHANGELOG 3.7.1。
 
 ## v3.6.1：數值調整、挖寶機率、選單列、身高體重
 
