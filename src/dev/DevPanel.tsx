@@ -150,6 +150,21 @@ export default function DevPanel() {
             </div>
           </div>
 
+          <div className="mb-2">
+            <div className="mb-1 text-white/60">滑鼠互動（點一下關閉／開啟）</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(['look', 'approach', 'retreat', 'pat', 'label', 'swat'] as const).map((k) => (
+                <button key={k} className={btn} onClick={() => { overrides.hover.off[k] = !overrides.hover.off[k]; force((n) => n + 1) }}>
+                  {{ look: '看', approach: '靠近', retreat: '閃開', pat: '摸頭', label: '標籤', swat: '拍吠' }[k]}
+                  {overrides.hover.off[k] ? ' ✗' : ' ✓'}
+                </button>
+              ))}
+              <button className={btn} onClick={() => { overrides.hover.swatChance = overrides.hover.swatChance === 1 ? null : 1; force((n) => n + 1) }}>
+                拍吠必中{overrides.hover.swatChance === 1 ? ' ✓' : ''}
+              </button>
+            </div>
+          </div>
+
           {pet && (
             <div className="mb-2">
               <div className="mb-1 text-white/60">調整寵物</div>

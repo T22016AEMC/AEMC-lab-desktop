@@ -404,6 +404,13 @@ const DOGS = { shiba: '柴犬.png', corgi: '柯基.png', husky: '哈士奇.png',
 const CATS = ['orange', 'black', 'calico', 'siamese', 'bluecat', 'ragdoll']
 const DOG_CORE = ['stand', 'walk_a', 'walk_b', 'sit_a', 'sit_b', 'sleep', 'eat', 'happy']
 const DOG_EXTRA = ['jump', 'dig_a', 'dig_b', 'tug', 'belly_up', 'bark']
+/**
+ * v3.8.1：貓圖改用清晰版（`cat_<花色>_core_hd.png`、`cat_<花色>_extra_hd.png`，原圖保留）。
+ * CAT_HD=0（環境變數）= 回到舊圖，只供「新舊逐格比對」用。CAT_HD_REVERT = 比對後發現走樣、退回舊圖的幀：{ 花色: { core: [幀名], extra: [幀名] } }。
+ */
+const CAT_HD = process.env.CAT_HD !== '0'
+// 橘貓 swat：hd 圖的揮爪特效（黃色弧線）變細、被濾掉（舊圖還留有幾個殘點），少畫了東西 → 這一格退回舊圖
+const CAT_HD_REVERT = { orange: { core: [], extra: ['swat'] } }
 const CAT_CORE = ['stand', 'walk_a', 'walk_b', 'sit_a', 'unused_back', 'sleep', 'eat', 'groom']
 const CAT_EXTRA = ['crouch', 'pounce', 'swat', 'tangled']
 
@@ -438,6 +445,34 @@ async function catCoreFix(id, core) {
     info('  橘貓換圖 ' + f.name + '：新 ' + f.spr.w + '×' + f.spr.h + '（舊 ' + o.w + '×' + o.h + '），錨點 ax=' + Math.round(f.spr.w / 2) + ' ay=' + f.spr.h)
   }
   return r
+}
+
+/**
+ * v3.8.1：貓 hd 圖去背後的「洋紅調」殘留。`isBg` 去掉的是整片背景與邊緣混色；hd 圖在毛色邊緣另外有零星幾個「鮮豔洋紅」的單點
+ * （R≥190、B≥140、G≤100、R 與 B 差 ≤70；耳朵、鼻子、舌頭的粉紅 G 較高、不會中），用上下左右（再不行用八方）不是洋紅調的不透明鄰居的平均色取代。
+ * 回傳取代的像素數（報告會逐張列出）。
+ */
+const strictMagenta = (r, g, b) => r >= 190 && b >= 140 && g <= 100 && Math.abs(r - b) <= 70
+function despillMagenta(spr) {
+  const { w, h, rgba } = spr
+  const hit = []
+  for (let i = 0; i < w * h; i++) if (rgba[i * 4 + 3] && strictMagenta(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2])) hit.push(i)
+  for (const i of hit) {
+    const x = i % w, y = (i / w) | 0
+    for (const nbs of [[[1, 0], [-1, 0], [0, 1], [0, -1]], [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]]) {
+      let n = 0, r = 0, g = 0, b = 0
+      for (const [dx, dy] of nbs) {
+        const xx = x + dx, yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
+        const j = (yy * w + xx) * 4
+        if (!rgba[j + 3] || strictMagenta(rgba[j], rgba[j + 1], rgba[j + 2])) continue
+        n++; r += rgba[j]; g += rgba[j + 1]; b += rgba[j + 2]
+      }
+      if (n) { rgba[i * 4] = Math.round(r / n); rgba[i * 4 + 1] = Math.round(g / n); rgba[i * 4 + 2] = Math.round(b / n); break }
+      if (nbs.length === 8) rgba[i * 4 + 3] = 0 // 四周都沒有可參考的顏色：移除
+    }
+  }
+  return hit.length
 }
 
 const pCache = {}
@@ -762,18 +797,37 @@ async function main() {
   }
 
   // 2) 貓
+  const despills = {}
   for (const id of CATS) {
     const key = 'cat_' + id
-    const core = await sheet({ file: key + '_core.png', cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    const coreSheet = (file) => sheet({ file, cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    // v3.8.1：core、extra 改用 _hd 圖（CAT_HD=0 回到舊圖，只供新舊比對用）；CAT_HD_REVERT 列出的幀退回舊圖
+    const revert = CAT_HD_REVERT[id] ?? { core: [], extra: [] }
+    const core = await coreSheet(key + (CAT_HD ? '_core_hd.png' : '_core.png'))
     animalP[key] = core.p
+    // 舊圖的 core：橘貓換圖（fix）要對齊的「舊」尺寸、以及退回舊圖的幀，都以舊圖為準（不因新圖的細微差異而改變）
+    const coreOld = CAT_HD && (CAT_CORE_FIX[id] || revert.core.length) ? await coreSheet(key + '_core.png') : core
     // v3.6.3：橘貓的 sleep／eat／groom 三格換成新圖（cat_orange_core_fix.png，3 隻橫排）；其他格、core.p（extra 的取樣基準）不動
-    const fix = CAT_CORE_FIX[id] ? await catCoreFix(id, core) : null
+    const fix = CAT_CORE_FIX[id] ? await catCoreFix(id, coreOld) : null
     for (const f of core.frames) {
       const swap = fix?.frames.find((g) => g.name === f.name)
-      addFrame(key, key + '_' + f.name, swap ? swap.spr : f.spr, f.name === 'unused_back' ? { unused: true } : {})
+      const old = revert.core.includes(f.name) ? coreOld.frames.find((g) => g.name === f.name) : null
+      // 橘貓 sleep／eat／groom（fix）與退回舊圖的幀不動；其餘 hd 幀去洋紅調單點
+      if (CAT_HD && !swap && !old) despills[key + '_' + f.name] = despillMagenta(f.spr)
+      addFrame(key, key + '_' + f.name, swap ? swap.spr : old ? old.spr : f.spr, f.name === 'unused_back' ? { unused: true } : {})
     }
-    const extra = await sheet({ file: key + '_extra.png', cols: 2, rows: 2, names: CAT_EXTRA, pFixed: core.p * CAT_EXTRA_RATIO })
-    for (const f of extra.frames) addFrame(key, key + '_' + f.name, f.spr)
+    const extraSheet = (file) => sheet({ file, cols: 2, rows: 2, names: CAT_EXTRA, pFixed: core.p * CAT_EXTRA_RATIO })
+    const extra = await extraSheet(key + (CAT_HD ? '_extra_hd.png' : '_extra.png'))
+    const extraOld = CAT_HD && revert.extra.length ? await extraSheet(key + '_extra.png') : extra
+    for (const f of extra.frames) {
+      const back = revert.extra.includes(f.name)
+      if (CAT_HD && !back) despills[key + '_' + f.name] = despillMagenta(f.spr)
+      addFrame(key, key + '_' + f.name, back ? extraOld.frames.find((g) => g.name === f.name).spr : f.spr)
+    }
+  }
+  if (CAT_HD) {
+    const n = Object.entries(despills).filter(([, v]) => v)
+    info('貓 hd 圖：去洋紅調單點 ' + n.reduce((t, [, v]) => t + v, 0) + ' 個（' + (n.map(([k, v]) => k + '×' + v).join('、') || '無') + '）；退回舊圖的幀：' + (Object.entries(CAT_HD_REVERT).map(([c, v]) => 'cat_' + c + ' core[' + v.core + '] extra[' + v.extra + ']').join('；') || '無'))
   }
   info('每隻動物的像素格 p（core 與 extra 共用；貓 extra 為 ×' + CAT_EXTRA_RATIO + '）：' + Object.entries(animalP).map(([k, v]) => k + '=' + v.toFixed(2)).join('、'))
 

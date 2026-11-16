@@ -236,6 +236,54 @@ export const BALANCE = {
     cheerSeconds: 1.6,
   },
 
+  /**
+   * 滑鼠互動（v3.8.1）：只有有 hover 能力的裝置（桌面滑鼠）才啟用；全部只是畫面演出，不改飽食／心情／清潔、不存檔。
+   * 距離、速度的單位都是「邏輯像素」（和寵物、場景同一個座標：寵物約 30～46 高），速度 = 邏輯像素／秒。
+   * 只有「醒著、閒置或在走路」的寵物回應 look／approach／retreat／swat；睡覺、吃東西、玩耍、挖寶、尋寶、洗澡（含走去水池）、被拖曳、
+   * 氣泡選單開著、野餐中的寵物不回應（野餐中只回應 pat 的愛心與名字標籤）。
+   *  - maxApproach：同一時間最多幾隻回應「黏人靠近」
+   *  - lookRadius／lookRelease：1 停下來看你——游標離寵物外框多近（邏輯像素）會停下看；離開範圍後多久（秒）恢復
+   *  - approach*：2 黏人靠近——個性「黏人」的寵物，游標在草地範圍內連續停留 dwell 秒後，走到離游標 gap 處停下；
+   *    游標離開寵物 keepRadius 以外（或離開草地、離開畫面）後 releaseAfter 秒恢復；每隻冷卻 cooldown 秒（從結束算）；speedMul = 走路速度倍率（慢慢走）
+   *  - retreat*：3 膽小閃開——個性「膽小」的寵物，游標快速接近（朝寵物靠近的速度 ≥ speed）並進入外框 radius 內時，往遠離游標方向退開 distance；
+   *    每隻冷卻 cooldown 秒；speedMul = 走路速度倍率；maxSeconds = 走不到時的保險逾時
+   *  - pat*：4 摸頭——游標停在寵物身上並左右來回：window 秒內水平方向反轉 ≥ reversals 次（每次要朝反方向移動 minMove 以上才算）→ 冒 hearts[0]～hearts[1] 個愛心、開心姿勢 seconds 秒；每隻冷卻 cooldown 秒
+   *  - label*：5 小名字標籤——游標停在寵物上 delay 秒後浮出名字與個性圖示
+   *  - swat*：6 貓拍、狗吠——游標掃過寵物（速度 ≥ speed）時 chance 機率，貓 swat、狗 bark，持續 seconds 秒；每隻冷卻 cooldown 秒（成功才算）；
+   *    一次掃過只抽一次：抽完要等游標慢下來（低於 speed 的一半）或離開這隻、連續 rearm 秒才會再抽（游標速度忽快忽慢也不會重複抽）
+   *  - speedWindow：量游標速度用的時間窗（秒）
+   */
+  hover: {
+    maxApproach: 2,
+    lookRadius: 60,
+    lookRelease: 0.6,
+    approachDwell: 2,
+    approachGap: 40,
+    approachKeepRadius: 100,
+    approachReleaseAfter: 3,
+    approachCooldown: 30,
+    approachSpeedMul: 0.6,
+    retreatRadius: 80,
+    retreatSpeed: 140,
+    retreatDistance: 60,
+    retreatCooldown: 10,
+    retreatSpeedMul: 1.8,
+    retreatMaxSeconds: 3,
+    patWindow: 1.5,
+    patReversals: 4,
+    patMinMove: 2,
+    patHearts: [1, 2],
+    patSeconds: 1.2,
+    patCooldown: 3,
+    labelDelay: 0.5,
+    swatSpeed: 240,
+    swatChance: 0.3,
+    swatSeconds: 0.6,
+    swatCooldown: 20,
+    swatRearm: 0.4,
+    speedWindow: 0.1,
+  },
+
   /** 存檔節流（毫秒）與數值結算間隔（秒） */
   saveDebounceMs: 600,
   statTickSeconds: 10,

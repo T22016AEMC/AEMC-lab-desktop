@@ -1,5 +1,6 @@
 import { SPECIES, variantOf, type SpeciesId } from '../config/species'
 import { personalityMul } from '../config/personality'
+import { BALANCE } from '../config/balance'
 import type { Find, Pet } from '../save/types'
 import { isSleeping } from '../sim/rules'
 import type { Weather } from '../sim/worldTime'
@@ -18,7 +19,7 @@ import type { Rect } from './layout'
  * 不做旋轉、傾斜、縮放；往左走用水平翻轉。
  */
 
-export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom' | 'bark' | 'dig' | 'crouch' | 'pounce'
+export type Action = 'idle' | 'walk' | 'sit' | 'sleep' | 'eat' | 'happy' | 'groom' | 'bark' | 'dig' | 'crouch' | 'pounce' | 'swat'
 
 export interface Anim {
   /** 幀名稱（manifest 裡 dog_<品種>_<名稱> 的名稱） */
@@ -42,6 +43,8 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     dig: { frames: ['dig_a', 'dig_b'], fps: 6 },
     crouch: { frames: ['stand'], fps: 1 },
     pounce: { frames: ['jump'], fps: 1 },
+    // v3.8.1 滑鼠互動：狗用 bark；swat 是貓的（狗不會用到）
+    swat: { frames: ['stand'], fps: 1 },
   },
   cat: {
     idle: { frames: ['stand'], fps: 1 },
@@ -56,6 +59,8 @@ export const ANIMS: Record<SpeciesId, Record<Action, Anim>> = {
     dig: { frames: ['crouch'], fps: 1 },
     crouch: { frames: ['crouch'], fps: 1 },
     pounce: { frames: ['pounce'], fps: 1 },
+    // v3.8.1 滑鼠互動：貓拍（extra 的 swat 幀）；貓的 bark 不會用到
+    swat: { frames: ['swat'], fps: 1 },
   },
 }
 
@@ -77,6 +82,31 @@ export const BATH_WALK = { maxSeconds: 45, stallSeconds: 12, progressPx: 4, arri
 
 /** 泡澡各階段的時間（秒）；soak 約 4.5 秒 */
 export const BATH_TIMES = { jump: 0.5, soak: 4.5, climb: 0.55, shake: 1.5 } as const
+
+/**
+ * 滑鼠互動（v3.8.1）造成的暫時行為（hover.ts 設定與解除；這裡只負責「這個影格怎麼動」）：
+ *  look = 停下來面向游標；approach = 走去游標旁邊再站著看游標（黏人）；retreat = 往遠離游標的方向退開（膽小）。null = 沒有。
+ * 引擎既有的狀態（睡覺、吃、玩耍、洗澡、拖曳、建築、野餐、選單、指令動作）永遠優先：hover.ts 每個影格檢查，不符合就解除。
+ */
+export interface HoverAct {
+  kind: 'look' | 'approach' | 'retreat'
+  /** 游標位置（邏輯座標，每個影格更新）：面向它 */
+  cx: number
+  cy: number
+  /** 走去（approach／retreat）的目標點（腳底位置） */
+  gx: number
+  gy: number
+  /** 已到達（approach：站著看游標；retreat：到了就由 hover.ts 解除）；look 一開始就是 true */
+  arrived: boolean
+  /** 已經過的時間（秒） */
+  t: number
+  /** approach：上一次更新目標點的時間（h.t 的單位） */
+  goalT: number
+  /** 走路時，上一次檢查「有沒有在前進」的時間與位置（卡住就當作到了，不把寵物卡住） */
+  chkT: number
+  chkX: number
+  chkY: number
+}
 
 export interface Actor {
   id: string
@@ -135,6 +165,8 @@ export interface Actor {
   seek: number | null
   /** 野餐（v3.8.0）：參加中的座位與狀態；null = 沒參加。被拖曳、洗澡、開始玩耍、散步、找新主人時清掉（中途離開） */
   picnic: PicnicSeat | null
+  /** 滑鼠互動（v3.8.1）：看著游標、走去游標旁邊、退開；null = 沒有 */
+  hv: HoverAct | null
 }
 
 export interface BehaviorEnv {
@@ -184,7 +216,7 @@ export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
     override: null, hop: 0, hovered: false, sepX: 0, sepY: 0, stuckT: 0, lastX: x, lastY: y, animT: rand() * 10, moving: false,
     drag: false, lift: 0, fly: null, bounceT: 0, bath: null, shakeX: 0,
-    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null, picnic: null,
+    bld: null, bowlCool: 0, bldCool: 0, rainIn: null, path: [], pathKey: '', pathAge: 0, seek: null, play: null, picnic: null, hv: null,
   }
   clampActor(actor, L) // 剛好出生在障礙物裡就推出來
   actor.tx = actor.x
@@ -464,6 +496,12 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
     return
   }
 
+  // 滑鼠互動（v3.8.1）：看著游標、走去游標旁邊、退開。排在睡覺、建築、玩耍、野餐、指令動作、選單之後，所以不會蓋掉它們
+  if (a.hv) {
+    updateHoverMotion(a, a.hv, dt, env, sp.speed)
+    return
+  }
+
   switch (a.action) {
     case 'walk': {
       const d = Math.hypot(a.tx - a.x, a.ty - a.y)
@@ -512,6 +550,48 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
       break
   }
   clampActor(a, env.layout)
+}
+
+/** 滑鼠互動（v3.8.1）的移動：look／approach 抵達後 = 站著面向游標；走路用一般的 moveToward（會繞過障礙、被夾回活動範圍），卡住或逾時就當作到了 */
+function updateHoverMotion(a: Actor, h: HoverAct, dt: number, env: BehaviorEnv, speed: number): void {
+  h.t += dt
+  if (!h.arrived) {
+    const d = Math.hypot(h.gx - a.x, h.gy - a.y)
+    if (d < 2.5) h.arrived = true
+    else {
+      // 兩秒內（approach 慢，所以用 1.2 秒）幾乎沒前進 = 卡住（被夾在障礙或別的寵物旁邊）→ 當作到了
+      if (h.t - h.chkT >= 1.2) {
+        if (Math.hypot(a.x - h.chkX, a.y - h.chkY) < 2) h.arrived = true
+        h.chkT = h.t
+        h.chkX = a.x
+        h.chkY = a.y
+      }
+      if (!h.arrived) {
+        if (a.action !== 'walk') setAction(a, 'walk', 1e9)
+        a.tx = h.gx
+        a.ty = h.gy
+        moveToward(a, dt, speed * (h.kind === 'retreat' ? BALANCE.hover.retreatSpeedMul : BALANCE.hover.approachSpeedMul), env)
+        return
+      }
+    }
+  }
+  // 站著（站姿）、面向游標；靜止時也被輕輕推開，避免疊在一起（和一般閒置相同）
+  if (a.action !== 'idle') setAction(a, 'idle', 1e9)
+  if (h.kind !== 'retreat' && Math.abs(h.cx - a.x) > 1.5) a.facing = h.cx > a.x ? 1 : -1
+  a.x += a.sepX * dt
+  a.y += a.sepY * dt
+  clampActor(a, env.layout)
+}
+
+/** 解除滑鼠互動：走路中的原地停下、站一小段時間再照一般行為走（不繼續走向舊的互動目標） */
+export function releaseHover(a: Actor, rand: () => number): void {
+  if (!a.hv) return
+  a.hv = null
+  a.path = []
+  a.pathKey = ''
+  a.tx = a.x
+  a.ty = a.y
+  setAction(a, 'idle', rr(rand, 0.3, 0.9))
 }
 
 /** 水池洗澡中的寵物（跳進去、泡澡、爬出來、甩水）；走去水池前不算 */

@@ -198,3 +198,13 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **拍照**（`ui/photo.ts`）：`engine.snapshot()` 以 1 邏輯像素 = 1 畫布像素重畫場景（不含 DOM、不畫選取標記），`cropSizeFor(window)` = 窗口 × FRAME_SCALE(6) ÷ PHOTO_SCALE(2) 往上取整，照片在下、相框在上；下載再 ×2。相框窗口是管線偵測的 `meta.window`，不手寫座標。拍立得 `ui/PolaroidDialog.tsx`（裝置像素整數倍顯示）。閃光是白色 DOM 疊層（以前沒有現成的閃光特效）。
 - **素材**：`process-assets.mjs` 第 9 段；`picnic_mats.png` 用 `strictBg`（粉色墊的深粉紅滾邊會被 `isBg` 的玫瑰紅陰影規則吃掉），相框不做 `defringePink`。只處理 personality_icons、picnic_basket／mats／food／camera／pet_snacks、polaroid_frames_b；polaroid_frames_a/c、picnic_decor、stickers_* 不處理、不輸出（測試檢查 manifest 與 dist）。圖集 `polaroid` 在 `LAZY_ATLASES`。
 - 選單列按鈕 `components/PicnicButton.tsx`（每秒更新；停用時看起來停用但可點、點了 toast 原因），透過 `uiStore.requestPicnic` 交給 `farm/index.tsx` 開始。
+
+## v3.8.1：滑鼠互動與貓圖改清晰
+
+- **滑鼠互動**（`pixel/hover.ts` 的 `HoverController`，純邏輯；數值全在 `BALANCE.hover`，單位 = 邏輯像素、秒）：1 停下來看你、2 黏人靠近（最多 2 隻同時）、3 膽小閃開、4 摸頭（愛心）、5 小名字標籤（畫在畫布上）、6 貓拍狗吠（貓 `swat`、狗 `bark`）。**全部只是畫面演出：不改飽食／心情／清潔、不改存檔、不呼叫任何 `hooks`**（測試用 v3.8.0 原始碼比對：沒有建築時存檔數值逐位元相同）。
+- **入口**：`farm/index.tsx` 的 `onPointerMove` 只在 `pointerType === 'mouse'` 時呼叫 `engine.cursorMove`（只記下位置，O(1)）；`onPointerLeave`、視窗 blur、分頁隱藏、`mouseleave` 呼叫 `engine.cursorLeave`；`engine.hover.enabled` 由 `matchMedia('(hover: hover) and (pointer: fine)')` 決定（預設 false，Node 測試與觸控裝置不受影響）；`engine.hover.blocked` 由畫面層依「領養、啟動台、建築模式、關於、收藏冊、工具、匯入、找新主人、拍立得、視窗最大化」設定。反應全部在 `engine.update` 裡（`hover.update` 在 `updateActor` 之前）。
+- **既有狀態永遠優先**：`HoverController.free(a)` = 沒在拖曳／飛回去／洗澡（含走去水池）／玩耍／野餐／使用建築／找睡覺位置／睡覺／選單開著／指令動作（`a.override`）、而且動作是 idle／walk／sit；不符合就解除（`releaseHover`）。`Actor.hv`（look／approach／retreat）在 `updateActor` 裡排在睡覺、建築、玩耍、野餐、指令動作、選單之後、一般閒晃 switch 之前（`updateHoverMotion`，走路用 `moveToward`，會繞障礙、被夾回活動範圍）；摸頭與貓拍狗吠用既有的 `a.override`（標記 `hpat`／`hswat`，`isHoverOverride`），所以睡覺、拖曳、選單、野餐開始都會清掉它。新增 hover 行為時要保住這個優先順序與「不碰存檔」。
+- **名字標籤**：`engine.drawLabel`（畫在 render 最後、拍照 `view` 不畫）；圖示是 `PERSONALITY_ICONS`，名字用 9px 粗體；位置在頭上、放不下放腳下，左右上下夾進 `layout.W／H`。
+- **測試用覆寫**：`overrides.hover`（6 項各一個 `off` 開關＋`swatChance`），預設全關／null；只有 `src/dev/DevPanel.tsx`（開發環境）與自動化測試寫入。正式 build 要檢查不含「測試模式」「生物圖鑑」`__farm`、`shiftTime`。
+- **貓圖改 hd**（`process-assets.mjs`：`CAT_HD`、`CAT_HD_REVERT`、`despillMagenta`）：貓 core／extra 用 `cat_<花色>_core_hd.png`／`_extra_hd.png`（原圖保留）；`CAT_HD_REVERT` 列出比對後退回舊圖的幀（目前只有橘貓 swat，hd 的揮爪特效弧線被濾掉）；橘貓 core 第 6、7、8 格仍是 `cat_orange_core_fix.png`（求解用的「舊」尺寸一律從舊圖 core 取，所以三張與 v3.6.3 逐像素相同）。`CAT_HD=0` 回到舊圖（只供新舊比對）。hd 圖在毛色邊緣有零星鮮豔洋紅單點，`despillMagenta` 以鄰居平均色取代（報告逐張列出）。**換貓圖後要重跑管線、確認其他素材（狗、場景、野餐…）逐像素不變、每張洋紅殘留 0、橘貓 sleep／eat／groom 沒被蓋掉。**
+- 已知行為：貓 `tangled` 幀沒有任何行為使用（和 v3.8.0 一樣）；`swat` 用貓 extra 的 swat 幀（橘貓是舊圖，所以揮爪特效只剩幾個殘點，其他花色的特效與 v3.8.0 相同）。

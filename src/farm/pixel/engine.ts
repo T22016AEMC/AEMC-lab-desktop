@@ -25,6 +25,8 @@ import {
 } from './pets'
 import { ballPos, beginPlay, checkThrow, endPlay, isCarrying, mouthOffset, throwBall, type PlayBall, type PlayEnd, type PlayEnv, type PlayToyId, type ThrowCheck } from './play'
 import { isCarryingBundle } from './finder'
+import { HoverController, type HoverEnv } from './hover'
+import { PERSONALITY_ICONS } from '../config/personality'
 import { findCap, findPositions, worldToFind } from './finds'
 import {
   drawClouds, drawCelestial, drawDarkness, drawDrops, drawFar, drawGlow, drawGrass, drawPath, drawSky, drawStars,
@@ -112,6 +114,11 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
+  /**
+   * 滑鼠互動（v3.8.1，hover.ts）：停下來看你、黏人靠近、膽小閃開、摸頭、小名字標籤、貓拍狗吠。
+   * enabled 由畫面層依「這個裝置有沒有 hover 能力（桌面滑鼠）」設定；預設關閉（Node 測試與觸控裝置不受影響）。
+   */
+  hover = new HoverController()
   hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {}, addFind: () => false }
   /** 還沒揭曉的寶物（存檔 finds）、各部位穿的外觀（'gold' = 金色版；不在清單或圖集還沒載入就用預設圖） */
   private finds: readonly Find[] = []
@@ -193,7 +200,11 @@ export class PixelEngine {
   /** 讓場景上的寵物與存檔裡的寵物一致（新增、移除、資料更新） */
   sync(pets: Pet[]): void {
     const ids = new Set(pets.map((p) => p.id))
-    for (const id of [...this.actors.keys()]) if (!ids.has(id)) this.actors.delete(id)
+    for (const id of [...this.actors.keys()])
+      if (!ids.has(id)) {
+        this.actors.delete(id)
+        this.hover.removePet(id)
+      }
     for (const pet of pets) {
       const a = this.actors.get(pet.id)
       if (a) a.pet = pet
@@ -217,6 +228,8 @@ export class PixelEngine {
     cancelBath(a)
     releaseUse(a, false)
     if (this.draggingId === id) this.draggingId = null
+    this.hover.removePet(id)
+    a.hv = null
     a.drag = false
     a.fly = null
     a.bath = null
@@ -309,6 +322,8 @@ export class PixelEngine {
     this.lastFrame = f
     this.updatePicnic(dt)
     const list = [...this.actors.values()]
+    // 滑鼠互動：在寵物行為更新之前決定誰要看、靠近、退開、摸頭、貓拍狗吠（既有狀態優先：不符合的立刻解除）
+    this.hover.update(dt, this.hoverEnv(list, f))
     // 被拖著、飛回去、洗澡中的寵物不參與避讓（也不會被別人推開）
     const free = list.filter((a) => !a.drag && !a.fly && !a.bath)
     for (const a of list) if (!free.includes(a)) a.sepX = a.sepY = 0
@@ -572,6 +587,47 @@ export class PixelEngine {
       ctx.fillText(fl.text, Math.round(fl.x), Math.round(fl.y - fl.t * 12))
     }
     ctx.globalAlpha = 1
+    // v3.8.1 小名字標籤（拍照不畫）
+    if (!view) this.drawLabel(ctx)
+  }
+
+  /**
+   * 小名字標籤：游標停在寵物上約 0.5 秒後，在頭上浮出「個性圖示＋名字」；放不下（上方出界）就放腳下，左右夾進畫面。
+   * 游標移開、開選單、拖曳、開視窗時 hover 控制器就不回報 id，標籤立刻消失。
+   */
+  private drawLabel(ctx: CanvasRenderingContext2D): void {
+    const id = this.hover.enabled && !this.hover.blocked ? this.hover.labelId() : null
+    const a = id ? this.actors.get(id) : undefined
+    if (!a || this.selectedId || this.draggingId) return
+    const s = this.actorSprite(a)
+    if (!s) return
+    const L = this.layout
+    const icon = a.pet.personality ? assets.get(PERSONALITY_ICONS[a.pet.personality]) : null
+    ctx.font = 'bold 9px "Courier New", monospace'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    const tw = Math.ceil(ctx.measureText(a.pet.name).width)
+    const pad = 3
+    const w = pad + (icon ? icon.w + 2 : 0) + tw + pad
+    const h = Math.max(icon ? icon.h : 0, 11) + 4
+    const hop = this.hopOffset(a)
+    const top = a.y - hop - s.ay
+    let x = Math.round(a.x - w / 2)
+    let y = Math.round(top - 3 - h)
+    if (y < 2) y = Math.round(a.y - hop - s.ay + s.h + 3) // 頭上放不下：放腳下
+    x = Math.max(2, Math.min(Math.floor(L.W) - w - 2, x))
+    y = Math.max(2, Math.min(Math.floor(L.H) - h - 2, y))
+    ctx.fillStyle = '#3b2a1c'
+    ctx.fillRect(x - 1, y - 1, w + 2, h + 2)
+    ctx.fillStyle = '#fffdf4'
+    ctx.fillRect(x, y, w, h)
+    let tx = x + pad
+    if (icon) {
+      drawSprite(ctx, icon, tx + icon.ax, y + 2 + icon.ay)
+      tx += icon.w + 2
+    }
+    ctx.fillStyle = '#3b2a1c'
+    ctx.fillText(a.pet.name, tx, y + Math.round(h / 2) + 3)
   }
 
   /** 夜晚（暗到需要亮燈）：住家換成亮燈版 */
@@ -862,6 +918,37 @@ export class PixelEngine {
     return this.findPoints().get(id) ?? null
   }
 
+  /** 滑鼠互動需要的東西（見 hover.ts 的 HoverEnv）；每個影格組一次 */
+  private hoverEnv(list: Actor[], f: FrameInfo): HoverEnv {
+    return {
+      layout: this.layout,
+      actors: list,
+      rand: this.rand,
+      selectedId: this.selectedId,
+      dragging: this.draggingId !== null,
+      sleeping: (a) => isSleeping(a.pet, f.hour, f.nowMs),
+      petAt: (x, y) => this.petAt(x, y),
+      box: (a) => {
+        const s = this.actorSprite(a)
+        if (!s) return null
+        const hop = this.hopOffset(a)
+        return { x0: a.x - s.ax, y0: a.y - hop - s.ay, x1: a.x - s.ax + s.w, y1: a.y - hop - s.ay + s.h }
+      },
+      emit: (kind, x, y) => this.emit(kind, x, y),
+    }
+  }
+
+  /** 游標移動（CSS 座標）：只記下最新位置，實際反應在下一個影格的 update 裡處理（指標事件很密，不在事件裡做運算） */
+  cursorMove(cssX: number, cssY: number): void {
+    const p = fromCss(this.layout, cssX, cssY)
+    this.hover.move(p.x, p.y)
+  }
+
+  /** 游標離開畫布、視窗失焦、分頁被藏起來：互動立即解除 */
+  cursorLeave(): void {
+    this.hover.leave()
+  }
+
   /** 滑鼠移動：寵物稍微看向滑鼠並輕輕跳一下；回傳目前在哪隻寵物上 */
   pointerMove(cssX: number, cssY: number): string | null {
     const { x, y } = fromCss(this.layout, cssX, cssY)
@@ -927,6 +1014,7 @@ export class PixelEngine {
     }
     releaseUse(a, false)
     a.picnic = null // v3.8.0：被拖走 = 離開野餐
+    a.hv = null // v3.8.1：滑鼠互動的暫時行為也清掉
     if (isSleeping(a.pet, this.lastFrame.hour, this.lastFrame.nowMs)) this.hooks.wake(id)
     const p = fromCss(this.layout, cssX, cssY)
     this.dragOff = { dx: a.x - p.x, dy: a.y - p.y }

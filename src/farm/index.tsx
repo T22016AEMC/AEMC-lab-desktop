@@ -353,6 +353,34 @@ export function Farm() {
   useEffect(() => {
     if (rehomeId && rehomeId !== selected) setRehomeId(null)
   }, [rehomeId, selected])
+  // v3.8.1 滑鼠互動：只在有 hover 能力的裝置（桌面滑鼠）啟用；手機、平板永遠關閉
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
+    const apply = () => {
+      engine.hover.enabled = mq.matches
+      if (!mq.matches) engine.cursorLeave()
+    }
+    apply()
+    mq.addEventListener('change', apply)
+    // 視窗失焦、分頁被藏起來：互動立即解除
+    const off = () => engine.cursorLeave()
+    const vis = () => {
+      if (document.hidden) engine.cursorLeave()
+    }
+    window.addEventListener('blur', off)
+    document.addEventListener('visibilitychange', vis)
+    document.documentElement.addEventListener('mouseleave', off)
+    return () => {
+      mq.removeEventListener('change', apply)
+      window.removeEventListener('blur', off)
+      document.removeEventListener('visibilitychange', vis)
+      document.documentElement.removeEventListener('mouseleave', off)
+    }
+  }, [engine])
+  // 開啟啟動台、領養、建築模式、關於、收藏冊、工具、匯入、找新主人、拍立得、視窗被蓋住：滑鼠互動立即解除（引擎每個影格看這個旗標）
+  useEffect(() => {
+    engine.hover.blocked = Boolean(adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
+  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
     if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
@@ -416,6 +444,8 @@ export function Farm() {
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = local(e)
+    // v3.8.1 滑鼠互動：只記下最新游標位置（O(1)），反應在下一個影格處理；只有滑鼠（觸控不啟用，不影響觸控）
+    if (e.pointerType === 'mouse') engine.cursorMove(p.x, p.y)
     const g = gesture.current
     if (g) {
       g.curX = p.x
@@ -638,6 +668,7 @@ export function Farm() {
         onPointerMove={onPointerMove}
         onPointerUp={(e) => endGesture(e, false)}
         onPointerCancel={(e) => endGesture(e, true)}
+        onPointerLeave={() => engine.cursorLeave()}
         onContextMenu={(e) => {
           // 玩耍中右鍵 = 提前結束（只有玩耍中才攔截，其他時候維持瀏覽器原本的行為）
           if (engine.isPlaying()) {
