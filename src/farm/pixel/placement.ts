@@ -232,8 +232,10 @@ export function withMove(P: Placement, id: string, x: number | null, y: number |
   const stored = new Set(P.stored)
   if (!def) return { ...P, rev: ++revCounter }
   if (x === null || y === null) {
+    // 住家、鐘樓、池塘、公佈欄不能收：維持原樣（不會從畫面消失）
+    if (!def.storable) return { ...P, rev: ++revCounter }
     placed.delete(id)
-    if (def.storable) stored.add(id)
+    stored.add(id)
   } else {
     stored.delete(id)
     // 保持 PLACE_ORDER 的順序（畫圖時腳底 y 相同的物件前後不變）

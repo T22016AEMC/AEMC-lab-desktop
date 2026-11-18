@@ -14,7 +14,7 @@ import { assets, drawSprite, type Sprite } from './assets'
 import { drawClock } from './clock'
 import { drawEmptyIcon } from './icons'
 import {
-  DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
+  DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, isWalkable, nearestWalkable, ownedSlots, pondPos, sceneObjects,
   setPlacement, toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
   boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
@@ -289,9 +289,28 @@ export class PixelEngine {
    * 擺出來的物件腳下佔地是障礙，寵物繞行；站在新障礙裡的寵物會被推出來。載入時不檢查重疊、不改寫存檔。
    */
   setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined): void {
+    const before = this.buildings()
     this.farmLayout = farmLayout
     this.placement = resolvePlacement(owned, farmLayout)
     setPlacement(this.layout, this.placement)
+    // v3.9.0：建築收進庫存或換了位置 → 正在使用（走過去、坐著、睡著、吃著）的寵物離開那個建築，回到座位旁的地面
+    // （睡著的繼續睡，之後照一般規則睡在地上或走去新位置）。座位旁剛好被別的物件佔住就推到最近的可站位置
+    const after = this.buildings()
+    for (const a of this.actors.values()) {
+      const u = a.bld
+      if (!u) continue
+      const was = before.get(u.id)
+      const now = after.get(u.id)
+      if (now && was && now.x === was.x && now.y === was.y) continue
+      releaseUse(a)
+      if (!isWalkable(this.layout, a.x, a.y)) {
+        const p = nearestWalkable(this.layout, a.x, a.y)
+        a.x = p.x
+        a.y = p.y
+      }
+      a.tx = a.x
+      a.ty = a.y
+    }
     for (const a of this.actors.values()) {
       clampActor(a, this.layout)
       a.path = []
@@ -1166,7 +1185,7 @@ export class PixelEngine {
     return {
       layout: this.layout, rand: this.rand, emit: this.emit, settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
       others: [...this.actors.values()], nowMs: this.lastFrame.nowMs, hour: this.lastFrame.hour,
-      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
+      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind, notify: (m) => this.hooks.notify(m),
     }
   }
 

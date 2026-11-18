@@ -41,6 +41,14 @@ export const PLACE_REASON_TEXT: Readonly<Record<PlaceReason, string>> = {
   unknown: '不能放在這裡',
 }
 
+/** 這個物件可以收進庫存嗎（住家、鐘樓、池塘、公佈欄不行；建築要先買） */
+export function canStore(L: Layout, id: string): boolean {
+  const def = layoutItemDef(id)
+  if (!def || !def.storable) return false
+  if (def.building && !L.placement.owned.has(id)) return false
+  return L.placement.placed.has(id)
+}
+
 /** 腳底 y 的上限（往後、往畫面上方）：住家、公佈欄可以到草地上緣（公佈欄那條線）；鐘樓還要整張圖不超出畫面頂端；其他到草地上緣 + BACK_BASE */
 export function minFootY(L: Layout, kind: LayoutKind): number {
   if (kind === 'house' || kind === 'board') return L.farBottom

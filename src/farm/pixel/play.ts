@@ -68,7 +68,7 @@ export interface PlayState {
 }
 
 /** 玩耍需要的引擎連接（BehaviorEnv 的子集） */
-export type PlayEnv = Pick<BehaviorEnv, 'layout' | 'rand' | 'emit' | 'settlePlay' | 'others' | 'nowMs' | 'hour' | 'finds' | 'findCap' | 'addFind'>
+export type PlayEnv = Pick<BehaviorEnv, 'layout' | 'rand' | 'emit' | 'settlePlay' | 'others' | 'nowMs' | 'hour' | 'finds' | 'findCap' | 'addFind' | 'notify'>
 
 export interface PlayOps {
   setAction: (a: Actor, action: Action, dur: number) => void
