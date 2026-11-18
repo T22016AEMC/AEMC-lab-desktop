@@ -14,12 +14,15 @@ export const BACKUP_FORMAT = 'aemc-desktop-backup'
  * 匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受：2、3 的檔案沒有 notes（就算檔案裡有也不讀，一律視為空），
  * 其他缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 4 會顯示「較新版本」）。
  */
-export const BACKUP_FORMAT_VERSION = 5
+export const BACKUP_FORMAT_VERSION = 6
+// v3.9.0：6 = 養殖場存檔多了農場擺放（farmLayout）。讀取 2～5：就算檔案裡有 farmLayout 也不讀（全部預設）。v3.8.x 的舊程式讀到 6 會顯示「較新版本」並拒絕。
 // v3.8.0：5 = 寵物多了個性（personality）、上次互動（lastInteract），存檔多了野餐紀錄（picnic）。
 // 讀取舊格式（2～4）：這些欄位本來就不在檔案裡，parseSave 照一般存檔的規則補上（個性 = 用寵物 id 算出的固定那一種，和直接載入舊存檔得到的一樣；
 // lastInteract = 備份的 lastSeen；沒有野餐紀錄 = 今天還沒野餐過）。v3.7.x 的舊程式讀到 5 會顯示「較新版本」並拒絕（不會把個性默默丟掉）。
 /** 從這個格式版本起，備份裡的 notes 才會被讀取 */
 export const NOTES_FORMAT_VERSION = 4
+/** 從這個格式版本起，備份裡的 farmLayout（農場擺放）才會被讀取 */
+export const LAYOUT_FORMAT_VERSION = 6
 export const MIN_BACKUP_FORMAT_VERSION = 2
 export const PRE_RESET_MESSAGE = '這個備份來自重置前的版本，無法匯入'
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024
@@ -57,6 +60,8 @@ export interface BackupSummary {
   noteCount: number
   /** 備份是否帶有公佈欄資料（格式版本 4 以上） */
   hasNotes: boolean
+  /** 農場擺放：調整過的物件數（驗證後；格式版本 5 以前一律 0） */
+  layoutCount: number
 }
 
 export type ParseResult = { ok: true; backup: BackupFile; summary: BackupSummary } | { ok: false; error: string }
@@ -74,6 +79,7 @@ export function summarize(b: BackupFile): BackupSummary {
     refund: 0,
     noteCount: b.data.farm.notes?.length ?? 0,
     hasNotes: b.formatVersion >= NOTES_FORMAT_VERSION,
+    layoutCount: b.data.farm.farmLayout?.items.length ?? 0,
   }
 }
 
@@ -102,8 +108,11 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   if (!listRaw || typeof listRaw !== 'object') return fail('備份檔裡的啟動台程式清單無法辨識')
   if (farmRaw.schemaVersion > CURRENT_SCHEMA_VERSION || isNewerData(farmRaw) || (typeof listRaw.schemaVersion === 'number' && listRaw.schemaVersion > APP_LIST_SCHEMA_VERSION)) return fail(NEWER_VERSION_MESSAGE)
   if (isResetSchema(farmRaw)) return fail(PRE_RESET_MESSAGE)
-  // 格式版本 2、3 沒有公佈欄：就算檔案裡有 notes 也不讀（視為空）
-  const farm = parseSave(r.formatVersion >= NOTES_FORMAT_VERSION ? farmRaw : { ...farmRaw, notes: undefined })
+  // 格式版本 2、3 沒有公佈欄：就算檔案裡有 notes 也不讀（視為空）；5 以前沒有農場擺放：就算有 farmLayout 也不讀（全部預設）
+  const farmIn: Record<string, unknown> = { ...farmRaw }
+  if (r.formatVersion < NOTES_FORMAT_VERSION) farmIn.notes = undefined
+  if (r.formatVersion < LAYOUT_FORMAT_VERSION) farmIn.farmLayout = undefined
+  const farm = parseSave(farmIn)
   if (!farm) return fail('備份檔裡的養殖場存檔無法辨識或已損毀')
   const appList = parseAppList(listRaw)
   if (!appList) return fail('備份檔裡的啟動台程式清單無法辨識或已損毀')

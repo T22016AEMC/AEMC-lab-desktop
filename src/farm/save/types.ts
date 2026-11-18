@@ -1,6 +1,7 @@
 import type { SpeciesId } from '../config/species'
 import type { Note } from '../../tools/notes'
 import type { PersonalityId } from '../config/personality'
+import type { LayoutKind } from '../config/layoutItems'
 
 /**
  * 目前的存檔格式。v5（v3.4.0）起，舊格式（v4 以前）不再升級，第一次載入時一律重置為全新存檔（見 storage.ts 的 loadOrReset）。
@@ -10,8 +11,9 @@ export const CURRENT_SCHEMA_VERSION = 5
  * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
  * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
  */
-export const DATA_REV = 3
-// DATA_REV 歷史：1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+export const DATA_REV = 4
+// DATA_REV 歷史：4 = v3.9.0（農場擺放 farmLayout）；1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+// 升到 4 的用意：v3.8.x 的舊分頁讀到 dataRev 4 會停止自動存檔並提示重新整理，不會把擺放紀錄洗掉。
 // 升到 3 的用意：v3.7.x 的舊分頁讀到 dataRev 3 會停止自動存檔並提示重新整理，不會把個性與野餐紀錄洗掉。
 // 升到 2 的用意：v3.6.0～v3.6.3 的舊分頁讀到 dataRev 2 會停止自動存檔並提示重新整理，不會把 notes 洗掉。
 
@@ -109,6 +111,21 @@ export interface PicnicState {
   active?: PicnicActive
 }
 
+/**
+ * 農場擺放（v3.9.0）的一筆紀錄：只記錄被改過的物件（沒有紀錄 = 預設狀態，見 config/layoutItems.ts）。
+ * x、y = 固定場景（640×320）的絕對座標、物件腳底中心（整數）；state 為 stored（在庫存）時沒有座標，placed 沒有座標 = 預設位置。
+ */
+export interface LayoutItem {
+  id: string
+  kind: LayoutKind
+  state: 'placed' | 'stored'
+  x?: number
+  y?: number
+}
+export interface FarmLayout {
+  items: LayoutItem[]
+}
+
 /** 存檔：單一物件，包含 schemaVersion 以便未來升級資料格式 */
 export interface SaveData {
   schemaVersion: number
@@ -143,6 +160,8 @@ export interface SaveData {
   notes?: Note[]
   /** 野餐的每日次數與冷卻（v3.8.0，可缺少：沒有 = 今天還沒野餐過、沒有冷卻） */
   picnic?: PicnicState
+  /** 農場擺放（v3.9.0，可缺少：沒有 = 全部在預設狀態；驗證在 migrate.ts 的 cleanFarmLayout） */
+  farmLayout?: FarmLayout
   /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
   resetNotice?: true
 }
