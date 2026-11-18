@@ -22,6 +22,11 @@ import { pondStand, pondStandFound } from './reach'
  *  5. 走得到（unreachable）：所有建築座位旁的位置、洗澡站位都在最大的區塊上
  */
 export const MIN_GAP = 12
+/**
+ * 鐘樓能往後（往畫面上方）移到哪裡：鐘樓素材頂端的 y 不能小於這個值（0 = 整張圖不超出畫面頂端；
+ * 改成負數就能再往後，例如 -20 = 頂端可以超出畫面 20 像素）。鐘樓腳底的下限只由這個常數與草地上緣決定（minFootY）。
+ */
+export const TOWER_TOP_MIN = 0
 export const GROUND_BOTTOM = 316
 
 export type PlaceReason = 'outside' | 'overlap' | 'covers' | 'disconnected' | 'unreachable' | 'unknown'
@@ -39,7 +44,7 @@ export const PLACE_REASON_TEXT: Readonly<Record<PlaceReason, string>> = {
 /** 腳底 y 的上限（往後、往畫面上方）：住家、公佈欄可以到草地上緣（公佈欄那條線）；鐘樓還要整張圖不超出畫面頂端；其他到草地上緣 + BACK_BASE */
 export function minFootY(L: Layout, kind: LayoutKind): number {
   if (kind === 'house' || kind === 'board') return L.farBottom
-  if (kind === 'tower') return Math.max(L.farBottom, TOWER_H)
+  if (kind === 'tower') return Math.max(L.farBottom, TOWER_H + TOWER_TOP_MIN)
   return L.farBottom + BACK_BASE
 }
 

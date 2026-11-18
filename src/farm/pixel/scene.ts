@@ -2,6 +2,9 @@ import { rgb, skyAt, type Weather } from '../sim/worldTime'
 import { assets, drawSprite } from './assets'
 import { FAR_H, PATH_H, HOUSE_X0, type Layout, type Rect } from './layout'
 
+/** v3.8.1 沙土路的起點（住家左緣 + 40）：路的格子對齊這條線 */
+const PATH_X0 = HOUSE_X0 + 40
+
 /**
  * v3.9.0：可見範圍（邏輯座標，含場景外的延伸區），取整數邊界。沒給 ext（拍照、或剛好塞滿）＝場景本身 0..W × 0..H，
  * 畫出來的結果和 v3.8.1 逐像素相同；有延伸區時只是同樣的圖案往外多鋪幾格。
@@ -139,14 +142,16 @@ export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect):
   ctx.restore()
 }
 
-/** 橫向小路：從住家門口往右延伸到畫面右側（水平重複） */
+/** 橫向小路（固定位置）：v3.9.0 起從場景左緣鋪到右緣（水平重複），左右延伸區也接上 */
 export function drawPath(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
   const s = assets.get('path')
   if (!s) return
   const y = L.H - 6 - PATH_H
-  // 沙土路從住家門口往右，右邊的延伸區也接著鋪（左邊延伸區沒有路）
-  const x1 = extOf(L, ext).x1
-  for (let x = HOUSE_X0 + 40; x < x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
+  // v3.9.0：沙土路鋪滿整個場景寬度（住家可以移走，原本被住家蓋住的左端會露出來），左右延伸區也接著鋪。
+  // 格子對齊 v3.8.1 的起點（住家左緣 + 40），所以原本就看得到的那段路逐像素不變
+  const e = extOf(L, ext)
+  const x0 = PATH_X0 - Math.ceil((PATH_X0 - e.x0) / s.w) * s.w
+  for (let x = x0; x < e.x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
 }
 
 /** 夜晚與黃昏的暗色疊層 */
