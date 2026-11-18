@@ -1,9 +1,10 @@
 import { BALANCE } from '../config/balance'
 import type { Find } from '../save/types'
 import {
-  DECOR_SIZE, HOUSE_H, LAMP_AX, LAMP_H, LAMP_W, POND_AX, POND_H, POND_W, TOWER_H, TOWER_W, TREE_W, isWalkable, nearestWalkable, ownedSlots, pathTopOf, petBounds, pondPos, pondStrip,
+  HOUSE_H, POND_AX, POND_H, POND_W, TOWER_H, TOWER_W, TREE_W, isWalkable, nearestWalkable, ownedSlots, pathTopOf, petBounds, pondPos,
   sceneObjects, slotBox, towerTopLeft, type Layout, type Rect,
 } from './layout'
+import { spriteBoxAt, type Placement } from './placement'
 import { isClear, type Pt } from './nav'
 
 /**
@@ -34,26 +35,24 @@ export function findBox(kind: FindKind, x: number, y: number): Rect {
 
 const intersects = (a: Rect, b: Rect, gap: number): boolean => a.x0 < b.x1 + gap && a.x1 > b.x0 - gap && a.y0 < b.y1 + gap && a.y1 > b.y0 - gap
 
-const obstacleCache = new WeakMap<Layout, { owned: ReadonlySet<string>; rects: Rect[] }>()
+const obstacleCache = new WeakMap<Layout, { P: Placement; rects: Rect[] }>()
 
 /** 寶物要避開的障礙物外框（不含擴張的空隙）；同一個 Layout、同一份 owned 會快取 */
 export function obstacleRects(L: Layout): Rect[] {
   const hit = obstacleCache.get(L)
-  if (hit && hit.owned === L.owned) return hit.rects
+  if (hit && hit.P === L.placement) return hit.rects
   const out: Rect[] = [{ x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - HOUSE_H, y1: L.house.baseY }]
   const pd = pondPos(L)
   out.push({ x0: pd.x - POND_AX, x1: pd.x - POND_AX + POND_W, y0: pd.y - POND_H, y1: pd.y })
   const tl = towerTopLeft(L)
   out.push({ x0: tl.x, x1: tl.x + TOWER_W, y0: tl.y, y1: tl.y + TOWER_H })
-  const strip = pondStrip(L)
-  if (strip) out.push(strip)
   for (const o of sceneObjects(L)) {
-    if (o.key === 'lamp') out.push({ x0: o.x - LAMP_AX, x1: o.x - LAMP_AX + LAMP_W, y0: o.y - LAMP_H, y1: o.y })
-    else if (o.key === 'tree') out.push({ x0: o.x - TREE_W * 0.4, x1: o.x + TREE_W * 0.4, y0: o.y - 30, y1: o.y + 2 }) // 樹根與樹下的花草
-    else if (DECOR_SIZE[o.key]) out.push({ x0: o.x - DECOR_SIZE[o.key][0] / 2, x1: o.x + DECOR_SIZE[o.key][0] / 2, y0: o.y - DECOR_SIZE[o.key][1], y1: o.y })
+    if (o.key === 'pond' || o.key === 'clocktower') continue // 上面已加
+    if (o.key === 'tree') out.push({ x0: o.x - TREE_W * 0.4, x1: o.x + TREE_W * 0.4, y0: o.y - 30, y1: o.y + 2 }) // 樹根與樹下的花草
+    else out.push(spriteBoxAt(o.kind, o.x, o.y)) // 路燈、裝飾物、花槽、珊瑚石堆：素材外框
   }
   for (const s of ownedSlots(L)) out.push(slotBox(s))
-  obstacleCache.set(L, { owned: L.owned, rects: out })
+  obstacleCache.set(L, { P: L.placement, rects: out })
   return out
 }
 
@@ -116,17 +115,17 @@ export function findPositions(L: Layout, finds: readonly Pick<Find, 'id' | 'kind
   return out
 }
 
-const areaCache = new WeakMap<Layout, { owned: ReadonlySet<string>; area: number }>()
+const areaCache = new WeakMap<Layout, { P: Placement; area: number }>()
 
 /** 放得下土堆的草地面積（邏輯像素²）：每個格點（2×2）上土堆的外框離障礙物都夠遠才算。同一個 Layout、同一份 owned 會快取 */
 export function grassArea(L: Layout): number {
   const hit = areaCache.get(L)
-  if (hit && hit.owned === L.owned) return hit.area
+  if (hit && hit.P === L.placement) return hit.area
   const g = grassRect(L)
   let n = 0
   for (let y = g.y0; y <= g.y1; y += 2) for (let x = g.x0; x <= g.x1; x += 2) if (spotValid(L, 'mound', x, y)) n++
   const area = n * 4
-  areaCache.set(L, { owned: L.owned, area })
+  areaCache.set(L, { P: L.placement, area })
   return area
 }
 

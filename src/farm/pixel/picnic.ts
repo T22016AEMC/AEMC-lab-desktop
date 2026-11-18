@@ -1,9 +1,10 @@
 import { BALANCE } from '../config/balance'
 import { SPECIES } from '../config/species'
 import {
-  BACK_BASE, HOUSE_H, LAMP_AX, LAMP_H, LAMP_W, POND_AX, POND_H, POND_W, TOWER_H, TOWER_W, buildingSlots, isWalkable, lampX, pathTopOf, petBounds, pondPos, pondStrip,
+  BACK_BASE, HOUSE_H, LAMP_AX, LAMP_H, LAMP_W, POND_AX, POND_H, POND_W, TOWER_H, TOWER_W, buildingSlots, isWalkable, pathTopOf, petBounds, placedOf, pondPos,
   slotBox, towerBase, towerX, type Layout, type Rect,
 } from './layout'
+import type { Placement } from './placement'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
@@ -45,17 +46,16 @@ function matObstacles(L: Layout): Rect[] {
   const out: Rect[] = []
   for (const s of buildingSlots(L)) if (s.id === 'kennel' || s.id === 'bowls' || s.id === 'catTree') out.push(slotBox(s))
   out.push({ x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - HOUSE_H, y1: L.house.baseY })
-  out.push({ x0: lampX() - LAMP_AX, x1: lampX() - LAMP_AX + LAMP_W, y0: L.H - 12 - LAMP_H, y1: L.H - 12 })
+  const lamp = placedOf(L, 'lamp')
+  if (lamp) out.push({ x0: lamp.x - LAMP_AX, x1: lamp.x - LAMP_AX + LAMP_W, y0: lamp.y - LAMP_H, y1: lamp.y })
   const pd = pondPos(L)
   out.push({ x0: pd.x - POND_AX, x1: pd.x - POND_AX + POND_W, y0: pd.y - POND_H, y1: pd.y })
-  const st = pondStrip(L)
-  if (st) out.push(st)
   const tx = towerX(L)
   out.push({ x0: tx - TOWER_W / 2 - 4, x1: tx + TOWER_W / 2 + 4, y0: towerBase(L) - TOWER_H, y1: towerBase(L) + 6 })
   return out
 }
 
-const matCache = new WeakMap<Layout, Rect | null>()
+const matCache = new WeakMap<Layout, { P: Placement; r: Rect | null }>()
 
 /**
  * 野餐墊落地的位置（素材外框，邏輯座標）；這個視窗放不下 = null。
@@ -64,7 +64,8 @@ const matCache = new WeakMap<Layout, Rect | null>()
  * 偏好位置：水平在「食盆水盆右緣」與「貓跳台左緣」的正中間，垂直在草地中段的中間；挑離偏好位置最近的。
  */
 export function picnicMatRect(L: Layout): Rect | null {
-  if (matCache.has(L)) return matCache.get(L)!
+  const mc = matCache.get(L)
+  if (mc && mc.P === L.placement) return mc.r
   const b = petBounds(L)
   const yTop = L.farBottom + BACK_BASE + 4
   const yBot = pathTopOf(L)
@@ -87,7 +88,7 @@ export function picnicMatRect(L: Layout): Rect | null {
       best = { r, cost }
     }
   const out = best?.r ?? null
-  matCache.set(L, out)
+  matCache.set(L, { P: L.placement, r: out })
   return out
 }
 

@@ -178,6 +178,7 @@ export function Farm() {
     let last = performance.now()
     let lastPets: unknown = null
     let lastOwned: unknown = null
+    let lastLayout: unknown = null
     let lastFinds: unknown = null
     let lastSkins: unknown = null
     let lastDraw = 0
@@ -199,9 +200,11 @@ export function Farm() {
       const st = useFarmStore.getState()
       const nowMs = gameNow()
       const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs), gifts: st.gifts }
-      if (st.save?.ownedBuildings !== lastOwned) {
+      // v3.9.0：已購買的建築或農場擺放變了 → 重新算擺放結果
+      if (st.save?.ownedBuildings !== lastOwned || st.save?.farmLayout !== lastLayout) {
         lastOwned = st.save?.ownedBuildings
-        engine.setOwned(st.save?.ownedBuildings ?? [])
+        lastLayout = st.save?.farmLayout
+        engine.setLayoutData(st.save?.ownedBuildings ?? [], st.save?.farmLayout)
       }
       engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
       if (st.save?.finds !== lastFinds) {

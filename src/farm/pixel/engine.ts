@@ -15,7 +15,7 @@ import { drawClock } from './clock'
 import { drawEmptyIcon } from './icons'
 import {
   DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
-  toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
+  setPlacement, toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
   boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
 import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
@@ -117,6 +117,9 @@ export interface RenderView {
   ext?: LayoutRect
 }
 
+import { KIND_GEOM, defaultPlacement, resolvePlacement, type Placement } from './placement'
+import type { FarmLayout } from '../save/types'
+
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
 export class PixelEngine {
   layout: Layout = computeLayout(1280, 692, 1)
@@ -134,14 +137,16 @@ export class PixelEngine {
   hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {}, addFind: () => false }
   /** 還沒揭曉的寶物（存檔 finds）、各部位穿的外觀（'gold' = 金色版；不在清單或圖集還沒載入就用預設圖） */
   private finds: readonly Find[] = []
-  private findPos: { L: Layout; owned: ReadonlySet<string>; list: readonly Find[]; pts: Map<string, { x: number; y: number }> } | null = null
+  private findPos: { L: Layout; P: Placement; list: readonly Find[]; pts: Map<string, { x: number; y: number }> } | null = null
   skins: Readonly<Record<string, string>> = {}
   /** 揭曉動畫：寶物位置、結果、已經過的時間 */
   private reveals: { x: number; y: number; result: RevealResult; t: number }[] = []
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
-  private ownedIds: ReadonlySet<string> = new Set()
+  /** v3.9.0：存檔的 farmLayout 與算出來的擺放結果（setLayoutData 時換新的） */
+  private farmLayout: FarmLayout | undefined = undefined
+  placement: Placement = defaultPlacement()
   bowlLeft = 0
-  private bmap: { L: Layout; owned: ReadonlySet<string>; map: Map<string, BuildingSlot> } | null = null
+  private bmap: { L: Layout; P: Placement; map: Map<string, BuildingSlot> } | null = null
   private anims: Anim[] = []
   private dragOff = { dx: 0, dy: 0 }
   private draggingId: string | null = null
@@ -164,7 +169,7 @@ export class PixelEngine {
   setSize(backW: number, backH: number, dpr: number): void {
     const old = this.layout
     this.layout = computeLayout(Math.max(1, backW), Math.max(1, backH), dpr)
-    this.layout.owned = this.ownedIds
+    setPlacement(this.layout, this.placement)
     for (const a of this.actors.values()) clampActor(a, this.layout)
     // v3.9.0：場景座標固定，改變視窗大小不影響場景裡的位置，只有邏輯尺寸變了才提前結算玩耍（目前不會發生）
     if (old.W !== this.layout.W || old.H !== this.layout.H) this.endPlay('resize')
@@ -205,9 +210,9 @@ export class PixelEngine {
   /** 寶物在場景上的位置（id → 座標）；同一個 Layout、同一份 owned、同一份清單會快取 */
   findPoints(): Map<string, { x: number; y: number }> {
     const c = this.findPos
-    if (c && c.L === this.layout && c.owned === this.ownedIds && c.list === this.finds) return c.pts
+    if (c && c.L === this.layout && c.P === this.layout.placement && c.list === this.finds) return c.pts
     const pts = findPositions(this.layout, this.finds)
-    this.findPos = { L: this.layout, owned: this.ownedIds, list: this.finds, pts }
+    this.findPos = { L: this.layout, P: this.layout.placement, list: this.finds, pts }
     return pts
   }
 
@@ -273,12 +278,20 @@ export class PixelEngine {
   }
 
   /**
-   * 設定已購買的建築（存檔變動時呼叫）。購買後建築的腳下佔地加入障礙，寵物繞行；
-   * 站在新建築障礙裡的寵物（例如剛買下去、寵物剛好站在那裡）會被推出來。
+   * 設定已購買的建築（存檔變動時呼叫）：保留目前的擺放紀錄，重新算擺放結果（見 setLayoutData）。
    */
   setOwned(ids: readonly string[]): void {
-    this.ownedIds = new Set(ids)
-    this.layout.owned = this.ownedIds
+    this.setLayoutData(ids, this.farmLayout)
+  }
+
+  /**
+   * v3.9.0：設定已購買的建築與存檔的擺放紀錄（任一個變動時呼叫）→ 換一個新的擺放結果（擺放版本 +1，所有版面快取跟著失效）。
+   * 擺出來的物件腳下佔地是障礙，寵物繞行；站在新障礙裡的寵物會被推出來。載入時不檢查重疊、不改寫存檔。
+   */
+  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined): void {
+    this.farmLayout = farmLayout
+    this.placement = resolvePlacement(owned, farmLayout)
+    setPlacement(this.layout, this.placement)
     for (const a of this.actors.values()) {
       clampActor(a, this.layout)
       a.path = []
@@ -289,9 +302,9 @@ export class PixelEngine {
   /** 已購買、而且目前視窗放得下的建築空位（id → 空位）；放不下的建築紀錄還在，只是畫面上隱藏、寵物也不會去 */
   buildings(): ReadonlyMap<string, BuildingSlot> {
     const c = this.bmap
-    if (c && c.L === this.layout && c.owned === this.ownedIds) return c.map
+    if (c && c.L === this.layout && c.P === this.layout.placement) return c.map
     const map = new Map(ownedSlots(this.layout).map((s) => [s.id, s]))
-    this.bmap = { L: this.layout, owned: this.ownedIds, map }
+    this.bmap = { L: this.layout, P: this.layout.placement, map }
     return map
   }
 
@@ -454,7 +467,8 @@ export class PixelEngine {
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
-      const s = o.key === 'clocktower' ? this.towerSprite() : assets.get(o.key)
+      const key = KIND_GEOM[o.kind].sprite
+      const s = o.key === 'clocktower' ? this.towerSprite() : key ? assets.get(key) : null
       if (!s) continue
       items.push({
         y: o.y,

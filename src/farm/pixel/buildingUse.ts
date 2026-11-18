@@ -1,7 +1,7 @@
 import { BALANCE } from '../config/balance'
 import { personalityMul } from '../config/personality'
 import type { BuildingId } from '../config/buildings'
-import { KENNEL_AX, KENNEL_H, CAT_TREE_H, petMinX, type BuildingSlot } from './layout'
+import { KENNEL_AX, KENNEL_H, CAT_TREE_H, type BuildingSlot } from './layout'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
@@ -104,11 +104,10 @@ export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose)
   const left = slot.x - KENNEL_AX
   if (id === 'kennel' && purpose !== 'eat') {
     const doorX = left + KENNEL_DOOR_CX
-    // 狗窩在路燈後面、門在可走範圍的左緣附近：窩前的位置只能站在 petMinX 右邊（左邊被燈座的石圈蓋住）
-    const minX = petMinX() + 3
-    out.push({ x: left + KENNEL_INSIDE_RIGHT - 24, y: slot.y - KENNEL_H + KENNEL_INSIDE_BOTTOM, face: 1, kind: 'inside', near: { x: Math.max(doorX - 4, minX), y: slot.y + 20 } })
+    // v3.9.0：不再夾在「路燈右邊」（路燈可以移動）；座位旁一律在門洞前方
+    out.push({ x: left + KENNEL_INSIDE_RIGHT - 24, y: slot.y - KENNEL_H + KENNEL_INSIDE_BOTTOM, face: 1, kind: 'inside', near: { x: doorX - 4, y: slot.y + 20 } })
     // 躲雨時站著或坐著（比躺著高），再往右一點，不擋住窩裡的狗的頭
-    const front = { x: Math.max(doorX + KENNEL_FRONT_DX + (purpose === 'shelter' ? 14 : 0), minX + 4), y: slot.y + 8 }
+    const front = { x: doorX + KENNEL_FRONT_DX + (purpose === 'shelter' ? 14 : 0), y: slot.y + 8 }
     out.push({ ...front, face: -1, kind: 'ground', near: front })
   } else if (id === 'catTree' && purpose === 'sleep') {
     const top = slot.y - CAT_TREE_H
