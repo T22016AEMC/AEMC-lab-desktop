@@ -1,30 +1,41 @@
 /**
  * 像素場景的版面。
  *
- * 畫布以「整數倍放大」顯示：S = 每個邏輯像素佔幾個「裝置像素」（已含 devicePixelRatio，所以一定是整數，不會模糊）。
- * 邏輯高度盡量接近 270，視窗更寬就向左右延伸，天空與草地鋪滿；底部貼地（多出來的高度從天空上緣裁掉）。
+ * v3.9.0 起場景是固定的 640×320 邏輯像素（SCENE_W × SCENE_H），放大規則見 sceneScale；S = 每個邏輯像素佔幾個「裝置像素」（已含 devicePixelRatio）。
+ * 視窗多出來的空間由引擎畫天空、遠景、草地延伸（Layout.view），不是場景的一部分。
  *
  * 配置（由左到右）：住家（最左下）→ 路燈 → 樹 → 樹 → 鐘樓（最右側的後排，貼近右邊緣）；水池在住家右上方的後排（左邊那棵樹的左側）。
  * 裝飾物散布在小路兩側的草地，位置固定（不是隨機）。尺寸常數要和 public/assets/manifest.json 一致（測試會檢查）。
  */
 
-export const TARGET_H = 270
-/** 邏輯寬度的下限：寬度夠才放得下住家、路燈、2 棵樹與鐘樓；實在太窄的視窗（例如 1024）才退到 MIN_W_NARROW */
-export const MIN_W = 560
-export const MIN_W_NARROW = 440
+/**
+ * v3.9.0：場景改成固定邏輯尺寸 SCENE_W × SCENE_H（和視窗大小無關），所有物件位置都是固定的場景座標。
+ * 顯示：視窗比場景大時取最大整數倍；整數倍讓場景在「比較緊的那一邊」佔不到視窗的 WHOLE_MIN（七成五）就改用非整數倍；
+ * 比場景小時等比縮小（非整數倍）。場景水平置中、底部貼齊，剩下的空間用天空、遠景、草地（右邊含沙土路）延伸填滿，不留黑邊。
+ * 延伸區只是畫面，寵物與物件都不會進去。
+ */
+export const SCENE_W = 640
+export const SCENE_H = 320
+export const WHOLE_MIN = 0.75
 
 export interface Layout {
-  /** 裝置像素 / 邏輯像素（整數） */
+  /** 裝置像素 / 邏輯像素（整數倍時是整數；非整數倍時是小數，見 whole） */
   S: number
-  /** 邏輯寬、高 */
+  /** 是否整數倍放大（非整數倍時引擎先畫到 1 倍暫存畫布再等比放大） */
+  whole: boolean
+  /** 邏輯寬、高（固定 SCENE_W × SCENE_H） */
   W: number
   H: number
   /** 畫布（裝置像素）大小 */
   backW: number
   backH: number
   dpr: number
-  /** 畫布往上平移的裝置像素（<= 0）：讓邏輯畫面的底部對齊畫布底部 */
+  /** 場景原點在畫布上的水平位移（裝置像素，>= 0；場景水平置中） */
+  ox: number
+  /** 場景原點在畫布上的垂直位移（裝置像素，>= 0；場景底部貼齊畫布底部，多出來的高度在天空） */
   offsetY: number
+  /** 畫布可見範圍（邏輯座標，含延伸區）：x0 <= 0、y0 <= 0、x1 >= W、y1 >= H */
+  view: Rect
   /** 遠景底邊（天空與草地的交界）*/
   farBottom: number
   /** 住家的位置與尺寸 */
@@ -128,37 +139,35 @@ export const TOWER_MARGIN = 10
 /** 鐘樓周圍不放裝飾物的範圍：約 1.5 倍鐘樓寬（左右各 0.75 倍） */
 export const TOWER_CLEAR = Math.round(TOWER_W * 0.75)
 
+/**
+ * 放大倍率：exact = 場景塞進畫布的最大倍率（可有小數）；整數倍 floor(exact) 只要 >= 1 而且 floor(exact) / exact >= WHOLE_MIN 就用整數倍，
+ * 否則用 exact（非整數倍）。純函式，測試用。
+ */
+export function sceneScale(backW: number, backH: number): { S: number; whole: boolean } {
+  const exact = Math.min(backW / SCENE_W, backH / SCENE_H)
+  const k = Math.floor(exact + 1e-9)
+  if (k >= 1 && k / exact >= WHOLE_MIN - 1e-9) return { S: k, whole: true }
+  return { S: exact, whole: false }
+}
+
 export function computeLayout(backW: number, backH: number, dpr: number): Layout {
-  const score = (S: number, minW: number): number => {
-    const W = Math.ceil(backW / S)
-    const H = Math.ceil(backH / S)
-    // 寵物活動的地面帶至少要有一定深度（六隻同場不會擠成一團），所以 H 偏小時額外扣分
-    return Math.abs(H - TARGET_H) + (W < minW ? 1000 : 0) + (H < 190 ? 300 : 0) + Math.max(0, 258 - H) * 3
-  }
-  // 先要求寬度 >= MIN_W 且放大至少 2 倍；做不到（很窄的視窗）才放寬
-  const pick = (minW: number, from: number): { S: number; score: number } => {
-    let best = { S: from, score: Infinity }
-    for (let S = from; S <= 12; S++) {
-      const sc = score(S, minW)
-      if (sc < best.score) best = { S, score: sc }
-    }
-    return best
-  }
-  let best = pick(MIN_W, 2)
-  if (best.score >= 1000) best = pick(MIN_W_NARROW, 2)
-  if (best.score >= 1000) best = pick(0, 1)
-  const S = best.S
-  const W = Math.ceil(backW / S)
-  const H = Math.ceil(backH / S)
+  const { S, whole } = sceneScale(backW, backH)
+  const W = SCENE_W
+  const H = SCENE_H
+  const ox = Math.max(0, Math.round((backW - W * S) / 2))
+  const offsetY = Math.max(0, Math.round(backH - H * S))
   const farBottom = Math.round(H * 0.4) + 8
   return {
     S,
+    whole,
     W,
     H,
     backW,
     backH,
     dpr,
-    offsetY: backH - H * S,
+    ox,
+    offsetY,
+    view: { x0: -ox / S, y0: -offsetY / S, x1: (backW - ox) / S, y1: (backH - offsetY) / S },
     farBottom,
     house: { x0: HOUSE_X0, x1: HOUSE_X0 + HOUSE_W, baseY: H - 6 },
     owned: NO_OWNED,
@@ -167,12 +176,12 @@ export function computeLayout(backW: number, backH: number, dpr: number): Layout
 
 /** 邏輯座標 → 畫布的 CSS 座標（疊在畫布上的 DOM 元素用） */
 export function toCss(L: Layout, x: number, y: number): { x: number; y: number } {
-  return { x: (x * L.S) / L.dpr, y: (y * L.S + L.offsetY) / L.dpr }
+  return { x: (x * L.S + L.ox) / L.dpr, y: (y * L.S + L.offsetY) / L.dpr }
 }
 
-/** 畫布上的 CSS 座標 → 邏輯座標 */
+/** 畫布上的 CSS 座標 → 邏輯座標（延伸區會得到場景範圍外的座標） */
 export function fromCss(L: Layout, cx: number, cy: number): { x: number; y: number } {
-  return { x: (cx * L.dpr) / L.S, y: (cy * L.dpr - L.offsetY) / L.S }
+  return { x: (cx * L.dpr - L.ox) / L.S, y: (cy * L.dpr - L.offsetY) / L.S }
 }
 
 /** 住家的門（相對於住家素材外框的比例）：滑鼠移上去開門、點擊開啟啟動台 */

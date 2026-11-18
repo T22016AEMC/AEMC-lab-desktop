@@ -1,6 +1,23 @@
 import { rgb, skyAt, type Weather } from '../sim/worldTime'
 import { assets, drawSprite } from './assets'
-import { FAR_H, PATH_H, HOUSE_X0, type Layout } from './layout'
+import { FAR_H, PATH_H, HOUSE_X0, type Layout, type Rect } from './layout'
+
+/**
+ * v3.9.0：可見範圍（邏輯座標，含場景外的延伸區），取整數邊界。沒給 ext（拍照、或剛好塞滿）＝場景本身 0..W × 0..H，
+ * 畫出來的結果和 v3.8.1 逐像素相同；有延伸區時只是同樣的圖案往外多鋪幾格。
+ */
+export interface Ext {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+export function extOf(L: Layout, ext?: Rect): Ext {
+  if (!ext) return { x0: 0, y0: 0, x1: L.W, y1: L.H }
+  return { x0: Math.min(0, Math.floor(ext.x0)), y0: Math.min(0, Math.floor(ext.y0)), x1: Math.max(L.W, Math.ceil(ext.x1)), y1: Math.max(L.H, Math.ceil(ext.y1)) }
+}
+/** 水平鋪排的起點：<= x0 且和 0 對齊 tile 寬（場景內的格子位置不變） */
+const tileStart = (x0: number, w: number): number => (x0 >= 0 ? 0 : -Math.ceil(-x0 / w) * w)
 
 /** 微小的確定性亂數（星星、雲的位置固定，不閃爍） */
 function hash(n: number): number {
@@ -13,7 +30,8 @@ function hash(n: number): number {
 const SKY_BANDS = 14
 
 /** 天空：程式畫的漸層（分成幾條色帶，像素風），隨日夜變色 */
-export function drawSky(ctx: CanvasRenderingContext2D, L: Layout, hour: number, weather: Weather): void {
+export function drawSky(ctx: CanvasRenderingContext2D, L: Layout, hour: number, weather: Weather, ext?: Rect): void {
+  const e = extOf(L, ext)
   const sky = skyAt(hour)
   // 下雨、下雪、多雲時天空偏灰
   const grey = weather === 'rain' ? 0.55 : weather === 'snow' ? 0.4 : weather === 'cloudy' ? 0.3 : 0
@@ -32,21 +50,24 @@ export function drawSky(ctx: CanvasRenderingContext2D, L: Layout, hour: number, 
       top[2] + (bottom[2] - top[2]) * t,
     ]
     ctx.fillStyle = rgb(c)
-    const y0 = Math.floor((h * i) / SKY_BANDS)
+    // 最上面那條色帶往上延伸到可見範圍頂端（場景上方的天空）
+    const y0 = i === 0 ? e.y0 : Math.floor((h * i) / SKY_BANDS)
     const y1 = Math.floor((h * (i + 1)) / SKY_BANDS)
-    ctx.fillRect(0, y0, L.W, y1 - y0 + 1)
+    ctx.fillRect(e.x0, y0, e.x1 - e.x0, y1 - y0 + 1)
   }
 }
 
 /** 星星：夜晚出現，位置固定，緩慢閃爍 */
-export function drawStars(ctx: CanvasRenderingContext2D, L: Layout, hour: number, time: number): void {
+export function drawStars(ctx: CanvasRenderingContext2D, L: Layout, hour: number, time: number, ext?: Rect): void {
   const vis = skyAt(hour).stars
   if (vis < 0.05) return
-  const n = Math.round(L.W / 9)
+  const e = extOf(L, ext)
+  const ew = e.x1 - e.x0
+  const n = Math.round(ew / 9)
   const star = assets.get('star')
   for (let i = 0; i < n; i++) {
-    const x = Math.floor(hash(i * 7 + 1) * L.W)
-    const y = Math.floor(hash(i * 13 + 5) * (L.farBottom - 22))
+    const x = e.x0 + Math.floor(hash(i * 7 + 1) * ew)
+    const y = e.y0 + Math.floor(hash(i * 13 + 5) * (L.farBottom - 22 - e.y0))
     const tw = 0.55 + 0.45 * Math.sin(time * (0.8 + hash(i) * 1.4) + i)
     ctx.globalAlpha = Math.min(1, vis * tw)
     if (i % 17 === 0 && star) drawSprite(ctx, star, x, y + star.h)
@@ -77,15 +98,16 @@ export function drawCelestial(ctx: CanvasRenderingContext2D, L: Layout, hour: nu
 const CLOUD_KEYS = ['cloud_a', 'cloud_b', 'cloud_c']
 
 /** 雲：緩慢向右漂移（位置由時間決定，水平循環）；天氣越差雲越多 */
-export function drawClouds(ctx: CanvasRenderingContext2D, L: Layout, weather: Weather, time: number, darkness: number): void {
+export function drawClouds(ctx: CanvasRenderingContext2D, L: Layout, weather: Weather, time: number, darkness: number, ext?: Rect): void {
+  const e = extOf(L, ext)
   const n = weather === 'sunny' ? 3 : weather === 'cloudy' ? 7 : weather === 'rain' ? 8 : 5
-  const span = L.W + 80
+  const span = e.x1 - e.x0 + 80
   for (let i = 0; i < n; i++) {
     const s = assets.get(CLOUD_KEYS[i % 3])
     if (!s) continue
     const speed = 2.5 + hash(i + 40) * 3
-    const x = ((hash(i * 3 + 9) * span + time * speed) % span) - 40
-    const y = 8 + Math.floor(hash(i * 5 + 3) * Math.max(8, L.farBottom - 52))
+    const x = e.x0 + ((hash(i * 3 + 9) * span + time * speed) % span) - 40
+    const y = e.y0 + 8 + Math.floor(hash(i * 5 + 3) * Math.max(8, L.farBottom - 52 - e.y0))
     ctx.globalAlpha = 1 - darkness * 0.35
     drawSprite(ctx, s, x, y + s.h)
   }
@@ -93,44 +115,49 @@ export function drawClouds(ctx: CanvasRenderingContext2D, L: Layout, weather: We
 }
 
 /** 遠景：水平重複的樹與丘陵 */
-export function drawFar(ctx: CanvasRenderingContext2D, L: Layout): void {
+export function drawFar(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
   const s = assets.get('far')
   if (!s) return
-  for (let x = 0; x < L.W; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, L.farBottom - FAR_H, s.w, s.h)
+  const e = extOf(L, ext)
+  for (let x = tileStart(e.x0, s.w); x < e.x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, L.farBottom - FAR_H, s.w, s.h)
 }
 
 /** 草地：2×2 鏡像無縫的草地方塊，從遠景底邊鋪到畫面底部 */
-export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout): void {
+export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
   const s = assets.get('grass_tile')
+  const e = extOf(L, ext)
   if (!s) {
     ctx.fillStyle = '#5aa83a'
-    ctx.fillRect(0, L.farBottom, L.W, L.H - L.farBottom)
+    ctx.fillRect(e.x0, L.farBottom, e.x1 - e.x0, e.y1 - L.farBottom)
     return
   }
   ctx.save()
   ctx.beginPath()
-  ctx.rect(0, L.farBottom, L.W, L.H - L.farBottom)
+  ctx.rect(e.x0, L.farBottom, e.x1 - e.x0, e.y1 - L.farBottom)
   ctx.clip()
-  for (let y = L.farBottom; y < L.H; y += s.h) for (let x = 0; x < L.W; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
+  for (let y = L.farBottom; y < e.y1; y += s.h) for (let x = tileStart(e.x0, s.w); x < e.x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
   ctx.restore()
 }
 
 /** 橫向小路：從住家門口往右延伸到畫面右側（水平重複） */
-export function drawPath(ctx: CanvasRenderingContext2D, L: Layout): void {
+export function drawPath(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
   const s = assets.get('path')
   if (!s) return
   const y = L.H - 6 - PATH_H
-  for (let x = HOUSE_X0 + 40; x < L.W; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
+  // 沙土路從住家門口往右，右邊的延伸區也接著鋪（左邊延伸區沒有路）
+  const x1 = extOf(L, ext).x1
+  for (let x = HOUSE_X0 + 40; x < x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, y, s.w, s.h)
 }
 
 /** 夜晚與黃昏的暗色疊層 */
-export function drawDarkness(ctx: CanvasRenderingContext2D, L: Layout, hour: number, weather: Weather): number {
+export function drawDarkness(ctx: CanvasRenderingContext2D, L: Layout, hour: number, weather: Weather, ext?: Rect): number {
   let dark = skyAt(hour).dark
   if (weather === 'rain') dark = Math.min(0.7, dark + 0.16)
   else if (weather === 'cloudy') dark = Math.min(0.7, dark + 0.06)
   if (dark > 0.01) {
     ctx.fillStyle = `rgba(10,14,52,${(dark * 0.78).toFixed(3)})`
-    ctx.fillRect(0, 0, L.W, L.H)
+    const e = extOf(L, ext)
+    ctx.fillRect(e.x0, e.y0, e.x1 - e.x0, e.y1 - e.y0)
   }
   return dark
 }
@@ -167,15 +194,18 @@ export interface Drop {
  * 雨雪粒子，由引擎持有。雨是細細的淺藍色短線（1 像素寬、4～8 像素長、數量多、速度快），不用水珠素材；
  * 雪是縮小後的小顆雪花素材，密度適中。
  */
-export function makeDrops(L: Layout, weather: Weather, prev: Drop[]): Drop[] {
-  const want = weather === 'rain' ? Math.round(L.W / 3.2) : weather === 'snow' ? Math.round(L.W / 22) : 0
+export function makeDrops(L: Layout, weather: Weather, prev: Drop[], ext?: Rect): Drop[] {
+  const e = extOf(L, ext)
+  const ew = e.x1 - e.x0
+  const want = weather === 'rain' ? Math.round(ew / 3.2) : weather === 'snow' ? Math.round(ew / 22) : 0
   const out = prev.slice(0, want)
   while (out.length < want)
-    out.push({ x: Math.random() * L.W, y: Math.random() * L.H, v: 0.8 + Math.random() * 0.5, ph: Math.random() * 6.28, len: 4 + Math.floor(Math.random() * 5) })
+    out.push({ x: e.x0 + Math.random() * ew, y: e.y0 + Math.random() * (e.y1 - e.y0), v: 0.8 + Math.random() * 0.5, ph: Math.random() * 6.28, len: 4 + Math.floor(Math.random() * 5) })
   return out
 }
 
-export function updateDrops(drops: Drop[], L: Layout, weather: Weather, dt: number): void {
+export function updateDrops(drops: Drop[], L: Layout, weather: Weather, dt: number, ext?: Rect): void {
+  const e = extOf(L, ext)
   for (const d of drops) {
     if (weather === 'rain') {
       d.y += 260 * d.v * dt
@@ -184,12 +214,12 @@ export function updateDrops(drops: Drop[], L: Layout, weather: Weather, dt: numb
       d.y += 16 * d.v * dt
       d.x += Math.sin(d.ph + d.y * 0.05) * 7 * dt
     }
-    if (d.y > L.H + 10) {
-      d.y = -12
-      d.x = Math.random() * L.W
+    if (d.y > e.y1 + 10) {
+      d.y = e.y0 - 12
+      d.x = e.x0 + Math.random() * (e.x1 - e.x0)
     }
-    if (d.x < -12) d.x = L.W + 6
-    if (d.x > L.W + 12) d.x = -6
+    if (d.x < e.x0 - 12) d.x = e.x1 + 6
+    if (d.x > e.x1 + 12) d.x = e.x0 - 6
   }
 }
 

@@ -105,6 +105,18 @@ interface Float {
   t: number
 }
 
+/**
+ * render 的指定視角（拍照、非整數倍的暫存畫布用）：放大倍率、平移（裝置像素）、畫布大小；ext = 要畫的可見範圍（邏輯座標，沒給 = 只畫場景本身）
+ */
+export interface RenderView {
+  scale: number
+  offsetX?: number
+  offsetY: number
+  w: number
+  h: number
+  ext?: LayoutRect
+}
+
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
 export class PixelEngine {
   layout: Layout = computeLayout(1280, 692, 1)
@@ -154,8 +166,30 @@ export class PixelEngine {
     this.layout = computeLayout(Math.max(1, backW), Math.max(1, backH), dpr)
     this.layout.owned = this.ownedIds
     for (const a of this.actors.values()) clampActor(a, this.layout)
-    // 版面真的變了（球與 home 的位置可能失效）：玩耍提前結算
-    if (old.backW !== this.layout.backW || old.backH !== this.layout.backH || old.dpr !== this.layout.dpr) this.endPlay('resize')
+    // v3.9.0：場景座標固定，改變視窗大小不影響場景裡的位置，只有邏輯尺寸變了才提前結算玩耍（目前不會發生）
+    if (old.W !== this.layout.W || old.H !== this.layout.H) this.endPlay('resize')
+  }
+
+  /** 非整數倍放大用的 1 倍暫存畫布 */
+  private scaledBuf: HTMLCanvasElement | null = null
+
+  private renderScaled(ctx: CanvasRenderingContext2D): void {
+    const L = this.layout
+    if (typeof document === 'undefined') return
+    const bx0 = Math.floor(L.view.x0)
+    const by0 = Math.floor(L.view.y0)
+    const bw = Math.ceil(L.view.x1) - bx0
+    const bh = Math.ceil(L.view.y1) - by0
+    const buf = this.scaledBuf ?? (this.scaledBuf = document.createElement('canvas'))
+    if (buf.width !== bw) buf.width = bw
+    if (buf.height !== bh) buf.height = bh
+    const bctx = buf.getContext('2d')
+    if (!bctx) return
+    this.render(bctx, { scale: 1, offsetX: -bx0, offsetY: -by0, w: bw, h: bh, ext: L.view })
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.imageSmoothingEnabled = false
+    ctx.clearRect(0, 0, L.backW, L.backH)
+    ctx.drawImage(buf, 0, 0, bw, bh, L.ox + bx0 * L.S, L.offsetY + by0 * L.S, bw * L.S, bh * L.S)
   }
 
   /** 設定還沒揭曉的寶物（存檔 finds 變動時呼叫） */
@@ -354,8 +388,8 @@ export class PixelEngine {
     for (const r of this.reveals) r.t += dt
     this.reveals = this.reveals.filter((r) => r.t < BALANCE.dig.revealSeconds)
     // 天氣粒子
-    this.drops = makeDrops(this.layout, f.weather, this.drops)
-    updateDrops(this.drops, this.layout, f.weather, dt)
+    this.drops = makeDrops(this.layout, f.weather, this.drops, this.layout.view)
+    updateDrops(this.drops, this.layout, f.weather, dt, this.layout.view)
     this.giftT += dt
   }
 
@@ -367,23 +401,30 @@ export class PixelEngine {
    * 畫整個場景。view（v3.8.0 拍照用）：改用指定的放大倍率、平移與畫布大小，例如 { scale: 1, offsetY: 0, w: W, h: H } = 1 個邏輯像素畫成 1 個畫布像素；
    * 沒給就用版面（畫在主畫布上）。
    */
-  render(ctx: CanvasRenderingContext2D, view?: { scale: number; offsetY: number; w: number; h: number }): void {
+  render(ctx: CanvasRenderingContext2D, view?: RenderView): void {
     const L = this.layout
     const f = this.lastFrame
     if (!assets.ready) return
+    // v3.9.0 非整數倍：先在 1 倍的暫存畫布畫出整個可見範圍，再關掉平滑等比放大貼上（不會有接縫，像素寬度會差 1 個裝置像素）
+    if (!view && !L.whole) {
+      this.renderScaled(ctx)
+      return
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.imageSmoothingEnabled = false
     ctx.clearRect(0, 0, view?.w ?? L.backW, view?.h ?? L.backH)
-    ctx.setTransform(view?.scale ?? L.S, 0, 0, view?.scale ?? L.S, 0, view?.offsetY ?? L.offsetY)
+    ctx.setTransform(view?.scale ?? L.S, 0, 0, view?.scale ?? L.S, view ? view.offsetX ?? 0 : L.ox, view?.offsetY ?? L.offsetY)
+    // 可見範圍（含延伸區）；拍照只畫場景本身
+    const ext = view ? view.ext : L.view
 
     const night = this.isHouseLit(f.hour)
-    drawSky(ctx, L, f.hour, f.weather)
-    drawStars(ctx, L, f.hour, this.time)
+    drawSky(ctx, L, f.hour, f.weather, ext)
+    drawStars(ctx, L, f.hour, this.time, ext)
     drawCelestial(ctx, L, f.hour, f.weather)
-    drawClouds(ctx, L, f.weather, this.time, 0)
-    drawFar(ctx, L)
-    drawGrass(ctx, L)
-    drawPath(ctx, L)
+    drawClouds(ctx, L, f.weather, this.time, 0, ext)
+    drawFar(ctx, L, ext)
+    drawGrass(ctx, L, ext)
+    drawPath(ctx, L, ext)
     // v3.8.0 野餐墊（落地後）：平鋪在地上，畫在所有物件與寵物之前（墊子頂端在後排景物腳底之下，所以不會蓋到樹與裝飾）
     const pst = this.picnicState
     const mat = pst ? picnicMatRect(L) : null
@@ -517,7 +558,7 @@ export class PixelEngine {
     if (f.weather === 'rain' || f.weather === 'snow') drawDrops(ctx, this.drops, f.weather)
 
     // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
-    const dark = drawDarkness(ctx, L, f.hour, f.weather)
+    const dark = drawDarkness(ctx, L, f.hour, f.weather, ext)
     // 鐘面完全由程式畫，疊在鐘樓上、蓋過原圖那個小鐘面；畫在暗色疊層之後，夜晚也清楚可讀
     const tower = this.towerSprite()
     const face = tower?.meta?.clock

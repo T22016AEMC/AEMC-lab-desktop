@@ -35,7 +35,8 @@ export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; lay
   const avail = buildingAvailability(L)
   const todo = PURCHASABLE.filter((id) => !owned?.includes(id))
   const hidden = todo.filter((id) => !avail.find((a) => a.id === id)?.available)
-  const cssW = (L.W * L.S) / L.dpr
+  // 畫布的 CSS 寬度（v3.9.0 起場景可能置中、左右有延伸區，卡片以整個畫布為界）
+  const cssW = L.backW / L.dpr
 
   const buy = (id: BuildingId): void => {
     const def = buildingDef(id)
