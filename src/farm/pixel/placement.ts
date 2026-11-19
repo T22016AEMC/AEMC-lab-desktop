@@ -95,13 +95,12 @@ export const KIND_GEOM: Readonly<Record<LayoutKind, KindGeom>> = {
   flowers: { env: 'flowers', sprite: 'flowers', foot: decorFoot(39) },
   stump: { env: 'stump', sprite: 'stump', foot: decorFoot(53) },
   tall_grass: { env: 'tall_grass', sprite: 'tall_grass', foot: decorFoot(44) },
-  // 第六階段：花槽、珊瑚石堆（素材縮放係數都是 0.7，62×45、59×50）。腳下佔地由 envelopes.ts 逐列不透明像素量出：
+  // 花槽、珊瑚石堆（素材縮放係數都是 0.7，62×45、59×50）。腳下佔地由 envelopes.ts 逐列不透明像素量出：
   // 底下 2 列是圓角／碎石的不規則邊，往上 10 列（第 3～12 列）平均寬都是 53.6，取 54（±27）、深 10（和其他裝飾的深度一樣）
   planter: { env: 'planter', sprite: 'planter', foot: { x0: -27, x1: 27, d: 10 } },
   coral: { env: 'coral', sprite: 'coral', foot: { x0: -27, x1: 27, d: 10 } },
 }
 
-export const geomOf = (kind: LayoutKind): KindGeom => KIND_GEOM[kind]
 export const envelopeOf = (kind: LayoutKind): Envelope => ENVELOPES[KIND_GEOM[kind].env]
 
 /** 腳下佔地（固定場景座標） */
@@ -151,7 +150,7 @@ export function resolvePlacement(owned: readonly string[], layout?: FarmLayout |
 /** 預設擺放（沒有存檔紀錄）。owned 省略 = 沒買任何建築 */
 export const defaultPlacement = (owned: readonly string[] = []): Placement => resolvePlacement(owned, null)
 
-/** 把擺放結果寫回存檔用的紀錄：只記和預設不同的物件（第五階段的編輯模式用） */
+/** 把擺放結果寫回存檔用的紀錄：只記和預設不同的物件（編輯模式用） */
 export function placementToLayout(P: Placement): FarmLayout {
   const items: FarmLayout['items'] = []
   for (const def of LAYOUT_ITEMS) {

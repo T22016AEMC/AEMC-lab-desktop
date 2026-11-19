@@ -219,7 +219,6 @@ export interface Components {
 
 /** 比一隻寵物身體（約 24×12 像素 = 18 格）小的死角不算「不連通」，寵物也不會把那裡當目的地（使用者 2026-11-18 決定的寬鬆版本） */
 export const POCKET_MAX_CELLS = Math.floor((24 / CELL) * (12 / CELL)) // 18
-export const NAV_CELL = CELL
 
 const compCache = new WeakMap<Layout, { P: Placement; c: Components }>()
 

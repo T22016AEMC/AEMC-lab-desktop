@@ -61,7 +61,7 @@ const isBgStrict = (r, g, b) => {
 }
 
 /**
- * v3.9.0 第六階段：只認「接近純洋紅背景色」的像素（背景約 245,5,250）。小建築.png 右下格的珊瑚有粉紅枝（粉紅填色 R≈B、G 偏低，
+ * v3.9.0：只認「接近純洋紅背景色」的像素（背景約 245,5,250）。小建築.png 右下格的珊瑚有粉紅枝（粉紅填色 R≈B、G 偏低，
  * 和 isBg／isBgStrict 的「R、B 接近而 G 低」條件重疊），用那兩個會把粉紅填色吃掉、只剩黑色輪廓，所以這一格改用這個很窄的判斷。
  */
 const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b) <= 30
@@ -507,7 +507,7 @@ function despillMagenta(spr) {
 }
 
 const pCache = {}
-/** 建築素材的縮放係數（v3.3.1；v3.9.0 第六階段加花槽 planter、珊瑚 coral，兩個係數各自設定、預設都是 0.7，可用環境變數 PLANTER_SCALE／CORAL_SCALE 覆寫）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
+/** 建築素材的縮放係數（v3.3.1；v3.9.0 加花槽 planter、珊瑚 coral，兩個係數各自設定、預設都是 0.7，可用環境變數 PLANTER_SCALE／CORAL_SCALE 覆寫）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
 /** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
 const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
 const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7), planter: Number(process.env.PLANTER_SCALE ?? 0.7), coral: Number(process.env.CORAL_SCALE ?? 0.7) }
@@ -923,9 +923,9 @@ async function main() {
     }
     // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
     const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], scales: BUILDING_SCALES })
-    // 花圃（flowerbed）取消（v3.4.0 不使用）：原圖左下格不在這裡輸出（v3.9.0 第六階段的花槽在下面另外處理，id 是 planter）
+    // 花圃（flowerbed）取消（v3.4.0 不使用）：原圖左下格不在這裡輸出（v3.9.0 的花槽在下面另外處理，id 是 planter）
     for (const f of small.frames) addFrame('scene', f.name, f.spr)
-    // v3.9.0 第六階段：左下格 = 花槽（planter）、右下格 = 珊瑚石堆（coral）。兩者都有粉紅色（珊瑚的粉紅枝、花槽的粉紅花），
+    // v3.9.0：左下格 = 花槽（planter）、右下格 = 珊瑚石堆（coral）。兩者都有粉紅色（珊瑚的粉紅枝、花槽的粉紅花），
     // 一般的洋紅判斷（isBg 第二條「玫瑰紅陰影」）與嚴格判斷（isBgStrict）都會把粉紅填色吃掉一部分，所以這兩格用 isBgNear（只認接近背景色的洋紅）去背；
     // 取樣格大小 p 沿用上面同一張圖算出的值（整張共用同一個比例），其他物件的圖完全不受影響。
     const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], scales: BUILDING_SCALES, pFixed: small.p, nearBg: true })

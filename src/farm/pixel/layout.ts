@@ -189,8 +189,6 @@ export function setPlacement(L: Layout, P: Placement): void {
   L.house = { x0, x1: x0 + HOUSE_W, baseY: h.y }
 }
 
-/** 物件的實際位置（沒擺出來 = undefined） */
-export const placedOf = (L: Layout, id: string): { x: number; y: number; kind: LayoutKind } | undefined => L.placement.placed.get(id)
 /** 住家、鐘樓、池塘、公佈欄不能收，一定有位置（萬一沒有就用預設位置） */
 const must = (L: Layout, id: string): { x: number; y: number } => L.placement.placed.get(id) ?? DEFAULT_POS[id]
 

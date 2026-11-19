@@ -10,7 +10,7 @@ import { footprintAt, runsHit, spriteBoxAt, withMove, type Placement, type Place
 import { pondStand, pondStandFound } from './reach'
 
 /**
- * v3.9.0 農場自由擺放的規則（純邏輯）：玩家在編輯模式放下物件時才檢查；不合法就顯示紅色並退回原位（第五階段的介面）。
+ * v3.9.0 農場自由擺放的規則（純邏輯）：玩家在編輯模式放下物件時才檢查；不合法就顯示紅色並退回原位（介面在 ui/EditLayer.tsx）。
  * 載入存檔時不檢查（照存檔畫，不改寫），所以這裡只看「被移動的那個物件」和其他物件的關係，加上整個場景的連通。
  *
  *  1. 範圍（outside）：素材外框整個在場景寬度內；腳底 y ≤ GROUND_BOTTOM；腳底 y ≥ minFootY（住家、公佈欄可以到草地上緣＝公佈欄那條線，
