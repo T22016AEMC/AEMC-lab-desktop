@@ -1,5 +1,6 @@
 import type { Find, Pet, PicnicActive } from '../save/types'
 import { picnicEligible } from '../sim/picnic'
+import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
 import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, cameraRect, picnicMatRect, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
 import { skinDef } from '../config/skins'
@@ -955,6 +956,14 @@ export class PixelEngine {
     }
     drawSprite(ctx, s, px + a.shakeX, py - hop, a.facing === -1)
     if (v?.clip) ctx.restore()
+    // v3.10.0 貓揮爪：程式畫的弧線（素材的弧線去背時被濾掉）；只有滑鼠互動的揮爪（hswat）才畫
+    if (a.pet.species === 'cat' && a.action === 'swat' && a.override?.tag === 'hswat') {
+      const t = BALANCE.hover.swatSeconds - a.override.left
+      for (const q of swatArcScreen(Math.round(px + a.shakeX), Math.round(py - hop), a.facing === -1 ? -1 : 1, s.w, s.h, s.ax, t)) {
+        ctx.fillStyle = SWAT_ARC_COLORS[q.layer]
+        ctx.fillRect(q.x, q.y, 1, 1)
+      }
+    }
     // 叼著球：球掛在嘴邊（各品種、各幀的位置在 play.ts 的 MOUTH，往左走時水平翻轉）
     if (a.play && isCarrying(a.play)) {
       const m = mouthOffset(variantOf(a.pet.species, a.pet.variant).assetKey, frameNameOf(a), a.facing)

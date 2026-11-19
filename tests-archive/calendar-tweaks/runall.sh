@@ -2,7 +2,7 @@
 # 跑全部 Node 邏輯／引擎測試（vite 打包後執行）。用法：bash tests-archive/calendar-tweaks/runall.sh [套件名…]（不給名稱 = 全部）
 # 失敗的套件會在最後列出；全部通過 exit 0。TAILN=行數 控制每個套件顯示輸出最後幾行（預設 3）。
 cd "$(dirname "$0")" || exit 2
-SUITES=(ct-b-games ct-e-writer ct-c-calendar)
+SUITES=(ct-b-games ct-e-writer ct-c-calendar ct-d3-swat)
 [ $# -gt 0 ] && SUITES=("$@")
 [ -d .work/v391src/src ] || { echo "先執行 node tests-archive/calendar-tweaks/setup.mjs"; exit 2; }
 FAILED=()
