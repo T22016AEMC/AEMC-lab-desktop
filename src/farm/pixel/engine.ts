@@ -1,6 +1,7 @@
 import type { Find, Pet, PicnicActive } from '../save/types'
 import { picnicEligible } from '../sim/picnic'
 import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
+import { isPicnicNapping } from './picnic'
 import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, MAT_SNACKS, SNACK_KEYS, cameraRect, picnicMatRect, picnicSnacks, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
 import { skinDef } from '../config/skins'
@@ -993,6 +994,8 @@ export class PixelEngine {
   }
 
   statusIcon(a: Actor, f: FrameInfo): string | null {
+    // v3.10.0 野餐中偶爾睡一下：ZZZ（白天也一樣）
+    if (isPicnicNapping(a)) return 'fx_zzz'
     if (isSleeping(a.pet, f.hour, f.nowMs)) return a.action === 'sleep' ? 'fx_zzz' : null // 走去狗窩／貓跳台的路上還沒睡
     if (a.override?.tag === 'eat' || (a.bld?.purpose === 'eat' && a.bld.phase === 'at')) return null
     const n = lowStatNotices(a.pet)
@@ -1423,11 +1426,15 @@ export class PixelEngine {
     return n
   }
 
-  /** 拍照：墊子上坐好的寵物全部換成開心姿勢（不加心情）。回傳有幾隻 */
+  /** 拍照：墊子上坐好的寵物全部換成開心姿勢（不加心情）；v3.10.0：睡著的不叫醒（照片照到睡著的樣子），但也算在照片裡。回傳坐好的有幾隻 */
   picnicCheer(): number {
     let n = 0
     for (const a of this.actors.values()) {
       if (!a.picnic?.arrived) continue
+      if (isPicnicNapping(a)) {
+        n++
+        continue
+      }
       a.picnic.cheer = BALANCE.picnic.cheerSeconds
       a.action = 'happy'
       a.t = 0

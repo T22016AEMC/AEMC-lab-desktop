@@ -231,6 +231,49 @@ export interface PicnicSeat {
   t: number
   /** 拍照的開心姿勢還剩幾秒 */
   cheer: number
+  /** v3.10.0 偶爾睡一下（純畫面）：坐好之後累計的秒數、擲骰的累計秒數、還要睡幾秒（0 = 醒著）、這場睡過了沒 */
+  sat?: number
+  roll?: number
+  nap?: number
+  napped?: boolean
+}
+
+/** 這隻野餐中的寵物正在睡（偶爾睡一下） */
+export const isPicnicNapping = (a: Actor): boolean => (a.picnic?.nap ?? 0) > 0
+
+/**
+ * 坐在墊子上、沒在拍照、沒有指令動作時，每個影格呼叫：決定要不要開始睡、睡完坐起來。回傳 true = 正在睡（這個影格的姿勢已處理）。
+ * 同時睡的上限看 env.others（場景上所有寵物）。
+ */
+function updateNap(a: Actor, p: PicnicSeat, dt: number, env: BehaviorEnv, ops: PicnicOps): boolean {
+  const nb = BALANCE.picnic.nap
+  if ((p.nap ?? 0) > 0) {
+    p.nap = Math.max(0, (p.nap ?? 0) - dt)
+    if (p.nap === 0) {
+      ops.setAction(a, 'sit', 1e9)
+      return false
+    }
+    if (a.action !== 'sleep') ops.setAction(a, 'sleep', 1e9)
+    return true
+  }
+  if (p.napped) return false
+  const lazy = a.pet.personality === 'lazy'
+  p.sat = (p.sat ?? 0) + dt
+  if (p.sat < (lazy ? nb.lazyMinSitSeconds : nb.minSitSeconds)) return false
+  p.roll = (p.roll ?? 0) + dt
+  while (p.roll >= nb.rollEverySeconds) {
+    p.roll -= nb.rollEverySeconds
+    const others = env.others ?? []
+    const seated = others.filter((o) => o.picnic?.arrived).length
+    const napping = others.filter((o) => o !== a && isPicnicNapping(o)).length
+    if (napping >= (seated >= 4 ? nb.maxNappersMany : nb.maxNappers)) continue
+    if (!(env.rand() < nb.chance * (lazy ? nb.lazyChanceMul : 1))) continue
+    p.nap = nb.seconds[0] + env.rand() * (nb.seconds[1] - nb.seconds[0])
+    p.napped = true
+    ops.setAction(a, 'sleep', 1e9)
+    return true
+  }
+  return false
 }
 
 export interface PicnicOps {
@@ -287,6 +330,8 @@ export function updatePicnicSeat(a: Actor, dt: number, env: BehaviorEnv, mat: Re
   }
   if (a.override) {
     const o = a.override
+    // v3.10.0：氣泡選單的動作（撫摸、餵食…）會把睡著的叫醒（這場不再睡）
+    if ((p.nap ?? 0) > 0) p.nap = 0
     o.left -= dt
     if (a.action !== o.action) ops.setAction(a, o.action, o.left)
     if (o.tag === 'pet' && env.rand() < dt * 2.2) env.emit('heart', a.x + (env.rand() - 0.5) * 16, a.y - 28)
@@ -296,6 +341,8 @@ export function updatePicnicSeat(a: Actor, dt: number, env: BehaviorEnv, mat: Re
     }
     return true
   }
+  // v3.10.0 偶爾睡一下
+  if (updateNap(a, p, dt, env, ops)) return true
   if (a.action !== 'sit') ops.setAction(a, 'sit', 1e9)
   return true
 }
