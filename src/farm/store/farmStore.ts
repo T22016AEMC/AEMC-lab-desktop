@@ -13,7 +13,7 @@ import { CHECKIN_TEXT, checkIn, collectGift, giftCandidates, isCheckedIn, newSav
 import { addFind, digCoinsToday, makeFindId, resultText, retroEvents, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { rehomePet } from '../sim/rehome'
-import { SHOP_TEXT, purchase as purchaseItem, type PurchaseOptions } from '../sim/shop'
+import { SHOP_TEXT, equipSkin, purchase as purchaseItem, type PurchaseOptions } from '../sim/shop'
 import { useUIStore } from '../../store/uiStore'
 import { addNote, deleteNote, updateNote } from '../../tools/notes'
 import { TOOLS, type NoteColor } from '../../config/tools'
@@ -93,6 +93,8 @@ interface FarmState {
    * 扣金幣與得到的東西在同一份存檔裡、立刻寫入。回傳成功與否、錯誤原因、新的實例 id。
    */
   purchase: (itemId: string, opts?: PurchaseOptions) => Promise<ShopPurchaseResult>
+  /** v4.0 切換外觀（環境主題等）：skinId = null 或預設主題 → 換回預設；沒擁有的不能穿。有變才寫入 */
+  equipSkin: (slot: string, skinId: string | null) => void
   /** v4.0 從商店領養（不是第一隻）：先確認寫入權，再走 adoptPet，立刻寫入。回傳錯誤訊息或 null */
   shopAdopt: (req: Omit<AdoptRequest, 'free'>) => Promise<string | null>
   /** v3.9.0 擺設模式：寫入農場擺放（只記和預設不同的；全部預設 = 拿掉欄位），立刻存檔。不動 ownedBuildings */
@@ -381,8 +383,22 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const r = purchaseItem(cur, itemId, opts)
     if (!r.ok) return { ok: false, error: r.error }
     set({ save: r.save })
-    flushSave() // 金幣與購買的東西：立刻寫入（不等節流）
+    // 金幣與購買的東西：立刻寫入並等寫完。寫入前一刻被別的分頁接手（storage.save 拒寫、畫面鎖定）→ 記憶體回到購買前，不留「已購買」的假象
+    await flushSaveNow()
+    if (get().otherTab || get().newerData) {
+      set({ save: cur })
+      return { ok: false, error: get().otherTab ? SHOP_TEXT.otherTab : SHOP_TEXT.newer }
+    }
     return r.instanceId ? { ok: true, instanceId: r.instanceId } : { ok: true }
+  },
+
+  equipSkin: (slot, skinId) => {
+    const save = get().save
+    if (!save || get().otherTab || get().newerData) return
+    const next = equipSkin(save, slot, skinId)
+    if (next === save) return
+    set({ save: next })
+    flushSave()
   },
 
   shopAdopt: async (req) => {
@@ -394,10 +410,16 @@ export const useFarmStore = create<FarmState>((set, get) => ({
       markOtherTab()
       return SHOP_TEXT.otherTab
     }
-    if (get().otherTab) return SHOP_TEXT.otherTab
+    const before = get().save
+    if (!before || get().otherTab) return SHOP_TEXT.otherTab
     const err = get().adoptPet(req)
     if (err) return err
-    flushSave()
+    // 和購買一樣：寫入前一刻被接手 → 回到領養前
+    await flushSaveNow()
+    if (get().otherTab || get().newerData) {
+      set({ save: before })
+      return get().otherTab ? SHOP_TEXT.otherTab : SHOP_TEXT.newer
+    }
     return null
   },
 
@@ -535,15 +557,23 @@ export function flushSave(): void {
   flush()
 }
 
-function flush(): void {
-  if (savesSuspended) return
+/**
+ * 立刻寫入，並等寫入真的完成（v4.0 購買用）：寫完之後才知道有沒有被別的分頁搶先接手（storage.save 拒寫 → otherTab）。
+ */
+export function flushSaveNow(): Promise<void> {
+  return flush()
+}
+
+function flush(): Promise<void> {
+  if (savesSuspended) return Promise.resolve()
   window.clearTimeout(saveTimer)
   saveTimer = undefined
   const s = useFarmStore.getState().save
   if (s && s !== lastSaved) {
     lastSaved = s
-    void storage.save(s)
+    return storage.save(s).catch(() => {})
   }
+  return Promise.resolve()
 }
 useFarmStore.subscribe((state, prev) => {
   if (state.save === prev.save) return

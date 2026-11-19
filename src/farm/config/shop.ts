@@ -75,6 +75,26 @@ export const SHOP_LIMITS = {
  */
 export const ENV_SLOT = 'env'
 export const ENV_DEFAULT = 'env.grass'
+/** 環境主題放在商店的分類與小標題（裝飾品分頁的「環境主題」，排在「擺設」之前） */
+export const ENV_CATEGORY: ShopCategory = 'decor'
+export const ENV_GROUP = '環境主題'
+
+/**
+ * 環境主題商品（之後的階段加資料用）：買一次（maxOwned 1、不可重複），買了穿到 env（同一時間只有一個生效），之後可以切換（farmStore.equipSkin）。
+ * 階段 A 沒有任何主題內容，SHOP_ITEMS 裡沒有環境主題商品（只在測試資料裡驗證）。
+ */
+export const envTheme = (id: string, name: string, sprite?: string, price: number = SHOP_LIMITS.envThemePrice): ShopItem => ({
+  id,
+  name,
+  category: ENV_CATEGORY,
+  group: ENV_GROUP,
+  price,
+  repeatable: false,
+  maxOwned: 1,
+  ...(sprite ? { sprite } : {}),
+  blurb: '地板、小路與遠景一起換；買了之後可以切換',
+  grant: { type: 'skin', skin: id, slot: ENV_SLOT },
+})
 
 const decor = (kind: LayoutKind, size: SizeClass): ShopItem => ({
   id: 'decor.' + kind,

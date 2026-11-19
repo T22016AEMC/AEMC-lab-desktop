@@ -22,10 +22,13 @@ export type RevealResult =
 
 /** 事件對話框的資料（只在記憶體，不進存檔）：coins = 實際扣掉（罰款）或獲得（獎勵）的金幣 */
 export interface EventNotice {
-  id: EventId
+  /** 'retroBatch' = 載入時一次補發 2 個以上的收藏獎勵，合併成一個彈窗（各項在 parts） */
+  id: EventId | 'retroBatch'
   coins: number
   /** v4.0：載入時補發的（彈窗開頭寫「（更新補發）」）；揭曉當下觸發的沒有這個欄位 */
   retro?: true
+  /** retroBatch 的各項（依事件順序） */
+  parts?: { id: EventId; coins: number }[]
 }
 
 export interface RevealOutcome {
@@ -92,11 +95,15 @@ export function findsFull(save: SaveData, cap: number = BALANCE.dig.holdMax): bo
 
 export const FULL_MESSAGE = '先點開土堆'
 /** 草地完全放不下寶物（上限 0）時的提示（v3.9.0：場景固定，原因只會是擺設太多） */
-export const TOO_SMALL_MESSAGE = '草地太擠，放不下寶物，請移開或收起一些擺設'
-/** 草地太擠讓上限變小、而且已經滿了 */
-export const crowdedFullMessage = (cap: number): string => `草地太擠，寶物最多放 ${cap} 個，先點開土堆`
+/**
+ * v4.0 文字：擺設太多（商店可以買到 60 個裝飾）讓寶物放不下。v3.9.0 起場景固定 640×320、和視窗大小無關，
+ * 所以原因只會是擺設太多（沒有「視窗太小」的情況，也不提示放大視窗）。
+ */
+export const TOO_SMALL_MESSAGE = '擺設太多，放不下寶物，請收起一些擺設'
+/** 擺設太多讓上限變小、而且已經滿了 */
+export const crowdedFullMessage = (cap: number): string => `擺設太多，寶物最多放 ${cap} 個，先點開土堆`
 /** 玩耍途中找不到地方埋寶物（提前結束時的提示） */
-export const NO_SPOT_MESSAGE = '草地太擠，找不到地方埋寶物'
+export const NO_SPOT_MESSAGE = '擺設太多，找不到地方埋寶物，請收起一些擺設'
 /**
  * 現在不能開始挖寶、尋寶的原因（寶物已滿或草地放不下）；可以 = null。
  * 已有的寶物比上限多時（擺設變擠了）全部保留，只是不能再挖。
@@ -155,7 +162,10 @@ function applyEvent(save: SaveData, ev: EventDef, nowMs: number, notices: EventN
  */
 export function retroEvents(save: SaveData, nowMs: number): { save: SaveData; notices: EventNotice[] } {
   const r = checkEvents(save, nowMs, RETRO_EVENT_IDS)
-  return { save: r.save, notices: r.notices.map((n) => ({ ...n, retro: true as const })) }
+  // 只有 1 個：沿用原本的彈窗；2 個以上：合併成一個彈窗，列出各項與總金額
+  if (r.notices.length <= 1) return { save: r.save, notices: r.notices.map((n) => ({ ...n, retro: true as const })) }
+  const parts = r.notices.map((n) => ({ id: n.id as EventId, coins: n.coins }))
+  return { save: r.save, notices: [{ id: 'retroBatch', coins: parts.reduce((a, p) => a + p.coins, 0), retro: true, parts }] }
 }
 
 /** 揭曉一個寶物：抽選、發金幣（受每日上限）、記收藏、檢查事件、把它從清單拿掉。找不到這個寶物回傳 null */
