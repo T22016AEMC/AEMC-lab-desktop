@@ -33,7 +33,8 @@ export interface HoverEnv {
   petAt: (x: number, y: number) => Actor | null
   /** 寵物外框（邏輯座標，含跳一下的位移）；畫不出來 = null */
   box: (a: Actor) => { x0: number; y0: number; x1: number; y1: number } | null
-  emit: (kind: 'heart', x: number, y: number) => void
+  /** owner = 這個粒子屬於哪隻寵物（v3.10.0：摸頭的愛心在名字標籤之上再畫一次） */
+  emit: (kind: 'heart', x: number, y: number, owner?: string) => void
 }
 
 interface Sample {
@@ -446,7 +447,7 @@ export class HoverController {
     c.pat = this.t + B.patCooldown
     const top = env.box(a)?.y0 ?? a.y - 30
     const n = B.patHearts[0] + Math.floor(env.rand() * (B.patHearts[1] - B.patHearts[0] + 1))
-    for (let i = 0; i < n; i++) env.emit('heart', a.x + (n === 1 ? 0 : i === 0 ? -6 : 6) + (env.rand() - 0.5) * 3, top + 2 + i * 2)
+    for (let i = 0; i < n; i++) env.emit('heart', a.x + (n === 1 ? 0 : i === 0 ? -6 : 6) + (env.rand() - 0.5) * 3, top + 2 + i * 2, a.id)
     if (a.picnic) return
     if (a.hv) releaseHover(a, env.rand)
     a.override = { action: 'happy', left: B.patSeconds, speedMul: 0, tag: 'hpat' }

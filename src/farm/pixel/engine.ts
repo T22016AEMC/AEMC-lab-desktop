@@ -95,6 +95,8 @@ interface Particle {
   max: number
   /** 重力（像素／秒²），水滴用 */
   g?: number
+  /** 屬於哪隻寵物（v3.10.0：只有摸頭的愛心有；名字標籤顯示時，這隻的愛心在標籤之上再畫一次） */
+  owner?: string
 }
 
 interface Float {
@@ -687,8 +689,11 @@ export class PixelEngine {
       ctx.fillText(fl.text, Math.round(fl.x), Math.round(fl.y - fl.t * 12))
     }
     ctx.globalAlpha = 1
-    // v3.8.1 小名字標籤（拍照不畫）
-    if (!view) this.drawLabel(ctx)
+    // v3.8.1 小名字標籤（拍照不畫）；v3.10.0：這隻摸頭的愛心在標籤之上再畫一次（沒有標籤時畫面與 v3.9.1 逐像素相同）
+    if (!view) {
+      const labeled = this.drawLabel(ctx)
+      if (labeled) this.drawOwnedParticles(ctx, labeled)
+    }
     if (!view) this.drawEditMarks(ctx, L)
     if (!view) this.drawPicnicGhost(ctx)
   }
@@ -697,12 +702,12 @@ export class PixelEngine {
    * 小名字標籤：游標停在寵物上約 0.5 秒後，在頭上浮出「個性圖示＋名字」；放不下（上方出界）就放腳下，左右夾進畫面。
    * 游標移開、開選單、拖曳、開視窗時 hover 控制器就不回報 id，標籤立刻消失。
    */
-  private drawLabel(ctx: CanvasRenderingContext2D): void {
+  private drawLabel(ctx: CanvasRenderingContext2D): string | null {
     const id = this.hover.enabled && !this.hover.blocked ? this.hover.labelId() : null
     const a = id ? this.actors.get(id) : undefined
-    if (!a || this.selectedId || this.draggingId) return
+    if (!a || this.selectedId || this.draggingId) return null
     const s = this.actorSprite(a)
-    if (!s) return
+    if (!s) return null
     const L = this.layout
     const icon = a.pet.personality ? assets.get(PERSONALITY_ICONS[a.pet.personality]) : null
     ctx.font = 'bold 9px "Courier New", monospace'
@@ -716,6 +721,9 @@ export class PixelEngine {
     const top = a.y - hop - s.ay
     let x = Math.round(a.x - w / 2)
     let y = Math.round(top - 3 - h)
+    // v3.10.0：頭上有狀態圖示（餓、汗滴、髒、ZZZ、愛心）而且會被標籤蓋到 → 標籤往上移到圖示上方（不跟著圖示上下晃）
+    const icon0 = this.statusIconRect(a)
+    if (icon0 && icon0.x0 < x + w + 1 && icon0.x1 > x - 1 && icon0.y0 < y + h + 1 && icon0.y1 > y - 1) y = Math.round(icon0.y0 - 3 - h)
     if (y < 2) y = Math.round(a.y - hop - s.ay + s.h + 3) // 頭上放不下：放腳下
     x = Math.max(2, Math.min(Math.floor(L.W) - w - 2, x))
     y = Math.max(2, Math.min(Math.floor(L.H) - h - 2, y))
@@ -730,6 +738,37 @@ export class PixelEngine {
     }
     ctx.fillStyle = '#3b2a1c'
     ctx.fillText(a.pet.name, tx, y + Math.round(h / 2) + 3)
+    return a.id
+  }
+
+  /**
+   * 頭上狀態圖示的外框（不含上下晃動的 1 像素；和 drawActor 畫的位置相同）。沒有圖示 = null。
+   * 只給名字標籤避開用。
+   */
+  private statusIconRect(a: Actor): { x0: number; y0: number; x1: number; y1: number } | null {
+    const key = this.statusIcon(a, this.lastFrame)
+    const ic = key ? assets.get(key) : null
+    const s = this.actorSprite(a)
+    if (!ic || !s) return null
+    const hop = this.hopOffset(a)
+    const v = this.seatView(a)
+    const cx = v ? v.iconX : a.x
+    const bottom = (v ? v.iconBottom : a.y - s.h - 3) - hop
+    const x0 = cx - ic.ax
+    const y0 = bottom - ic.ay - 1
+    return { x0, y0, x1: x0 + ic.w, y1: bottom - ic.ay + ic.h + 1 }
+  }
+
+  /** 屬於某隻寵物的粒子（摸頭的愛心）再畫一次：和粒子層同樣的透明度與位置 */
+  private drawOwnedParticles(ctx: CanvasRenderingContext2D, owner: string): void {
+    for (const p of this.particles) {
+      if (p.owner !== owner) continue
+      const s = assets.get(p.key)
+      if (!s) continue
+      ctx.globalAlpha = Math.max(0, Math.min(1, (p.max - p.life) / 0.4))
+      drawSprite(ctx, s, p.x, p.y)
+    }
+    ctx.globalAlpha = 1
   }
 
   /** 夜晚（暗到需要亮燈）：住家換成亮燈版 */
@@ -1037,7 +1076,10 @@ export class PixelEngine {
         const hop = this.hopOffset(a)
         return { x0: a.x - s.ax, y0: a.y - hop - s.ay, x1: a.x - s.ax + s.w, y1: a.y - hop - s.ay + s.h }
       },
-      emit: (kind, x, y) => this.emit(kind, x, y),
+      emit: (kind, x, y, owner) => {
+        this.emit(kind, x, y)
+        if (owner) this.particles[this.particles.length - 1].owner = owner
+      },
     }
   }
 
