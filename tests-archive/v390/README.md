@@ -31,8 +31,8 @@ git archive --format=tar 719a575 | tar -x -C tests-archive/v390/.work/v381src
 ## 跑法
 
 ```bash
-bash tests-archive/v390/runall.sh                       # 23 個 Node 套件；也可只跑 bash runall.sh v390-review review-fuzz
-node tests-archive/v390/run-browser.mjs                 # 7 個瀏覽器測試（自己啟動／關閉兩個 dev server）
+bash tests-archive/v390/runall.sh                       # 24 個 Node 套件；也可只跑 bash runall.sh v390-tower v390-review review-fuzz
+node tests-archive/v390/run-browser.mjs                 # 8 個瀏覽器測試（自己啟動／關閉兩個 dev server）
 npm run build && node tests-archive/v390/dist-check.mjs # 正式 build 不可含測試模式等 11 個字串
 npx tsc -b                                              # 型別檢查
 ```
@@ -45,6 +45,7 @@ npx tsc -b                                              # 型別檢查
 
 | 套件 | 測什麼 |
 |---|---|
+| v390-tower | **鐘樓放寬與塔門保護**：`TOWER_TOP_MIN` -24（腳底 136 可以、135 不行、互動區與引擎 CSS 平移 -30）、塔門／招牌／鐘面各自 25%（界線掃描 76 萬個位置）、面積對照報告、放寬後新增位置的連通與座位檢查與原因文字 |
 | v390-review | **審查修正**：同一影格連續兩次擺放寫入都保留（含「用過期擺放結果寫入」的負向對照）、買建築忽略舊紀錄、匯入摘要 `layoutCount` |
 | review-fuzz | **審查壓力測試**：300 組隨機擺放跑版面／導航／寶物草地／野餐墊／洗澡站位／`canPlace`／20 秒寵物模擬；損壞擺放資料（`__proto__`、極端座標、100 萬筆…）；匯入格式 2～7 × dataRev 的接受／拒絕矩陣 |
 | v390-save | 存檔：`cleanFarmLayout` 54 萬項（含 2 萬次隨機）、和 v3.8.0／v3.8.1 的存檔讀寫互動、舊版讀到 dataRev 4 的行為、匯出入 2～6 |
@@ -70,6 +71,7 @@ npx tsc -b                                              # 型別檢查
 | t5-edit-browser | 擺設模式（購買／編輯分頁）：拖曳合法／不合法、倉庫列、收起、還原預設、買了放進倉庫的提示卡、橫幅不出界（96 項） |
 | t6-planter-coral-browser | 花槽、珊瑚：倉庫縮圖、放上場景、拖曳、收回、重新整理 |
 | t7-save-browser | 新舊版互相讀存檔：v3.8.1 讀到 dataRev 4 的提示與存檔不被覆寫、匯入格式 5／6 的確認視窗 |
+| t8-tower-browser | 鐘樓在最後面（y=136）：透明入口、鐘面與塔門畫面（和預設位置平移後逐像素比）、夜晚暖光；塔門與招牌被蓋 25% 時入口仍點得到；截圖 |
 
 通過條件：結束碼 0 且沒有「失敗」開頭的輸出行。
 

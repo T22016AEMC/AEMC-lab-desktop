@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '../..')
-const ALL = ['t1c-path', 't2-scale', 't3-follow-browser', 't4-browser', 't5-edit-browser', 't6-planter-coral-browser', 't7-save-browser']
+const ALL = ['t1c-path', 't2-scale', 't3-follow-browser', 't4-browser', 't5-edit-browser', 't6-planter-coral-browser', 't7-save-browser', 't8-tower-browser']
 const names = process.argv.length > 2 ? process.argv.slice(2) : ALL
 if (!existsSync(join(HERE, 'node_modules/playwright-core'))) {
   console.log('先在 tests-archive/v390 資料夾執行 npm install')

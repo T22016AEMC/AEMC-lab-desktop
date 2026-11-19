@@ -91,15 +91,19 @@ const placeMany = (L, moves) => { for (const [id, x, y] of moves) { const r = PR
   for (const it of L0.placement.placed.values()) ok(PR.canPlace(L0, it.id, it.x, it.y).ok, 'C 沒買建築時預設位置合法：' + it.id)
   // 範圍
   const R = (id) => PR.placeRange(L, PL.KIND_GEOM[LAYOUT_ITEMS.find((d) => d.id === id).kind] ? LAYOUT_ITEMS.find((d) => d.id === id).kind : id)
-  eq(R('tower'), { x0: 62, x1: 579, y0: 160, y1: 316 }, 'C 鐘樓範圍：x 62～579、腳底 y 160～316（整張圖不超出畫面頂端）')
+  // 預期值異動（TOWER_TOP_MIN 0 → -24）：y0 160 → 136
+  eq(R('tower'), { x0: 62, x1: 579, y0: 136, y1: 316 }, 'C 鐘樓範圍：x 62～579、腳底 y 136～316（TOWER_TOP_MIN -24：頂端可超出畫面 24 像素，腳底到公佈欄那條線）')
   eq(R('house').y0, 136, 'C 住家可以往後到公佈欄那條線（草地上緣 136）')
   eq(R('board').y0, 136, 'C 公佈欄 y 下限 136')
   eq(R('rocks').y0, 146, 'C 其他物件 y 下限 146（草地上緣 + 10）')
   const towerAt = (y) => PR.canPlace(L, 'tower', 568, y)
-  ok(towerAt(160).ok, 'C 鐘樓往後移到 y 160（頂端剛好 0）可以')
-  eq(towerAt(159).ok ? 'ok' : towerAt(159).reason, 'outside', 'C 鐘樓 y 159（頂端超出畫面）不行')
+  // 預期值異動：原本 160 可以、159 不行（頂端不超出畫面）；現在 160、159 都可以，下限改成 136 可以、135 不行
+  ok(towerAt(160).ok, 'C 鐘樓 y 160（頂端剛好 0）可以')
+  ok(towerAt(159).ok, 'C 鐘樓 y 159（頂端超出畫面 1 像素）現在可以')
+  ok(towerAt(136).ok, 'C 鐘樓 y 136（頂端超出畫面 24 像素、公佈欄那條線）可以')
+  eq(towerAt(135).ok ? 'ok' : towerAt(135).reason, 'outside', 'C 鐘樓 y 135 不行')
   const tw = PR.placeRange(L, 'tower')
-  report.push(`鐘樓可擺放範圍：腳底 x ${tw.x0}～${tw.x1}、y ${tw.y0}～${tw.y1}（預設 568, 166；最多往後 ${166 - tw.y0} 像素，頂端剛好碰到畫面頂端）`)
+  report.push(`鐘樓可擺放範圍：腳底 x ${tw.x0}～${tw.x1}、y ${tw.y0}～${tw.y1}（預設 568, 166；最多往後 ${166 - tw.y0} 像素，尖頂超出畫面頂端 ${160 - tw.y0} 像素）`)
   eq(PR.canPlace(L, 'rocks', 234, 145).ok ? 'ok' : PR.canPlace(L, 'rocks', 234, 145).reason, 'outside', 'C 石頭 y 145 不行')
   eq(PR.canPlace(L, 'tree2', 30, 200).reason, 'outside', 'C 樹的外框超出左邊界不行')
   // 住家往後到公佈欄那條線：把公佈欄、池塘收不了，所以把住家放到右邊空的草地後排（y 136）
@@ -198,6 +202,19 @@ const placeMany = (L, moves) => { for (const [id, x, y] of moves) { const r = PR
       if (o.id === id) continue
       const [back, front] = o.y > me.y ? [me, o] : me.y > o.y ? [o, me] : [null, null]
       if (!back) continue
+      // 預期值異動（塔門保護調整）：鐘樓的塔門、招牌、鐘面各自可以被蓋住 ≤ 25%（逐像素取樣獨立重算，邊界往內取整、和規則的定義相同）；窗戶仍是完全不能蓋
+      if (back.kind === 'tower') {
+        const names = ['塔門', '招牌', '窗戶', '鐘面']
+        PR.zonesOf(L, back).forEach((z, zi) => {
+          const x0 = Math.ceil(z.x0), x1 = Math.floor(z.x1), y0 = Math.ceil(z.y0), y1 = Math.floor(z.y1)
+          let cov = 0
+          for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) if (PL.envCovers(front.kind, front.x, front.y, xx + 0.5, yy + 0.5)) cov++
+          const area = (x1 - x0) * (y1 - y0)
+          if (names[zi] === '窗戶') ok(PR.coverStats(front.kind, front.x, front.y, z).covered === 0 && cov === 0, `D #${i} ${front.id} 沒有蓋到 ${back.id} 的窗戶`)
+          else ok(cov <= area * PR.TOWER_ZONE_COVER_MAX, `D #${i} ${front.id} 蓋住 ${back.id} 的${names[zi]} ${cov}/${area}，不超過 ${PR.TOWER_ZONE_COVER_MAX * 100}%`)
+        })
+        continue
+      }
       for (const z of PR.zonesOf(L, back)) {
         let hit = false
         const env = PL.envelopeOf(front.kind)

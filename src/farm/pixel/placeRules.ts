@@ -6,7 +6,7 @@ import {
 } from './layout'
 import { CAT_TREE_MID_SEAT, CAT_TREE_TOP_SEAT, KENNEL_DOOR_CLIP, seatsOf } from './buildingUse'
 import { hasIsolatedRegion, isReachable } from './nav'
-import { footprintAt, runsHit, spriteBoxAt, withMove, type Placement, type PlacedItem } from './placement'
+import { envelopeOf, footprintAt, runsHit, spriteBoxAt, withMove, type Placement, type PlacedItem } from './placement'
 import { pondStand, pondStandFound } from './reach'
 
 /**
@@ -14,19 +14,26 @@ import { pondStand, pondStandFound } from './reach'
  * 載入存檔時不檢查（照存檔畫，不改寫），所以這裡只看「被移動的那個物件」和其他物件的關係，加上整個場景的連通。
  *
  *  1. 範圍（outside）：素材外框整個在場景寬度內；腳底 y ≤ GROUND_BOTTOM；腳底 y ≥ minFootY（住家、公佈欄可以到草地上緣＝公佈欄那條線，
- *     鐘樓同時整張圖不超出畫面頂端，其他物件到草地上緣 + BACK_BASE）
+ *     鐘樓可以再往後到頂端超出畫面 -TOWER_TOP_MIN 像素（現為腳底 y = 草地上緣 136），其他物件到草地上緣 + BACK_BASE）
  *  2. 重疊（overlap）：腳下佔地和其他物件的腳下佔地相隔至少 MIN_GAP（12）
  *  3. 互動區（covers）：畫在前面（腳底比較低）的物件的不透明像素不能蓋到互動區：住家門、塔門與招牌、窗戶、鐘面、水面中心、
- *     公佈欄黑板、狗窩門洞、貓跳台的兩層平台；貓跳台＋睡在頂層的貓不能碰塔門與招牌
+ *     公佈欄黑板、狗窩門洞、貓跳台的兩層平台；貓跳台＋睡在頂層的貓不能碰塔門與招牌。
+ *     例外：塔門、招牌、鐘面三個互動區各自允許被蓋住不超過該區面積的 TOWER_ZONE_COVER_MAX（25%）；窗戶與其他物件的互動區維持「完全不能蓋」
  *  4. 連通（disconnected）：可走範圍除了最大的區塊，不能有比一隻寵物身體大的區塊
  *  5. 走得到（unreachable）：所有建築座位旁的位置、洗澡站位都在最大的區塊上
  */
 export const MIN_GAP = 12
 /**
  * 鐘樓能往後（往畫面上方）移到哪裡：鐘樓素材頂端的 y 不能小於這個值（0 = 整張圖不超出畫面頂端；
- * 改成負數就能再往後，例如 -20 = 頂端可以超出畫面 20 像素）。鐘樓腳底的下限只由這個常數與草地上緣決定（minFootY）。
+ * 負數 = 頂端可以超出畫面那麼多像素）。-24 → 腳底最小 y = 160 - 24 = 136（公佈欄那條水平線 = 草地上緣），頂端的尖頂被切掉 24 像素。
+ * 鐘樓腳底的下限由這個常數與草地上緣決定（minFootY：兩者取大，所以再往負也不會超過草地上緣）。
  */
-export const TOWER_TOP_MIN = 0
+export const TOWER_TOP_MIN = -24
+/**
+ * 塔門、招牌、鐘面三個互動區各自允許被「畫在前面的物件」蓋住的最大比例（0.25 = 25%；各區各自算，不是總和；
+ * 比例 = 被不透明像素蓋住的整數像素格數 ÷ 該區的整數像素格數，剛好等於上限可以、超過才算擋住）。窗戶不適用（維持完全不能蓋）。
+ */
+export const TOWER_ZONE_COVER_MAX = 0.25
 export const GROUND_BOTTOM = 316
 
 export type PlaceReason = 'outside' | 'overlap' | 'covers' | 'disconnected' | 'unreachable' | 'unknown'
@@ -93,6 +100,47 @@ export function zonesOf(L: Layout, it: PlacedItem): Rect[] {
   }
 }
 
+/** 物件（種類 kind、腳底 x、y）的不透明像素蓋住矩形 z 的整數像素格數，以及 z 的整數像素格數（z 的邊界往內取整） */
+export function coverStats(kind: LayoutKind, x: number, y: number, z: Rect): { covered: number; area: number } {
+  const e = envelopeOf(kind)
+  const xa = Math.ceil(z.x0)
+  const xb = Math.floor(z.x1)
+  const ya = Math.ceil(z.y0)
+  const yb = Math.floor(z.y1)
+  const area = Math.max(0, xb - xa) * Math.max(0, yb - ya)
+  const top = y - e.ay
+  let covered = 0
+  for (let py = Math.max(ya, top); py < Math.min(yb, top + e.h); py++)
+    for (const [lo, hi] of e.rows[py - top]) {
+      const a = Math.max(xa, x + lo)
+      const b = Math.min(xb, x + hi)
+      if (b > a) covered += b - a
+    }
+  return { covered, area }
+}
+
+/** 蓋住的格數超過互動區面積的 max 比例才算擋住（剛好等於上限可以） */
+export const coverExceeds = (covered: number, area: number, max: number = TOWER_ZONE_COVER_MAX): boolean => covered > area * max
+
+/**
+ * 畫在前面的物件 front 對鐘樓 back 的互動區：窗戶完全不能蓋；塔門、招牌、鐘面各自最多蓋住 TOWER_ZONE_COVER_MAX。
+ * 擋住時回傳說明，沒有擋住回傳 null。
+ */
+export function towerCoverBlock(T: Layout, back: PlacedItem, front: PlacedItem): string | null {
+  const strict = [{ name: '窗戶', z: towerWindowRect(T) }]
+  const tolerant = [
+    { name: '塔門', z: towerDoorRect(T) },
+    { name: '招牌', z: towerSignRect(T) },
+    { name: '鐘面', z: towerClockRect(T, null) },
+  ]
+  for (const s of strict) if (runsHit(front.kind, front.x, front.y, s.z)) return `${front.id} 蓋到 ${back.id} 的${s.name}`
+  for (const t of tolerant) {
+    const { covered, area } = coverStats(front.kind, front.x, front.y, t.z)
+    if (coverExceeds(covered, area)) return `${front.id} 蓋住 ${back.id} 的${t.name} ${covered}/${area}（超過 ${Math.round(TOWER_ZONE_COVER_MAX * 100)}%）`
+  }
+  return null
+}
+
 /** 一個複製的版面，換上擺放結果 P（擺放規則的試算用，不動引擎的版面） */
 export function layoutWith(L: Layout, P: Placement): Layout {
   const T: Layout = { ...L }
@@ -111,8 +159,14 @@ function coversCheck(T: Layout, P: Placement, id: string): string | null {
     if (other.y > me.y) pairs.push([me, other])
     else if (me.y > other.y) pairs.push([other, me])
     else pairs.push([me, other], [other, me])
-    for (const [back, front] of pairs)
+    for (const [back, front] of pairs) {
+      if (back.kind === 'tower') {
+        const hit = towerCoverBlock(T, back, front)
+        if (hit) return hit
+        continue
+      }
       for (const z of zonesOf(T, back)) if (runsHit(front.kind, front.x, front.y, z)) return `${front.id} 蓋到 ${back.id} 的互動區`
+    }
   }
   // 貓跳台＋睡在頂層的貓：不能碰塔門與招牌（逐列輪廓，v3.4.2 的規則）
   const ct = P.placed.get('catTree')
