@@ -223,10 +223,10 @@ export const BALANCE = {
      * 野餐中偶爾睡一下（v3.10.0，純畫面演出：不改任何數值、不存檔，睡覺心情回復只看睡覺時段與建築座位，與這裡無關）：
      * 坐好滿 minSitSeconds 秒後，每 rollEverySeconds 秒擲一次 chance；中了就躺下睡 seconds[0]～seconds[1] 秒（頭上 ZZZ）再坐起來。
      * 每隻每場最多睡一次；同時最多 maxNappers 隻（坐好的寵物 4 隻以上時 maxNappersMany 隻）。
-     * 懶散個性：機率 × lazyChanceMul、最早 lazyMinSitSeconds 秒。模擬（tests-archive/calendar-tweaks 的 ct-d22-nap）：一場 5 分鐘（坐好約 4.5 分鐘）一般個性約 55%、懶散約 80% 的寵物會睡一次（第一次擲骰在坐好後第 70 秒，懶散第 50 秒）。
+     * 懶散個性：機率 × lazyChanceMul、最早 lazyMinSitSeconds 秒。模擬（tests-archive/calendar-tweaks 的 ct-d22-nap）：一場 5 分鐘（坐好約 4.5 分鐘）一般個性約 35%、懶散約 55%（3.10.0 以前 1/24 時為 55%／80%）的寵物會睡一次（第一次擲骰在坐好後第 70 秒，懶散第 50 秒）。
      * 被摸只冒愛心、不會醒；氣泡選單的動作、拖曳、離開野餐都會醒來；拍照時睡著的不做開心姿勢（照片照到睡著的樣子）。
      */
-    nap: { minSitSeconds: 60, rollEverySeconds: 10, chance: 1 / 24, seconds: [15, 25], lazyChanceMul: 2, lazyMinSitSeconds: 40, maxNappers: 1, maxNappersMany: 2 },
+    nap: { minSitSeconds: 60, rollEverySeconds: 10, chance: 1 / 48, seconds: [15, 25], lazyChanceMul: 2, lazyMinSitSeconds: 40, maxNappers: 1, maxNappersMany: 2 },
   },
 
   /**

@@ -16,7 +16,7 @@ const report = []
 
 // ---------- D2-2 野餐睡覺（純邏輯模擬：updatePicnicSeat） ----------
 const nb = BALANCE.picnic.nap
-eq([nb.minSitSeconds, nb.rollEverySeconds, nb.chance, nb.seconds, nb.lazyChanceMul, nb.lazyMinSitSeconds, nb.maxNappers, nb.maxNappersMany], [60, 10, 1 / 24, [15, 25], 2, 40, 1, 2], '睡覺參數')
+eq([nb.minSitSeconds, nb.rollEverySeconds, nb.chance, nb.seconds, nb.lazyChanceMul, nb.lazyMinSitSeconds, nb.maxNappers, nb.maxNappersMany], [60, 10, 1 / 48, [15, 25], 2, 40, 1, 2], '睡覺參數')
 let seed = 22
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
 const mat = { x0: 100, y0: 100, x1: 204, y1: 163 }
@@ -59,8 +59,8 @@ const rate = napped / pets
 ok(firstMin >= 60, `最早在坐好 ${firstMin.toFixed(1)} 秒後才睡（≥ 60）`)
 ok(lens.every((l) => l >= 14.9 && l <= 25.2), `每次睡 ${Math.min(...lens).toFixed(1)}～${Math.max(...lens).toFixed(1)} 秒（15～25）`)
 ok(maxT <= 1, `3 隻時同時最多 ${maxT} 隻在睡（上限 1）`)
-// 理論值：60 秒後每 10 秒擲 1/24，坐好 270 秒擲 21 次 → 1 − (23/24)^21 ≈ 59%，再扣掉同時上限 → 約 55%
-ok(rate > 0.4 && rate < 0.7, `一般個性：一場（坐好 4.5 分鐘）有睡的比例 ${(rate * 100).toFixed(1)}%（理論約 55%）`)
+// v3.10.1：機率 1/48。60 秒後每 10 秒擲，坐好 270 秒擲 21 次 → 1 − (47/48)^21 ≈ 36%，再扣掉同時上限 → 約 35%
+ok(rate > 0.25 && rate < 0.45, `一般個性：一場（坐好 4.5 分鐘）有睡的比例 ${(rate * 100).toFixed(1)}%（理論約 35%）`)
 report.push(`野餐睡覺：一般個性 400 場 × 3 隻，有睡 ${(rate * 100).toFixed(1)}%、最早 ${firstMin.toFixed(1)} 秒、每次 ${Math.min(...lens).toFixed(1)}～${Math.max(...lens).toFixed(1)} 秒、同時最多 ${maxT} 隻`)
 // 懶散
 let lp = 0, ln = 0, lfirst = Infinity
