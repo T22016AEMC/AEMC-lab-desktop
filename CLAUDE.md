@@ -82,7 +82,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 
 ## 金幣經濟與建築（v3.2.0）
 
-- 介面上一律叫「金幣」，內部欄位仍叫 `points`（不改名）。新存檔初始 50（`BALANCE.startPoints`；已有存檔不補發）、每日 +5、日常活動 −1、領養狗貓都是 15（`species.ts` 的 `cost`；15／25／35 是 v3.0.0 前含海洋生物時的舊價格），第一隻免費（`farmStore.adoptPet` 的 `isFirst` = 沒有存檔或 0 隻寵物）。
+- 介面上一律叫「金幣」，內部欄位仍叫 `points`（不改名）。新存檔初始 50（`BALANCE.startPoints`；已有存檔不補發）、每日簽到 +5（v3.10.0 起要打開簽到月曆才給，見 v3.10.0 一節）、日常活動 −1、領養狗貓都是 15（`species.ts` 的 `cost`；15／25／35 是 v3.0.0 前含海洋生物時的舊價格），第一隻免費（`farmStore.adoptPet` 的 `isFirst` = 沒有存檔或 0 隻寵物）。
 - 賺金幣的規則是 `sim/earning.ts` 的純函式，數值在 `balance.ts`（`BALANCE.earn`）：啟動台開啟使用者的程式 +3（每程式每小時一次、合計每天 +10，開啟成功才給、管理清單不給）。**v3.10.0 起小遊戲不再給金幣**（遊戲本身保留；`useRoundReward`／`claimGame`／`gameGoals` 已刪除；存檔的 `earning.gameCoins` 只為相容保留，讀寫照舊、每天歸零、不再增加，不要拿它做新用途）。**冷卻與每日上限的時間一律用遊戲時間來源 `gameNow()`**（`farm/overrides.ts`，測試模式可平移），每日進度以本地日期 00:00 重置；不可直接用 `Date.now()`。純前端、存在瀏覽器，**無法防作弊**（程式註解有寫），帳號與雲端階段再處理，不要為此加複雜機制。
 - **空位專用標記**：建築空位的 id 就是專用標記，也是存檔 `ownedBuildings` 的值與 `config/buildings.ts` 的建築 id：`kennel` 狗窩、`bowls` 食盆水盆、`catTree` 貓跳台（走道上半部）、`picnicMat`（草地，留給之後的版本；沙坑在 v3.6.0 開發期間做過又取消、沒有發布，認不得的 `sandbox` 由 `parseSave` 過濾，素材也不輸出）。**可購買的建築由 `PURCHASABLE` 決定**（`buyBuilding` 擋掉其他的）：有食盆水盆、狗窩、貓跳台（營火 v3.4.0 加入、v3.5.1 移除）；野餐墊不顯示、不開放，資料與 `buildingAvailability` 保留（留給之後的版本）。價格在 `BALANCE.buildings.price`（食盆水盆 10、狗窩／貓跳台各 20）。
 - **購買規則**：建築選單列「建築」按鈕進入建築模式（`uiStore.buildMode`，再按一次或 Esc 離開），`ui/BuildLayer.tsx` 在可購買而未購買的空位顯示虛線框與價格，點開小卡片購買；金幣不足停用。窄視窗放不下的建築（`buildingAvailability` 的 `available` 為 false）不顯示空位，建築模式改顯示放大視窗的提示（見 v3.4.2）；已購買但放不下的建築，紀錄保留、畫面與障礙都隱藏（`engine.buildings()` 只回傳已購買且放得下的），放大後自動恢復，不退款不刪除。
@@ -95,7 +95,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - Logo 選單（`components/LogoMenu.tsx`）：關於這個桌面、匯出存檔…、匯入存檔…、持久儲存狀態。啟動時呼叫 `navigator.storage.persist()`（失敗不顯示錯誤），結果在 Logo 選單與「關於這個桌面」顯示。
 - 匯出檔格式（`lib/backup.ts`）：`{ format: "aemc-desktop-backup", formatVersion: 3（v3.6.0 起；匯入接受 2 與 3，2 缺的欄位補預設值）, exportedAt, appVersion, data: { farm, appList } }`，檔名 `aemc-desktop-backup-YYYYMMDD-HHmm.json`（本地時間）。**讀取一律走 `SaveStorage`／`DocumentStorage`（`getSaveStorage()`、`getAppListStorage()`），不要在別處直接讀 localStorage**，之後換雲端時才能整體替換。`DocumentStorage` 因此多了 `saveStrict`（失敗丟例外）、`snapshot`、`restore`，換雲端時整組一起實作。
 - 匯入檢查順序：大小（5 MB）→ JSON → format → formatVersion／schema 不高於目前（較新的拒絕，訊息「這個存檔來自較新版本，請重新整理網頁更新後再試」；formatVersion 1 或養殖場 schema 4 以下一律拒絕，訊息「這個備份來自重置前的版本，無法匯入」）→ `parseSave()` 驗證 → 啟動台清單 `parseAppList`。`parseBackup` 不寫入；按「匯入」才 `applyBackup`：先 snapshot 兩份資料、依序 saveStrict，任何一份失敗就全部還原（整批成功或整批不寫）。成功後 `suspendSaves()`（否則離開頁面時自動存檔會把記憶體裡的舊存檔寫回去）再重新整理。不做防竄改。
-- 匯入舊備份時：離線補算照舊（`lastSeen` 是備份當時，所以重新整理時一次補算到現在，數值最低掉到 `offlineFloor` 20，原本就更低的維持）；每日 +5 依 `lastDailyClaim`（備份的日期早於今天就領一次，只領一次不會補領每一天）；程式與遊戲的今日進度、食盆份量、禮物次數依日期歸零重算；各程式的冷卻以備份當時的時間計。
+- 匯入舊備份時：離線補算照舊（`lastSeen` 是備份當時，所以重新整理時一次補算到現在，數值最低掉到 `offlineFloor` 20，原本就更低的維持）；每日 +5 依 `lastDailyClaim`（v3.10.0 起不自動給：備份的日期早於今天，打開簽到月曆時可以簽今天一次，不會補領每一天）；程式與遊戲的今日進度、食盆份量、禮物次數依日期歸零重算；各程式的冷卻以備份當時的時間計。
 - 備份提醒（`components/BackupReminder.tsx`、`lib/backupReminder.ts`）：從未匯出且有寵物領養滿 3 天，或距上次匯出超過 14 天，顯示不擋操作的小提示（匯出／不再提醒），每天最多一次。上次匯出時間、「不再提醒」、上次提醒日期存在獨立的設定鍵 `aemc-desktop:settings`（`lib/settings.ts`），**不寫進養殖場存檔，也不放進匯出檔**。
 - 狗窩／貓跳台座位（2 個）坐滿時，多出來的寵物睡覺、躲雨改站在建築「前方」的前方位置（腳底比建築低 28、離洗澡通道遠，`seatsOf` 的 index ≥ capacity），不會被屋頂遮住；真座位空出來就換過去。這些位置沒有睡覺心情加成。
 
@@ -219,7 +219,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **介面**：`ui/EditLayer.tsx`（編輯分頁）、`ui/BuildLayer.tsx`（購買分頁）、`ui/farmHotkey.ts`（E）、`pixel/editDrag.ts`（拖曳、點擊與拖曳的判斷）；`uiStore.buildMode`／`farmTab`／`farmBuyNotice` 只在記憶體，不存檔。
 - **素材**：花槽 62×45、珊瑚 59×50（`PLANTER_SCALE`／`CORAL_SCALE` 預設 0.7）；`process-assets.mjs` 用 `isBgNear`＋`trimMagentaFringe` 只處理這兩格，其他素材逐像素不變。
 - **擺設寫入一律用「目前存檔」算**：`EditLayer` 放下／收進倉庫時用 `layoutAfterMove(save.ownedBuildings, save.farmLayout, id, x, y)`（`placement.ts`），不能用 `engine.layout.placement`（引擎要到下一個影格才跟上存檔；同一影格內連續兩次寫入，第二次會蓋掉第一次）。買建築時 `farmStore.buyBuilding` 用 `withoutRecord` 忽略存檔裡這棟建築以前殘留的擺放紀錄；匯入摘要的 `layoutCount` 只算 `placementToLayout(resolvePlacement(...))` 的項目。
-- **已知限制（不修）**：(1) 還開著的 v3.8.x 舊分頁匯出的備份不含擺放（舊版已出貨，新版分不出來）；(2) 兩個 v3.9.0 分頁同時開，後存的覆蓋先存的（寵物、金幣一直如此，4.0.0 再考慮跨分頁偵測）；(3) `backupActions.exportBackup` 先 `flushSave()` 再立刻 `load()`，因為 `LocalStorageAdapter.save` 會先 `await snapshot()` 才寫入，匯出檔可能少掉最後一個節流區間的變動（以前就有；擺放不受影響，`setFarmLayout` 放下就立刻寫入）。
+- **已知限制（不修）**：(1) 還開著的 v3.8.x 舊分頁匯出的備份不含擺放（舊版已出貨，新版分不出來）；(2) 兩個 v3.9.0 分頁同時開，後存的覆蓋先存的（v3.10.0 起由寫入權解決，見 v3.10.0 一節）；(3) `backupActions.exportBackup` 先 `flushSave()` 再立刻 `load()`，因為 `LocalStorageAdapter.save` 會先 `await snapshot()` 才寫入，匯出檔可能少掉最後一個節流區間的變動（以前就有；擺放不受影響，`setFarmLayout` 放下就立刻寫入）。
 - **測試**：`tests-archive/v390/`（不接 npm scripts；環境、執行方式、已知例外見該資料夾的 README.md）。
 - **鐘樓與塔門保護**（`placeRules.ts`）：`TOWER_TOP_MIN` = -24（鐘樓腳底最小 y = 136 = 草地上緣，尖頂超出畫面 24 像素；`minFootY` 取 `max(草地上緣, 160 + TOWER_TOP_MIN)`，再改小也不會超過草地上緣）。塔門、招牌、鐘面三個互動區各自允許被前面物件的素材蓋住 `TOWER_ZONE_COVER_MAX`（0.25）以下（`coverStats` 數整數像素格：邊界往內取整、剛好等於上限可以；`coverExceeds`、`towerCoverBlock`）；窗戶與其他物件的互動區仍用 `runsHit`（完全不能蓋）；`catTreeHitsTower` 沒動；鐘樓腳下佔地間距維持 `MIN_GAP` 12、沒有塔門特例。能蓋到鐘面的物件一定先把塔門蓋過 25%，所以鐘面這一區在現有素材下不會單獨擋人。
 
@@ -231,3 +231,17 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **判斷規則**只有一個：`pixel/picnic.ts` 的 `picnicSpotCheck`（自動找位置 `picnicMatRect`、手動選位置、野餐中離開編輯農場的 `picnicMatFitsAt` 共用）：範圍 `matRange`（與 v3.9.0 的掃描範圍相同）＋邊緣保險 `matEdgeOk`（座位寵物 `PICNIC_PET_REACH`、相機、照片裁切 `PICNIC_CROP_MIN` 都在場景內；範圍內一律成立）→ 外框碰佔地 → 座位站得住（`isWalkable`，不另外查「走得到」，使用者決定）→ 座位被蓋 ≤ 50%。原因文字 `MAT_SPOT_TEXT`（outside、overlap 與 `PLACE_REASON_TEXT` 相同）。改素材（寵物、相框）要確認這兩個常數仍涵蓋（測試會比對 manifest）。
 - **預覽**由引擎畫（`engine.picnicGhost`，`drawPicnicGhost` 在 render 最後、拍照不畫）：半透明墊子（不行時用 `tinted` 紅色）、虛線外框、6 個座位的腳底點與寵物身體範圍（`PET_BOX`）；出問題的座位紅色、其他白色。
 - 測試：`tests-archive/v390/node/v391-picnic-pick-entry.js`、`browser/t9-picnic-pick-browser.mjs`。
+
+## v3.10.0：簽到月曆、兩分頁寫入權、取消遊戲金幣、四項小改
+
+- **金幣來源（v3.10.0 起）**：每日簽到 +5（`BALANCE.dailyBonus`，**只有打開簽到月曆才給**，載入與跨日不再自動給）、啟動台開啟程式 +3（每程式每小時一次、每天 10）、挖寶尋寶揭曉的錢幣（每天 10）、**寵物禮物仍有**（`rollGift`／`collectGift`：每分鐘 8%、心情 > 70、每天 4 個、每個 +1～3；禮物出現時就記次數，禮物本身只在記憶體，重新整理會消失）、傳說集齊一次性 +100 ×2。**小遊戲不再給金幣**（`earning.gameCoins` 只為相容保留）。每日毛收入上限 37。名稱：「禮物」是寵物送金幣，「寶物」是挖寶，不要混用。
+- **簽到**（`sim/points.ts`：`checkIn`、`isCheckedIn`、`checkinDays`、`trimCheckins`、`CHECKIN_TEXT`；`farmStore.checkIn()`）：只能簽今天、冪等；`lastDailyClaim` 仍是「今天領過沒」的唯一依據（舊版也只認它），所以更新前已領的今天直接顯示「簽」。存檔可缺少的 `checkins`（YYYY-MM-DD，由舊到新、去重、最多 `CHECKIN_MAX` 62；`migrate.ts` 的 `cleanCheckins`／`isDayKey`；讀檔不刪未來日期，簽到時才修剪到上個月 1 號以後）。沒有寵物、`otherTab`、`newerData` 時不給；給之前再確認寫入權；給了立刻 `flushSave`。時間一律 `gameNow()`。
+- **介面**：選單列「簽到月曆＋日期時間」同一顆按鈕（`components/CheckInButton.tsx`，紅點 = 有寵物、沒停用、今天沒簽）；月曆 `components/tools/CalendarDialog.tsx`（`ToolDialog`，打開就簽、只簽一次（StrictMode 用 ref 擋）、當月＋上個月、開著跨午夜且分頁在前景時自動簽新的一天）；`TOOL_LIST` 的 `calendar`（`icon: null`，圖示是程式畫的 `CalendarIcon.tsx`；`ToolDialog` 的 `iconNode`）。開發面板 `shiftTime` 也平移 `checkins`。
+- **存檔版本**：`DATA_REV` 5、匯出格式 7（`CHECKINS_FORMAT_VERSION`；格式 2～6 不讀 `checkins`）。**上線後不能安全退回 3.9.x**（舊版讀到 dataRev 5 會顯示「存檔來自更新的版本」、不能玩；存檔不會被覆寫）。
+- **兩個分頁的寫入權**（`save/storage.ts`）：獨立的鍵 `aemc-desktop:farm-writer`（`WRITER_KEY`，不在存檔、不進匯出檔）；頁面 id 只在記憶體（`PAGE_TAB_ID`，**不可用 sessionStorage**：複製分頁會連它一起複製）。`loadOrReset` 接手（較新版本的存檔不接手）、`save` 寫入前檢查、`storage` 事件立刻通知；接手與讀檔都在第一個 `await` 前同步完成（多一個 await 會讓同頁排隊中的寫入插進來，v380-adapt-v371 測試踩過）。寫入權鍵讀寫失敗、壞掉、被刪 → 一律可以寫（不鎖死）。`SaveStorage` 介面有 `claim()`／`isOwner()`；匯入（`applyBackup`）先接手。被接手：`suspendSaves()`＋`otherTab`，`farm/ui/OtherTabNotice.tsx` 擋住整個畫面（z 9990）並攔下快捷鍵；未存的變動放棄、不合併。
+- **名字標籤**（`engine.drawLabel`）：有頭上圖示而且會蓋到 → 標籤移到圖示上方（`statusIconRect`）；摸頭的愛心粒子有 `owner`，標籤畫完後再畫一次（`drawOwnedParticles`）。沒有標籤時不走新程式（與 v3.9.1 逐像素相同，有測試）。
+- **貓揮爪弧線**（`pixel/swatArc.ts`）：只在滑鼠互動的揮爪（`hswat`）畫；整數像素表、兩層黃、往左水平鏡像；0.1～0.4 秒，最後 0.1 秒畫一半。圖集不動。
+- **野餐**：點心（`MAT_SNACKS`、`picnicSnacks`：有狗放餅乾、有貓放小魚乾，看開始時的參加名單，不存檔）；偶爾睡一下（`BALANCE.picnic.nap`、`updateNap`、`isPicnicNapping`：純畫面，不呼叫 hooks；睡著時頭上 ZZZ；拍照不叫醒但算在照片隻數裡；氣泡選單動作會叫醒）。實測一場一般個性約 55%、懶散約 80% 會睡一次。
+- **拍立得日期**（`ui/photo.ts`）：`composePolaroid(..., date)` 在倒數第 3 列與最後 2 列之間插入 `DATE_STRIP`（8）列白邊，左右邊框照倒數第 3 列延伸，日期用 3×5 點陣（`DATE_FONT`）＋`fillRect`，深灰 `DATE_COLOR`；日期與下載檔名用按快門當下的同一個 `gameNow()`。
+- **測試**：`tests-archive/calendar-tweaks/`（見該資料夾 README.md；`adapt-c.py` 是對 `tests-archive/v390` 舊測試寫死版本號的修改）。
+
