@@ -1,7 +1,7 @@
 import type { Find, Pet, PicnicActive } from '../save/types'
 import { picnicEligible } from '../sim/picnic'
 import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
-import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, cameraRect, picnicMatRect, type PicnicSeat } from './picnic'
+import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, MAT_SNACKS, SNACK_KEYS, cameraRect, picnicMatRect, picnicSnacks, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
 import { skinDef } from '../config/skins'
 import type { RevealResult } from '../sim/dig'
@@ -563,6 +563,12 @@ export class PixelEngine {
         const spot = MAT_FOODS[i]
         if (fs && spot) items.push({ y: mat.y0 + spot[1], draw: () => drawSprite(ctx, fs, mat.x0 + spot[0], mat.y0 + spot[1]) })
       })
+      // v3.10.0 寵物點心：有狗參加放餅乾、有貓參加放小魚乾（純裝飾、不存檔）
+      for (const k of picnicSnacks(pst.active.pets, (id) => this.actors.get(id)?.pet.species as 'dog' | 'cat' | undefined)) {
+        const ss = assets.get(SNACK_KEYS[k])
+        const [sx, sy] = MAT_SNACKS[k]
+        if (ss) items.push({ y: mat.y0 + sy, draw: () => drawSprite(ctx, ss, mat.x0 + sx, mat.y0 + sy) })
+      }
     }
     // 玩耍中的球（飛行、落地彈跳、放在腳邊）；叼著的球畫在狗的嘴邊（drawActor）
     for (const a of this.actors.values()) {

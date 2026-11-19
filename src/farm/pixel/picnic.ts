@@ -26,6 +26,20 @@ export const MAT_SEATS: readonly (readonly [number, number])[] = [
 export const MAT_BASKET: readonly [number, number] = [14, 46]
 export const MAT_FOODS: readonly (readonly [number, number])[] = [[92, 21], [44, 9]]
 export const FOOD_KEYS = ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'] as const
+/**
+ * 寵物點心（v3.10.0，純裝飾、不存檔）：狗餅乾（15×8）、貓小魚乾（15×4），放在籃子右下方的墊面上（素材座標，腳底）。
+ * 有狗參加才放餅乾、有貓參加才放小魚乾（看開始時的參加名單 picnic.active.pets）。
+ * 位置：籃子佔 x 3～24、y 24～46；座位腳底最低 y 46，所以點心（y 44～56）永遠畫在坐著的寵物前面、不會被擋住；
+ * 兩個點心、籃子、食物彼此不重疊，整個在墊面內（測試用 meta.mat 逐列檢查）。
+ */
+export const MAT_SNACKS = { dog: [33, 52], cat: [50, 56] } as const
+export const SNACK_KEYS = { dog: 'picnic_snack_dog', cat: 'picnic_snack_cat' } as const
+
+/** 這場野餐要放哪些點心：參加的寵物裡有狗就放餅乾、有貓就放小魚乾（species 查不到的寵物不算） */
+export function picnicSnacks(petIds: readonly string[], speciesOf: (id: string) => 'dog' | 'cat' | undefined): ('dog' | 'cat')[] {
+  const has = new Set(petIds.map(speciesOf))
+  return (['dog', 'cat'] as const).filter((k) => has.has(k))
+}
 export const MAT_KEYS = ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'] as const
 export const BASKET_KEYS = ['picnic_basket_closed', 'picnic_basket_open'] as const
 /** 相機圖示大小（picnic_camera） */
