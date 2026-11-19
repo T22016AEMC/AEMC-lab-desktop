@@ -444,7 +444,6 @@ export const SLOT_SPECS: SlotSpec[] = [
   { id: 'kennel', name: '狗窩', kind: 'kennel', w: KENNEL_W, h: KENNEL_H, fw: 76, fd: 22 },
   { id: 'bowls', name: '食盆水盆', kind: 'small', w: BOWLS_W, h: BOWLS_H, fw: 48, fd: 12 },
   { id: 'catTree', name: '貓跳台', kind: 'catTree', w: CAT_TREE_W, h: CAT_TREE_H, fw: 53, fd: 22 },
-  { id: 'picnicMat', name: '野餐墊', kind: 'small', w: 117, h: 69, fw: 84, fd: 20 },
 ]
 
 /** 走道上的空位（狗窩、食盆水盆、貓跳台）腳底在走道上緣再往下這麼多：落在沙地走道的上半部 */
@@ -496,12 +495,6 @@ export function buildingSlots(L: Layout): BuildingSlot[] {
   return slots
 }
 
-/** 放不下某個建築時的提示（v3.9.0 起場景固定，三個建築一定有位置；野餐墊沒有空位） */
-export const SLOT_UNAVAILABLE_MESSAGE = '此視窗大小空間不足，請放大視窗'
-
-export function slotUnavailableMessage(_L: Layout, _id: string): string {
-  return SLOT_UNAVAILABLE_MESSAGE
-}
 
 // ---------------------------------------------------------------------------
 // v3.7.0：公佈欄、鐘樓的窗戶與鐘面（工具包的入口）
@@ -602,36 +595,4 @@ export function toolHitRects(L: Layout, clock: { cx: number; cy: number; r: numb
     win.y1 -= d
   }
   return { window: win, clock: clk, door, board: growHit(rectCss(L, boardRect(L)), minCss) }
-}
-
-export interface BuildingAvailability {
-  id: string
-  name: string
-  /** 這個視窗大小放得下嗎；放不下的建築先隱藏，購買時顯示 message（建築種類不會被刪掉，視窗放大後就會出現） */
-  available: boolean
-  slotId: string | null
-  message: string | null
-}
-
-/**
- * 依目前視窗大小，哪些建築有空位可放（每種建築有自己的專用標記空位）。
- * available 為 false 的建築（這個視窗放不下）：建築模式不顯示它的空位、只顯示 message；已購買的建築紀錄保留、畫面上隱藏，放大視窗後自動恢復。
- */
-export function buildingAvailability(L: Layout): BuildingAvailability[] {
-  const slots = buildingSlots(L)
-  return SLOT_SPECS.map((sp) => {
-    const slot = slots.find((q) => q.id === sp.id)
-    return slot
-      ? { id: sp.id, name: sp.name, available: true, slotId: slot.id, message: null }
-      : {
-          id: sp.id,
-          name: sp.name,
-          available: false,
-          slotId: null,
-          // 要掃描視窗大小才算得出來，所以讀取時才算（算過會快取）
-          get message(): string {
-            return slotUnavailableMessage(L, sp.id)
-          },
-        }
-  })
 }

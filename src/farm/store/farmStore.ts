@@ -3,7 +3,8 @@ import { BALANCE } from '../config/balance'
 import { gameNow, worldHour, worldWeather } from '../overrides'
 import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, type PicnicDecor, type PicnicEndReason } from '../sim/picnic'
 import { LocalStorageAdapter, setNewerDataHandler } from '../save/storage'
-import type { Find, SaveData, SaveStorage } from '../save/types'
+import type { FarmLayout, Find, SaveData, SaveStorage } from '../save/types'
+import { layoutItemDef } from '../config/layoutItems'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
@@ -76,7 +77,15 @@ interface FarmState {
   dismissResetNotice: () => void
   dismissLegacyRefund: () => void
   /** 購買建築（扣金幣、紀錄、存檔）。回傳錯誤訊息或 null */
-  buyBuilding: (id: string) => string | null
+  /**
+   * 購買建築。storeIt = true：預設位置被其他擺設佔住（畫面層用擺放規則判斷），買下後直接放進庫存（v3.9.0）；
+   * 扣金幣、加進 ownedBuildings、寫入擺放紀錄在同一次存檔完成。
+   */
+  buyBuilding: (id: string, storeIt?: boolean) => string | null
+  /** v3.9.0 擺設模式：寫入農場擺放（只記和預設不同的；全部預設 = 拿掉欄位），立刻存檔。不動 ownedBuildings */
+  setFarmLayout: (layout: FarmLayout | undefined) => void
+  /** v3.9.0 還原預設：有預設位置的物件全部回到預設位置；花槽、珊瑚、灌木、高草叢（沒有預設位置）收進庫存。已購買的建築不變 */
+  restoreDefaultLayout: () => void
   /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）。回傳錯誤訊息或 null */
   eatAtBowl: (petId: string) => string | null
   /** 從啟動台成功開啟使用者的程式：依冷卻與每日上限給金幣，回傳實際給的數量 */
@@ -318,14 +327,33 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     set({ save: rest })
   },
 
-  buyBuilding: (id) => {
+  buyBuilding: (id, storeIt = false) => {
     const save = get().save
     if (!save) return '尚未開始'
     const r = buyBuilding(save, id)
     if (r.error) return r.error
-    set({ save: r.save })
+    let next = r.save
+    if (storeIt) {
+      const def = layoutItemDef(id)
+      const items = (next.farmLayout?.items ?? []).filter((it) => it.id !== id)
+      if (def) next = { ...next, farmLayout: { items: [...items, { id, kind: def.kind, state: 'stored' }] } }
+    }
+    set({ save: next })
+    flushSave()
     return null
   },
+
+  setFarmLayout: (layout) => {
+    const save = get().save
+    if (!save) return
+    const next: SaveData = { ...save }
+    if (layout && layout.items.length > 0) next.farmLayout = { items: layout.items.map((it) => ({ ...it })) }
+    else delete next.farmLayout
+    set({ save: next })
+    flushSave()
+  },
+
+  restoreDefaultLayout: () => get().setFarmLayout(undefined),
 
   eatAtBowl: (petId) => {
     const save = get().save

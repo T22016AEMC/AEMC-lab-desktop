@@ -18,6 +18,8 @@ import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
 import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
+import { EditLayer } from './ui/EditLayer'
+import { isFarmHotkey } from './ui/farmHotkey'
 import { PetMenu } from './ui/PetMenu'
 import { RehomeDialog } from './ui/RehomeDialog'
 import { rehomeBlock } from './sim/rehome'
@@ -93,6 +95,9 @@ export function Farm() {
   const toolOpen = useUIStore((s) => s.toolOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
+  /** v3.9.0 農場（擺設）模式：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
+  const editingRef = useRef(false)
+  editingRef.current = buildMode
   /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
   const [layoutVersion, setLayoutVersion] = useState(0)
 
@@ -232,13 +237,13 @@ export function Farm() {
       if (pact && st.save) {
         const due = picnicEndDue(st.save, frame)
         if (due) st.endPicnic(due)
-        else if (!engine.picnicMatFits()) st.endPicnic('resize')
+        else if (!editingRef.current && !engine.picnicMatFits()) st.endPicnic('resize')
         else if (engine.picnicParticipants() === 0) st.endPicnic('empty')
       }
       // 相機提示：墊子上有寵物坐好才出現（拍照中、拍立得開著時不顯示）；點擊區至少 24 CSS 像素
       const cam = cameraRef.current
       if (cam) {
-        const r = shootingRef.current || shotRef.current ? null : engine.cameraCss()
+        const r = shootingRef.current || shotRef.current || editingRef.current ? null : engine.cameraCss()
         if (r) {
           const w = Math.max(TOOLS.minHitCss, r.x1 - r.x0)
           const h = Math.max(TOOLS.minHitCss, r.y1 - r.y0)
@@ -292,7 +297,7 @@ export function Farm() {
           el.style.top = `${Math.round(r.y0)}px`
           el.style.width = `${Math.round(r.x1 - r.x0)}px`
           el.style.height = `${Math.round(r.y1 - r.y0)}px`
-          el.style.visibility = 'visible'
+          el.style.visibility = editingRef.current ? 'hidden' : 'visible'
         }
         const th = boardThumbRef.current
         if (th) {
@@ -310,7 +315,7 @@ export function Farm() {
         tdoor.style.top = `${Math.round(d.y0)}px`
         tdoor.style.width = `${Math.round(d.x1 - d.x0)}px`
         tdoor.style.height = `${Math.round(d.y1 - d.y0)}px`
-        tdoor.style.visibility = 'visible'
+        tdoor.style.visibility = editingRef.current ? 'hidden' : 'visible'
         const tsign = towerSignRef.current
         if (tsign) {
           const c = engine.towerSignCss()
@@ -326,7 +331,7 @@ export function Farm() {
         door.style.top = `${Math.round(d.y0)}px`
         door.style.width = `${Math.round(d.x1 - d.x0)}px`
         door.style.height = `${Math.round(d.y1 - d.y0)}px`
-        door.style.visibility = engine.layout ? 'visible' : 'hidden'
+        door.style.visibility = engine.layout && !editingRef.current ? 'visible' : 'hidden'
         const sign = signRef.current
         if (sign) {
           sign.style.left = `${Math.round((d.x0 + d.x1) / 2)}px`
@@ -420,10 +425,33 @@ export function Farm() {
       useUIStore.getState().setBuildMode(false)
     }
   }, [adoptOpen, launchpadOpen])
-  // 建築模式：關掉氣泡選單；沒有存檔（還沒領養）時不能進入
+  // 農場（擺設）模式：關掉氣泡選單、清掉入口的滑鼠停留狀態；沒有存檔（還沒領養）時不能進入
   useEffect(() => {
-    if (buildMode) setSelected(null)
-  }, [buildMode])
+    if (buildMode) {
+      setSelected(null)
+      engine.doorHover = false
+      engine.towerHover = false
+      setDoorHover(false)
+      setTowerHover(false)
+      setToolHover(null)
+    }
+  }, [engine, buildMode])
+  // v3.9.0 快捷鍵 E：進出農場（擺設）模式。輸入文字、有對話框或視窗開著時不觸發（isFarmHotkey）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const ui = useUIStore.getState()
+      const st = useFarmStore.getState()
+      const windowsOpen = Object.values(useWindowStore.getState().windows).some((w) => !w.minimized)
+      const blocked = ui.adoptOpen || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
+      const canEnter = !!st.save && st.save.pets.length > 0
+      if (!isFarmHotkey(e, blocked)) return
+      if (!ui.buildMode && !canEnter) return
+      e.preventDefault()
+      ui.setBuildMode(!ui.buildMode)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [rehomeId])
   useEffect(() => {
     if ((!hasSave || petCount === 0) && buildMode) useUIStore.getState().setBuildMode(false)
   }, [hasSave, petCount, buildMode])
@@ -869,6 +897,7 @@ export function Farm() {
       <div ref={flashRef} aria-hidden data-testid="picnic-flash" className="pointer-events-none absolute inset-0 z-40 bg-white" style={{ opacity: 0 }} />
       {shot && <PolaroidDialog shot={shot} onClose={closeShot} />}
 
+      {buildMode && hasSave && assetsReady && <EditLayer engine={engine} layoutVersion={layoutVersion} />}
       {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}

@@ -55,6 +55,15 @@ function matObstacles(L: Layout): Rect[] {
  */
 export const PICNIC_PREF_X = 436
 
+/**
+ * v3.9.0：已經鋪好的墊子（野餐進行中，位置固定）在目前的擺放下還放得下嗎：外框不碰任何物件的腳下佔地（間距 MAT_GAP）、
+ * 6 個座位站得住而且不被前面的物件蓋住超過一半。擺設模式離開時用來決定要不要提前結束野餐。
+ */
+export function picnicMatFitsAt(L: Layout, r: Rect): boolean {
+  if (matObstacles(L).some((o) => hitR(r, o, MAT_GAP))) return false
+  return MAT_SEATS.every(([sx, sy]) => isWalkable(L, r.x0 + sx, r.y0 + sy) && coverFraction(L.placement, r.x0 + sx, r.y0 + sy) <= 0.5)
+}
+
 const matCache = new WeakMap<Layout, { P: Placement; r: Rect | null }>()
 
 /**
