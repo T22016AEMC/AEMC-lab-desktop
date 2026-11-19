@@ -95,6 +95,7 @@ export function Farm() {
   const toolOpen = useUIStore((s) => s.toolOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
+  const farmTab = useUIStore((s) => s.farmTab)
   /** v3.9.0 農場（擺設）模式：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
   const editingRef = useRef(false)
   editingRef.current = buildMode
@@ -898,7 +899,7 @@ export function Farm() {
       {shot && <PolaroidDialog shot={shot} onClose={closeShot} />}
 
       {buildMode && hasSave && assetsReady && <EditLayer engine={engine} layoutVersion={layoutVersion} />}
-      {buildMode && hasSave && assetsReady && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
+      {buildMode && hasSave && assetsReady && farmTab === 'buy' && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}
       {rehomeId && <RehomeDialog petId={rehomeId} onCancel={() => setRehomeId(null)} onConfirm={confirmRehome} />}

@@ -14,8 +14,8 @@ import { useFarmStore } from '../store/farmStore'
  * v3.9.0 起場景固定，不再有「視窗太小放不下」的提示。橫幅與 Esc 由擺設模式（EditLayer）處理。
  * layoutVersion：視窗大小改變（版面重算）時遞增，讓虛線框跟著重新定位。
  */
-/** 買下但預設位置被佔住、放進庫存時的提示 */
-export const BOUGHT_TO_INVENTORY = (name: string): string => `${name}的預設位置被其他擺設佔住，已放進庫存，請從下方庫存列拖出來擺`
+/** 買下但預設位置被佔住、放進倉庫時的提示卡文字（購買分頁橫幅下方，不自動消失，附「到編輯分頁擺放」按鈕） */
+export const BOUGHT_TO_INVENTORY = (name: string): string => `${name}的預設位置被其他擺設佔住，已放進倉庫。請切到編輯分頁，從倉庫拿出來擺`
 export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; layoutVersion: number }) {
   const owned = useFarmStore((s) => s.save?.ownedBuildings)
   const points = useFarmStore((s) => s.save?.points ?? 0)
@@ -40,7 +40,8 @@ export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; lay
     if (err) useUIStore.getState().showToast(err)
     else {
       const name = def?.name ?? ''
-      useUIStore.getState().showToast(`購買了${name}（−${def?.price ?? 0} 金幣）` + (blocked ? `。${BOUGHT_TO_INVENTORY(name)}` : ''), blocked ? 4200 : undefined)
+      useUIStore.getState().showToast(`購買了${name}（−${def?.price ?? 0} 金幣）`)
+      useUIStore.getState().setFarmBuyNotice(blocked ? name : null)
       setCardId(null)
     }
   }
@@ -95,11 +96,7 @@ export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; lay
 
   return (
     <div ref={boxRef} className="pointer-events-none absolute inset-0 z-20" data-testid="build-layer">
-      {todo.length === 0 && (
-        <div data-testid="build-all-done" className="pointer-events-none absolute inset-x-0 top-11 flex justify-center" style={{ fontFamily: "'Microsoft JhengHei','PingFang TC',monospace" }}>
-          <div className="border-2 border-[#3b2a1c] bg-[#e4f5d0]/95 px-3 py-0.5 text-xs font-bold text-[#2f5a1c]">本版的建築都買齊了</div>
-        </div>
-      )}
+      {/* 「本版的建築都買齊了」由編輯農場的橫幅（EditLayer）顯示在橫幅下方，和提示卡排在一起不重疊 */}
 
       {todo.map((id) => {
         const slot = slots.find((s) => s.id === id)

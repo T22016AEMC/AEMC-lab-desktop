@@ -66,6 +66,9 @@ export function footAt(d: EditDrag, px: number, py: number): { x: number; y: num
   return { x: Math.round(px + d.grabX), y: Math.round(py + d.grabY) }
 }
 
+/** 拖到倉庫列卻不能收（住家、鐘樓、池塘、公佈欄）的原因；畫面上的「庫存」一律叫「倉庫」（程式內部名稱不變） */
+export const cantStoreText = (name: string): string => `${name}不能收進倉庫`
+
 export type DropDecision =
   | { kind: 'place'; x: number; y: number }
   | { kind: 'store' }
@@ -83,7 +86,7 @@ export function dropDecision(L: Layout, d: EditDrag, foot: { x: number; y: numbe
   if (!def) return { kind: 'cancel' }
   if (overInventory) {
     if (d.source === 'inventory') return { kind: 'cancel' }
-    return canStore(L, d.id) ? { kind: 'store' } : { kind: 'revert', reason: `${def.name}不能收進庫存` }
+    return canStore(L, d.id) ? { kind: 'store' } : { kind: 'revert', reason: cantStoreText(def.name) }
   }
   if (!foot) return { kind: 'cancel' }
   if (d.source === 'scene' && foot.x === d.fromX && foot.y === d.fromY) return { kind: 'cancel' }

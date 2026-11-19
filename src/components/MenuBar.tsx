@@ -75,9 +75,9 @@ export function MenuBar() {
             aria-pressed={buildMode}
             onClick={() => setBuildMode(!buildMode)}
             className={`rounded px-2 py-px font-semibold hover:bg-white/20 ${buildMode ? 'bg-white/25 text-[#ffd98a]' : ''}`}
-            title="農場：購買建築、移動擺設（快捷鍵 E；再按一次或 Esc 離開）"
+            title="編輯農場：購買建築、移動擺設（E 進出）"
           >
-            農場
+            編輯農場
           </button>
         )}
         {/* 野餐（v3.8.0）：排在建築旁 */}
