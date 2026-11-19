@@ -60,6 +60,37 @@ const isBgStrict = (r, g, b) => {
   return m >= 80 && g <= m - 45 && Math.abs(r - b) < 45
 }
 
+/**
+ * v3.9.0 第六階段：只認「接近純洋紅背景色」的像素（背景約 245,5,250）。小建築.png 右下格的珊瑚有粉紅枝（粉紅填色 R≈B、G 偏低，
+ * 和 isBg／isBgStrict 的「R、B 接近而 G 低」條件重疊），用那兩個會把粉紅填色吃掉、只剩黑色輪廓，所以這一格改用這個很窄的判斷。
+ */
+const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b) <= 30
+
+/**
+ * isBgNear 去背後，輪廓外面會留一圈「黑色輪廓混洋紅背景」的暗紫色邊（R、B 接近、G 很低、不夠亮）。
+ * 只移除「貼著透明處（上下左右任一邊）」的這種像素，最多 2 輪（邊只有 1 格寬）；黑色輪廓（R、B 都低）與粉紅填色（G 較高）不會中。
+ * 回傳 { spr: 重新裁切後的素材, n: 移除的像素數 }
+ */
+const fringeMagenta = (r, g, b) => Math.min(r, b) >= 60 && g < Math.min(r, b) * 0.45 && Math.abs(r - b) <= 50
+function trimMagentaFringe(spr, passes = 2) {
+  const { w, h, rgba } = spr
+  let n = 0
+  for (let k = 0; k < passes; k++) {
+    const hit = []
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        if (!rgba[i + 3] || !fringeMagenta(rgba[i], rgba[i + 1], rgba[i + 2])) continue
+        const open = (xx, yy) => xx < 0 || yy < 0 || xx >= w || yy >= h || !rgba[(yy * w + xx) * 4 + 3]
+        if (open(x + 1, y) || open(x - 1, y) || open(x, y + 1) || open(x, y - 1)) hit.push(i)
+      }
+    for (const i of hit) rgba[i + 3] = 0
+    n += hit.length
+    if (!hit.length) break
+  }
+  return { spr: cleanSprite(spr, isBgNear), n }
+}
+
 async function load(file) {
   const path = join(SRC, file)
   if (!existsSync(path)) throw new Error('找不到原圖：' + path)
@@ -476,10 +507,10 @@ function despillMagenta(spr) {
 }
 
 const pCache = {}
-/** 建築素材的縮放係數（v3.3.1）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
+/** 建築素材的縮放係數（v3.3.1；v3.9.0 第六階段加花槽 planter、珊瑚 coral，兩個係數各自設定、預設都是 0.7，可用環境變數 PLANTER_SCALE／CORAL_SCALE 覆寫）；候選值可用環境變數 BOWL_SCALE 覆寫食盆水盆的係數（0.7／0.75 比較用） */
 /** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
 const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
-const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7) }
+const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7), planter: Number(process.env.PLANTER_SCALE ?? 0.7), coral: Number(process.env.CORAL_SCALE ?? 0.7) }
 let clockClosedSpr = null
 let moundSpr = null
 /** 水池的目標寬度（邏輯像素） */
@@ -494,9 +525,9 @@ const POND_W = 110
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false }) {
+async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false }) {
   const img = await load(file)
-  const bgFn = strictBg ? isBgStrict : isBg
+  const bgFn = nearBg ? isBgNear : strictBg ? isBgStrict : isBg
   const mask = fgMask(img, bgFn)
   const { lab, comps: all } = label(mask, img.W, img.H)
   const comps = keepComps(all, minArea)
@@ -610,7 +641,7 @@ const KNOWN_ISSUES = [
   "每隻動物依「站姿目標高度」反推自己的像素格 p（柴犬 8.64、柯基 8.26、哈士奇 7.09、黃金獵犬 6.23、邊牧 6.84、貴賓 8.43；貓 8.96～10.10）。同一隻動物的 core 與 extra 共用同一個 p（貓 extra 為 core 的 ×0.56）。原圖本身的頻譜估算值在 5.3～7.8，貓的原圖是放大平滑過的（強度 0.06～0.09，估算不可靠），所以貓、狗的 p 都是由目標高度決定，而不是估算值。",
   "貓縮得比較多（p 約 9～10，原圖一個「像素格」約 5.3）：取樣格比原圖的像素格粗，邊緣的階梯會略不規則、細節（花紋、鬍鬚）損失較多。柯基身體長，寬度（35）比高度（31）大。",
   "貓 extra（crouch／pounce／swat／tangled）原圖是縮小後再放大的，解析度低、細節偏糊；沿用先前與 core 的相對取樣關係（p × 0.56），所以這四個姿勢比站姿高（例如 swat 41、crouch 40），是姿勢本身比較「長」，不是比例錯誤。",
-  "貓的 sit_b 是背面，已切出但標記 unused_back，不使用；小建築.png 的珊瑚礁（coral_unused）不使用；toys_cat.png 另外 6 個海洋道具（海灘球、泡泡、貝殼、蝦、海草、閃光）不使用；雨滴素材（raindrop）保留但不使用（雨改由程式畫細線）。",
+  "貓的 sit_b 是背面，已切出但標記 unused_back，不使用；toys_cat.png 另外 6 個海洋道具（海灘球、泡泡、貝殼、蝦、海草、閃光）不使用；雨滴素材（raindrop）保留但不使用（雨改由程式畫細線）。",
   "草地方塊以 2×2 鏡像拼成無縫，肉眼可看出左右上下對稱的花紋；原圖草地底邊較粗糙，已裁掉最外圈與底邊約 20 像素。草地原圖像素格估算 9.4（雜訊大）。",
   "小路原圖含上下的草緣，處理時只保留泥土與石頭（以顏色判斷），草緣交給草地方塊，所以路的邊緣是不規則的泥土輪廓而不是原圖的草緣；遠景與小路左右鏡像拼接成可水平重複。",
   "特效圖示（愛心、ZZZ、音符、汗滴、驚嘆號、閃光、泡泡、問號）統一取樣到高度 15；它們的原圖像素格是 9.2，取樣格縮小後細節是由較大的色塊重新取樣而來，略有變形。雪花縮到 8×9。",
@@ -891,9 +922,18 @@ async function main() {
       info('開門鐘樓：處理後 ' + f.spr.w + '×' + f.spr.h + '，貼到 ' + W + '×' + H + '（偏移 ' + ox + ',' + oy + '）；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
     }
     // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
-    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', 'flowerbed', 'lamp', 'coral_unused'], scales: BUILDING_SCALES })
-    // 花圃（flowerbed）取消（v3.4.0 不使用）：不輸出，不進圖集
-    for (const f of small.frames) if (f.name !== 'flowerbed') addFrame('scene', f.name, f.spr, f.name === 'coral_unused' ? { unused: true } : {})
+    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], scales: BUILDING_SCALES })
+    // 花圃（flowerbed）取消（v3.4.0 不使用）：原圖左下格不在這裡輸出（v3.9.0 第六階段的花槽在下面另外處理，id 是 planter）
+    for (const f of small.frames) addFrame('scene', f.name, f.spr)
+    // v3.9.0 第六階段：左下格 = 花槽（planter）、右下格 = 珊瑚石堆（coral）。兩者都有粉紅色（珊瑚的粉紅枝、花槽的粉紅花），
+    // 一般的洋紅判斷（isBg 第二條「玫瑰紅陰影」）與嚴格判斷（isBgStrict）都會把粉紅填色吃掉一部分，所以這兩格用 isBgNear（只認接近背景色的洋紅）去背；
+    // 取樣格大小 p 沿用上面同一張圖算出的值（整張共用同一個比例），其他物件的圖完全不受影響。
+    const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], scales: BUILDING_SCALES, pFixed: small.p, nearBg: true })
+    for (const f of small2.frames) {
+      const t = trimMagentaFringe(f.spr)
+      info('  ' + f.name + '：移除暗紫色洋紅邊 ' + t.n + ' 像素 → ' + t.spr.w + '×' + t.spr.h)
+      addFrame('scene', f.name, t.spr, { nearBg: true })
+    }
     // 營火（v3.4.0）於 v3.5.1 移除：不輸出 campfire_a、campfire_b、campfire_off；蹺蹺板、蝴蝶也不使用；沙坑（v3.6.0 開發期間做過又取消）沒有任何程式使用，不輸出
     const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
     for (const f of bn.frames) if (f.name !== 'seesaw' && f.name !== 'sandbox' && !f.name.startsWith('butterfly') && !f.name.startsWith('campfire')) addFrame('scene', f.name, f.spr)
@@ -1380,7 +1420,7 @@ async function writeOutputs() {
   for (const frames of Object.values(atlases))
     for (const f of frames) {
       let magenta = 0
-      const bgFn = f.strictBg ? isBgStrict : isBg
+      const bgFn = f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
       for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) magenta++
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
       // v3.8.0 新素材：逐張列出洋紅殘留（嚴格判斷＝純洋紅；一般判斷＝含玫瑰紅陰影，粉色墊的滾邊本來就是粉紅色，所以墊子只看嚴格判斷）

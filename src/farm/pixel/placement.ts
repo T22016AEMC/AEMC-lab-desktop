@@ -95,9 +95,10 @@ export const KIND_GEOM: Readonly<Record<LayoutKind, KindGeom>> = {
   flowers: { env: 'flowers', sprite: 'flowers', foot: decorFoot(39) },
   stump: { env: 'stump', sprite: 'stump', foot: decorFoot(53) },
   tall_grass: { env: 'tall_grass', sprite: 'tall_grass', foot: decorFoot(44) },
-  // 花槽的素材在第六階段加入；在那之前用珊瑚石堆的大小當暫時的佔地，畫面上找不到素材就不畫
-  planter: { env: 'coral', sprite: null, foot: decorFoot(85) },
-  coral: { env: 'coral', sprite: 'coral_unused', foot: decorFoot(85) },
+  // 第六階段：花槽、珊瑚石堆（素材縮放係數都是 0.7，62×45、59×50）。腳下佔地由 envelopes.ts 逐列不透明像素量出：
+  // 底下 2 列是圓角／碎石的不規則邊，往上 10 列（第 3～12 列）平均寬都是 53.6，取 54（±27）、深 10（和其他裝飾的深度一樣）
+  planter: { env: 'planter', sprite: 'planter', foot: { x0: -27, x1: 27, d: 10 } },
+  coral: { env: 'coral', sprite: 'coral', foot: { x0: -27, x1: 27, d: 10 } },
 }
 
 export const geomOf = (kind: LayoutKind): KindGeom => KIND_GEOM[kind]

@@ -28,7 +28,8 @@ const GROUPS = {
   doghouse: ['doghouse'],
   cat_tree: ['cat_tree'],
   bowls: ['bowls'],
-  coral: ['coral_unused'],
+  planter: ['planter'],
+  coral: ['coral'],
 }
 
 const atlases = {}
