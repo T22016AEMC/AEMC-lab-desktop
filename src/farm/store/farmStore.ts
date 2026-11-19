@@ -10,7 +10,7 @@ import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimProgram, earningToday } from '../sim/earning'
 import { CHECKIN_TEXT, checkIn, collectGift, giftCandidates, isCheckedIn, newSave, registerGift, todayKey } from '../sim/points'
-import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
+import { addFind, digCoinsToday, makeFindId, resultText, retroEvents, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { rehomePet } from '../sim/rehome'
 import { SHOP_TEXT, purchase as purchaseItem, type PurchaseOptions } from '../sim/shop'
@@ -194,10 +194,13 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     // 離線期間到期的寶物一次揭曉（揭曉後從清單拿掉，所以同一天載入多次不會重複結算）
     const due = revealDue(save, now, Math.random)
     save = due.save
-    set({ status: 'ready', save, pendingEvents: due.notices })
+    // v4.0：收藏集齊獎勵補發（老玩家已經達成的；事件旗標保證只發一次）。揭曉觸發的事件排在前面
+    const retro = retroEvents(save, now)
+    save = retro.save
+    set({ status: 'ready', save, pendingEvents: [...due.notices, ...retro.notices] })
     if (due.revealed.length) announceAuto(due.revealed, save, now)
     if (refund) set({ legacyRefund: refund })
-    if (hadPicnic) flushSave()
+    if (hadPicnic || retro.notices.length > 0) flushSave()
   },
 
   adoptPet: (req) => {

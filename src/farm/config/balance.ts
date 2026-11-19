@@ -98,6 +98,11 @@ export const BALANCE = {
     cat: { speedMul: 2.5, maxRange: 120, crouchSeconds: 1.2, pounceSeconds: 0.45, dropSeconds: 0.8, markSeconds: 0.9, stuckSeconds: 9 },
     /** 事件：罰款與違約金（一次性，不扣到負數）、傳說集齊獎勵 */
     events: { fine: 10, legendReward: 100 },
+    /**
+     * v4.0 收藏集齊獎勵（一次性、不算每日金幣上限）：常見 10 項、少見 9 項（含兩套碎片，6 片集滿才算）、稀有 5 項、
+     * 傳說 4 件全集齊（和舊的傳說配對獎勵分開，是獨立的新事件）、全圖鑑 28 項。
+     */
+    collectionRewards: { common: 15, uncommon: 30, rare: 50, legendary: 100, all: 100 },
     /** 揭曉動畫（秒） */
     revealSeconds: 1.1,
   },

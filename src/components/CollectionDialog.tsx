@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ITEMS, RARITIES, RARITY_LABEL, REWARD_SILHOUETTE, countOf, isCollected, shardsHave, type Collection, type ItemDef, type Rarity } from '../farm/config/items'
 import { skinDef } from '../farm/config/skins'
+import { ALL_REWARD, RARITY_REWARD } from '../farm/config/events'
 import { useFarmStore } from '../farm/store/farmStore'
 import { PixelSprite } from '../farm/ui/PixelSprite'
 import { assets } from '../farm/pixel/assets'
@@ -12,8 +13,17 @@ import { useUIStore } from '../store/uiStore'
  *  - 套組（機密碎片、合約碎片）：完整紙張的剪影＋已收集片數（例如 3／6）；集齊後改顯示完整圖。
  *  - 傳說項目旁有「獎勵剪影」（狗：金色屋頂住家；貓：黃金鐘樓），解鎖後顯示名稱。
  *  - 狗狗專屬、貓咪專屬的項目有標示（只養一種寵物的玩家抽不到另一種專屬的）。
- * 這個畫面不會出現任何跟集齊事件有關的文字。
+ * v4.0：各等級標題旁與頁首顯示「集齊獎勵 N 金幣」，已領的寫「已領取」。罰款、違約之類的字樣一律不出現。
  */
+
+/** 集齊獎勵的小標籤（等級標題旁、頁首） */
+function RewardBadge({ testId, coins, got, label = '集齊獎勵' }: { testId: string; coins: number; got: boolean; label?: string }) {
+  return (
+    <span data-testid={testId} data-claimed={got || undefined} className={`ml-2 border px-1 text-[10px] font-bold ${got ? 'border-[#2f7a1c]/60 bg-[#e4f5d0] text-[#2f5a1c]' : 'border-[#8a5a2b]/60 bg-[#f2dca8] text-[#5a3410]'}`}>
+      {label} {coins} 金幣{got ? '・已領取' : ''}
+    </span>
+  )
+}
 
 const POOL_LABEL = { dog: '狗狗專屬', cat: '貓咪專屬' } as const
 
@@ -102,6 +112,7 @@ export function CollectionDialog() {
         <div className="flex items-center justify-between border-b-2 border-[#3b2a1c]/40 px-3 py-2">
           <div className="text-base font-bold">
             收藏冊 <span className="ml-2 text-xs font-normal tabular-nums text-[#8a5a2b]" data-testid="collection-progress">已收集 {done}／{ITEMS.length}</span>
+            <RewardBadge testId="reward-badge-all" coins={ALL_REWARD.coins} got={events?.[ALL_REWARD.id] !== undefined} label="全部集齊獎勵" />
           </div>
           <button type="button" aria-label="關閉" data-testid="collection-close" className="px-btn px-2 py-0.5 text-sm" onClick={() => setOpen(false)}>
             關閉
@@ -115,6 +126,7 @@ export function CollectionDialog() {
               <section key={r} className="mt-3" data-testid={`rarity-${r}`}>
                 <h3 className="mb-1.5 text-sm font-bold">
                   {RARITY_LABEL[r]} <span className="text-xs font-normal tabular-nums text-[#8a5a2b]">{list.filter((d) => isCollected(c, d)).length}／{list.length}</span>
+                  <RewardBadge testId={`reward-badge-${r}`} coins={RARITY_REWARD[r].coins} got={events?.[RARITY_REWARD[r].id] !== undefined} />
                 </h3>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-2">
                   {list.map((d) => (

@@ -9,6 +9,9 @@ import { PixelSprite } from './PixelSprite'
  * 重置提示、存檔來自更新版本的提示顯示時先不顯示（那些是更重要的）。
  * v3.10.1：工具視窗（月曆等，z-9900）開著時也先排隊，關閉後才顯示；事件留在 pendingEvents，不會丟失。
  */
+/** v4.0：載入時補發的收藏獎勵，彈窗開頭的字 */
+export const RETRO_PREFIX = '（更新補發）'
+
 export function EventDialog() {
   const notice = useFarmStore((s) => s.pendingEvents[0])
   const blocked = useFarmStore((s) => s.save?.resetNotice === true || s.resetFailed || s.legacyRefund > 0 || s.newerData)
@@ -21,12 +24,15 @@ export function EventDialog() {
     <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/55 p-3" onPointerDown={(e) => e.stopPropagation()}>
       <div role="alertdialog" aria-label={def.title} data-testid="event-dialog" data-event={def.id} className="px-panel w-full max-w-sm p-4 text-center">
         <div className="text-base font-bold">{def.title}</div>
-        <div className="mt-3 flex items-center justify-center gap-2">
-          {def.images.map((k) => (
-            <PixelSprite key={k} frame={k} scale={2} />
-          ))}
-        </div>
+        {def.images.length > 0 && (
+          <div className="mt-3 flex items-center justify-center gap-2">
+            {def.images.map((k) => (
+              <PixelSprite key={k} frame={k} scale={2} />
+            ))}
+          </div>
+        )}
         <p className="mt-3 text-sm leading-relaxed" data-testid="event-body">
+          {notice.retro ? RETRO_PREFIX : ''}
           {def.body(notice.coins)}
         </p>
         <button type="button" data-testid="event-ok" className="px-btn mt-3 px-5 py-1 text-sm" onClick={dismiss}>

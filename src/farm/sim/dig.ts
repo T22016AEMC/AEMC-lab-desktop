@@ -1,5 +1,5 @@
 import { BALANCE } from '../config/balance'
-import { EVENTS, type EventDef, type EventId } from '../config/events'
+import { EVENTS, RETRO_EVENT_IDS, type EventDef, type EventId } from '../config/events'
 import { isCollected, itemDef, itemsFor, shardKey, shardsHave, type ItemDef, type Rarity } from '../config/items'
 import { skinDef } from '../config/skins'
 import type { SpeciesId } from '../config/species'
@@ -24,6 +24,8 @@ export type RevealResult =
 export interface EventNotice {
   id: EventId
   coins: number
+  /** v4.0：載入時補發的（彈窗開頭寫「（更新補發）」）；揭曉當下觸發的沒有這個欄位 */
+  retro?: true
 }
 
 export interface RevealOutcome {
@@ -116,10 +118,11 @@ export function addFind(save: SaveData, find: Find): SaveData | null {
 }
 
 /** 套用事件：條件達成而且還沒觸發過的，依序觸發（罰款不扣到負數；獎勵給金幣＋外觀） */
-export function checkEvents(save: SaveData, nowMs: number): { save: SaveData; notices: EventNotice[] } {
+export function checkEvents(save: SaveData, nowMs: number, only?: readonly EventId[]): { save: SaveData; notices: EventNotice[] } {
   let s = save
   const notices: EventNotice[] = []
   for (const ev of EVENTS) {
+    if (only && !only.includes(ev.id)) continue
     if (s.events[ev.id] !== undefined || !ev.met(s.collection)) continue
     s = applyEvent(s, ev, nowMs, notices)
   }
@@ -133,7 +136,7 @@ function applyEvent(save: SaveData, ev: EventDef, nowMs: number, notices: EventN
     notices.push({ id: ev.id, coins })
     return { ...save, points: save.points - coins, events }
   }
-  const coins = BALANCE.dig.events.legendReward
+  const coins = ev.coins ?? BALANCE.dig.events.legendReward
   notices.push({ id: ev.id, coins })
   let skins = save.skins
   const def = ev.skin ? skinDef(ev.skin) : undefined
@@ -144,6 +147,15 @@ function applyEvent(save: SaveData, ev: EventDef, nowMs: number, notices: EventN
     }
   }
   return { ...save, points: save.points + coins, events, skins }
+}
+
+/**
+ * v4.0 載入時補發（老玩家）：只查收藏集齊獎勵（RETRO_EVENT_IDS），已達成而且旗標沒設的才發；旗標保證只發一次，
+ * 未達成的不會發。舊的罰款、傳說配對事件不在這裡檢查（它們只在揭曉時觸發）。通知帶 retro。
+ */
+export function retroEvents(save: SaveData, nowMs: number): { save: SaveData; notices: EventNotice[] } {
+  const r = checkEvents(save, nowMs, RETRO_EVENT_IDS)
+  return { save: r.save, notices: r.notices.map((n) => ({ ...n, retro: true as const })) }
 }
 
 /** 揭曉一個寶物：抽選、發金幣（受每日上限）、記收藏、檢查事件、把它從清單拿掉。找不到這個寶物回傳 null */
