@@ -62,7 +62,11 @@ LS.clear()
 LS.set(KEY, JSON.stringify({ ...saves.完整, lastSeen: Date.now() }))
 setSaveStorage(new LocalStorageAdapter())
 useFarmStore.setState({ status: 'loading', save: null, otherTab: false, newerData: false, resetFailed: false })
+// 離線補算與寵物禮物會用亂數（偶爾 +1～3 金幣，3.10.0 也一樣），固定成「不擲中」才能比對金幣
+const realRandom = Math.random
+Math.random = () => 0.999
 await useFarmStore.getState().init()
+Math.random = realRandom
 const st = useFarmStore.getState()
 ok(st.status === 'ready' && !st.newerData && !st.resetFailed && st.save?.resetNotice !== true, '載入 3.10.0 存檔：就緒、沒有重置／較新版本提示')
 eq([st.save.points, st.save.pets.length, st.save.events.dogLeak, st.save.checkins, st.save.dataRev], [321, 2, T0 - 1000, ['2026-11-01', '2026-11-18', '2026-11-19'], 5], '金幣、寵物、事件旗標、簽到紀錄、dataRev 都沒變')
