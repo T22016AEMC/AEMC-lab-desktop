@@ -13,6 +13,7 @@ export function ToolDialog({
   id,
   title,
   icon,
+  iconNode,
   width = 520,
   onClose,
   onKey,
@@ -20,7 +21,9 @@ export function ToolDialog({
 }: {
   id: string
   title: string
-  icon: string
+  /** tools 圖集的圖示鍵名；沒有素材的工具（簽到月曆）改傳 iconNode */
+  icon?: string
+  iconNode?: ReactNode
   width?: number
   /** 使用者要求關閉（Esc、右上角、點遮罩）；要不要真的關由呼叫端決定（例如公佈欄有未儲存的修改時先確認） */
   onClose: () => void
@@ -66,7 +69,7 @@ export function ToolDialog({
       >
         <div className="flex items-center justify-between gap-2 border-b-2 border-[#3b2a1c]/40 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2 text-base font-bold">
-            <PixelSprite frame={icon} scale={0.5} title="" />
+            {iconNode ?? (icon ? <PixelSprite frame={icon} scale={0.5} title="" /> : null)}
             <span className="truncate">{title}</span>
           </div>
           <button type="button" aria-label="關閉" data-testid={`${id}-close`} className="px-btn shrink-0 px-2 py-0.5 text-sm" onClick={() => closeRef.current()}>

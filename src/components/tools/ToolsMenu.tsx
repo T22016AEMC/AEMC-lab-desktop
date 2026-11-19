@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { TOOL_LIST } from '../../config/tools'
 import { PixelSprite } from '../../farm/ui/PixelSprite'
+import { CalendarIcon } from './CalendarIcon'
 import { useUIStore } from '../../store/uiStore'
 
 /**
- * 選單列右側的「工具」（v3.7.0，排在「收藏冊」之後）：下拉清單 計算機、碼表與倒數、公佈欄，每項帶 tools 圖集的圖示。
+ * 選單列右側的「工具」（v3.7.0，排在「收藏冊」之後）：下拉清單 計算機、碼表與倒數、公佈欄、簽到月曆（v3.10.0），每項帶 tools 圖集的圖示（簽到月曆是程式畫的）。
  * 用 click（滑鼠與觸控都會觸發）開關；點清單外面或按 Esc 收起。圖示以裝置像素 1:1 顯示（48×48 素材，整數倍）。
  */
 export function ToolsMenu() {
@@ -54,7 +55,7 @@ export function ToolsMenu() {
               }}
               className="flex w-full items-center gap-2 px-2 py-1 text-left text-[13px] hover:bg-white/15"
             >
-              <PixelSprite frame={t.icon} scale={0.5} title="" />
+              {t.icon ? <PixelSprite frame={t.icon} scale={0.5} title="" /> : <CalendarIcon size={24} />}
               <span>{t.name}</span>
             </button>
           ))}

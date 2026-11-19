@@ -9,7 +9,7 @@ import { withoutRecord } from '../pixel/placement'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimProgram, earningToday } from '../sim/earning'
-import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
+import { CHECKIN_TEXT, checkIn, collectGift, giftCandidates, isCheckedIn, newSave, registerGift, todayKey } from '../sim/points'
 import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { rehomePet } from '../sim/rehome'
@@ -91,6 +91,11 @@ interface FarmState {
   restoreDefaultLayout: () => void
   /** 寵物在食盆吃一份（用掉今日份量、回復飽食度）。回傳錯誤訊息或 null */
   eatAtBowl: (petId: string) => string | null
+  /**
+   * 簽到月曆（v3.10.0）：簽到今天（+5 金幣、立刻寫入）。只能簽今天；今天簽過、沒有寵物、存檔被別的分頁接手或來自較新版本 → 不給。
+   * 回傳是否給了金幣與要顯示在月曆裡的一句話。冪等：同一天再呼叫不會再給。
+   */
+  checkIn: () => Promise<{ claimed: boolean; message: string }>
   /** 從啟動台成功開啟使用者的程式：依冷卻與每日上限給金幣，回傳實際給的數量 */
   earnProgram: (appId: string) => number
   /** 週期性擲禮物 */
@@ -174,16 +179,13 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     }
     // v3.8.0：重新整理、離線回來時還有進行中的野餐 → 直接結束（墊子不會出現、不補償；冷卻從離開網頁的時間起算）。要在補算數值（會更新 lastSeen）之前
     const hadPicnic = !!loaded.picnic?.active
-    // 離開網站期間補算數值（下限 20），再看今天有沒有每日獎勵
+    // 離開網站期間補算數值（下限 20）。v3.10.0：每日 +5 不再自動給，改成打開簽到月曆才給（checkIn）
     let save = advanceSave(settlePicnicOnLoad(loaded), now, true)
-    const daily = claimDaily(save, todayKey(now))
-    save = daily.save
     // 離線期間到期的寶物一次揭曉（揭曉後從清單拿掉，所以同一天載入多次不會重複結算）
     const due = revealDue(save, now, Math.random)
     save = due.save
     set({ status: 'ready', save, pendingEvents: due.notices })
     if (due.revealed.length) announceAuto(due.revealed, save, now)
-    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (refund) set({ legacyRefund: refund })
     if (hadPicnic) flushSave()
   },
@@ -288,9 +290,6 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const elapsedSec = Math.min(120, Math.max(0, (now - save.lastSeen) / 1000))
     let next = advanceSave(save, now, false)
     next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
-    const daily = claimDaily(next, todayKey(now))
-    next = daily.save
-    if (daily.claimed) useUIStore.getState().showToast(`每日登入獎勵 +${BALANCE.dailyBonus} 金幣`, undefined, 'daily')
     if (next !== save) set({ save: next })
     // v3.8.0：野餐時間到、下雨、天黑 → 結束（主迴圈每個影格也會檢查；這裡是分頁被蓋住或在背景時的備援）
     const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) })
@@ -370,6 +369,28 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects.filter((e) => e.kind === 'float')] }))
     return null
+  },
+
+  checkIn: async () => {
+    const st = get()
+    if (st.otherTab) return { claimed: false, message: CHECKIN_TEXT.otherTab }
+    if (st.newerData) return { claimed: false, message: CHECKIN_TEXT.newer }
+    if (!st.save || st.save.pets.length === 0) return { claimed: false, message: CHECKIN_TEXT.noSave }
+    const today = todayKey(gameNow())
+    if (isCheckedIn(st.save, today)) return { claimed: false, message: CHECKIN_TEXT.already }
+    // 給金幣之前再確認這個分頁還有寫入權（別的分頁接手了就不給，否則金幣只加在記憶體裡、存不進去）
+    if (!(await storage.isOwner())) {
+      markOtherTab()
+      return { claimed: false, message: CHECKIN_TEXT.otherTab }
+    }
+    const cur = get().save
+    if (!cur || get().otherTab) return { claimed: false, message: CHECKIN_TEXT.otherTab }
+    const r = checkIn(cur, today)
+    if (!r.claimed) return { claimed: false, message: CHECKIN_TEXT.already }
+    set({ save: r.save })
+    flushSave() // 金幣：立刻寫入（不等節流）
+    useUIStore.getState().showToast(CHECKIN_TEXT.toast(BALANCE.dailyBonus), undefined, 'daily')
+    return { claimed: true, message: CHECKIN_TEXT.claimed(BALANCE.dailyBonus) }
   },
 
   earnProgram: (appId) => {
@@ -491,10 +512,11 @@ setNewerDataHandler(() => {
   useUIStore.getState().showToast('存檔來自更新的版本，這個分頁不會覆寫它，請重新整理網頁', 10000, 'update')
 })
 // v3.10.0：另一個分頁接手了存檔：不再寫入（未寫入的變動放棄，不做合併），畫面由 OtherTabNotice 擋住
-setOtherTabHandler(() => {
+function markOtherTab(): void {
   if (useFarmStore.getState().otherTab) return
   suspendSaves()
   useFarmStore.setState({ otherTab: true })
-})
+}
+setOtherTabHandler(markOtherTab)
 window.addEventListener('beforeunload', flush)
 document.addEventListener('visibilitychange', () => document.hidden && flush())

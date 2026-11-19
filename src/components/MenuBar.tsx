@@ -9,6 +9,7 @@ import { useActiveApp, useWindowStore } from '../store/windowStore'
 import { LogoMenu } from './LogoMenu'
 import { ToolsMenu } from './tools/ToolsMenu'
 import { PicnicButton } from './PicnicButton'
+import { CheckInButton } from './CheckInButton'
 
 export function MenuBar() {
   const now = useClock()
@@ -104,7 +105,8 @@ export function MenuBar() {
             🪙 {points}
           </span>
         )}
-        <time className="tabular-nums">{formatMenuBarTime(now)}</time>
+        {/* v3.10.0 簽到月曆：「簽到月曆」＋日期時間是同一顆按鈕（今天還沒簽到時「簽到月曆」右上角有小紅點） */}
+        <CheckInButton time={formatMenuBarTime(now)} />
       </div>
     </header>
   )

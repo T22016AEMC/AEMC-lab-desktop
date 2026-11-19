@@ -11,8 +11,9 @@ export const CURRENT_SCHEMA_VERSION = 5
  * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
  * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
  */
-export const DATA_REV = 4
-// DATA_REV 歷史：4 = v3.9.0（農場擺放 farmLayout）；1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+export const DATA_REV = 5
+// DATA_REV 歷史：5 = v3.10.0（簽到紀錄 checkins）；4 = v3.9.0（農場擺放 farmLayout）；1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+// 升到 5 的用意：v3.9.x 的舊分頁讀到 dataRev 5 會停止自動存檔並提示重新整理，不會把簽到紀錄洗掉。
 // 升到 4 的用意：v3.8.x 的舊分頁讀到 dataRev 4 會停止自動存檔並提示重新整理，不會把擺放紀錄洗掉。
 // 升到 3 的用意：v3.7.x 的舊分頁讀到 dataRev 3 會停止自動存檔並提示重新整理，不會把個性與野餐紀錄洗掉。
 // 升到 2 的用意：v3.6.0～v3.6.3 的舊分頁讀到 dataRev 2 會停止自動存檔並提示重新整理，不會把 notes 洗掉。
@@ -133,7 +134,10 @@ export interface SaveData {
   points: number
   /** 最後一次結算數值的時間 */
   lastSeen: number
-  /** 每日登入獎勵最後領取的本機日期（YYYY-MM-DD） */
+  /**
+   * 每日簽到最後領取的本機日期（YYYY-MM-DD）。「今天領過沒」的唯一依據（舊版程式也只認它）。
+   * v3.10.0 起只有打開簽到月曆才領（以前是載入或跨日時自動領）。
+   */
   lastDailyClaim: string | null
   /** 今天已經出現幾次禮物 */
   gifts: { date: string; count: number }
@@ -151,6 +155,11 @@ export interface SaveData {
   events: Record<string, number>
   /** 外觀 */
   skins: SkinState
+  /**
+   * 簽到紀錄（v3.10.0，可缺少；沒有 = 空）：簽到過的本機日期 YYYY-MM-DD，由舊到新、不重複，最多 CHECKIN_MAX（62）筆。
+   * 只給月曆顯示「簽」用；今天領過沒看 lastDailyClaim（更新前已領的今天沒有這筆紀錄，月曆照樣顯示「簽」）。
+   */
+  checkins?: string[]
   /** 資料修訂（見 DATA_REV）；舊存檔沒有 = 0 */
   dataRev: number
   /**

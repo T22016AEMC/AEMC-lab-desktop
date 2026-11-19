@@ -64,14 +64,14 @@ async function importFile(page) {
   // 寫入的欄位只有 pets、lastSeen、farmLayout（清理後），合法紀錄的位置不動
   const raw0 = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY)
   const changed = Object.keys({ ...raw0, ...BASE }).filter((k) => JSON.stringify(raw0[k]) !== JSON.stringify(BASE[k]))
-  ok(same(changed.sort(), ['farmLayout', 'lastSeen', 'pets']), '新版載入：改變的欄位只有離線結算的 pets、lastSeen 與清理後的 farmLayout（' + changed.join(', ') + '）')
+  ok(same(changed.sort(), ['dataRev', 'farmLayout', 'lastSeen', 'pets']), '新版載入：改變的欄位只有離線結算的 pets、lastSeen 與清理後的 farmLayout（v3.10.0：加上 dataRev 4 → 5）（' + changed.join(', ') + '）')
   ok(same(raw0.farmLayout.items, CLEAN), '新版載入：寫入的擺放 = 清理結果（重疊的路燈與狗窩位置沒動）')
   // 觸發一次自動存檔（加 1 金幣），等節流寫入
   await page.evaluate(() => { const s = window.__farmStore.getState(); window.__farmStore.setState({ save: { ...s.save, points: s.save.points + 1 } }) })
   await page.clock.runFor(5000)
   await page.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).points === 124, KEY)
   const raw1 = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY)
-  ok(same(raw1.farmLayout.items, CLEAN) && raw1.dataRev === 4 && raw1.schemaVersion === 5, '自動存檔後：合法紀錄原樣保留（重疊的路燈與狗窩位置沒動）、dataRev 4、schema 5')
+  ok(same(raw1.farmLayout.items, CLEAN) && raw1.dataRev === 5 && raw1.schemaVersion === 5, '自動存檔後：合法紀錄原樣保留（重疊的路燈與狗窩位置沒動）、dataRev 4（v3.10.0：5）、schema 5')
   // 匯入格式 6：確認視窗有「農場擺放」那一行
   await importFile(page)
   await page.getByTestId('import-confirm').waitFor({ state: 'visible' })

@@ -67,10 +67,14 @@ export const NOTE_CSS: Record<NoteColor, { label: string; bg: string; edge: stri
   green: { label: '綠色', bg: '#bdfabb', edge: '#4f9e4f' },
 }
 
-/** 三個工具的 id、名稱與 tools 圖集的圖示鍵名（選單列「工具」下拉清單的順序） */
+/**
+ * 工具的 id、名稱與 tools 圖集的圖示鍵名（選單列「工具」下拉清單的順序）。
+ * v3.10.0 簽到月曆（calendar）沒有素材圖示：icon = null，畫面用程式畫的 CalendarIcon；主要入口是選單列的「簽到月曆」。
+ */
 export const TOOL_LIST = [
   { id: 'calc', name: '計算機', icon: 'tool_calc' },
   { id: 'timer', name: '碼表與倒數', icon: 'tool_timer' },
   { id: 'notes', name: '公佈欄', icon: 'tool_board' },
+  { id: 'calendar', name: '簽到月曆', icon: null },
 ] as const
 export type ToolId = (typeof TOOL_LIST)[number]['id']

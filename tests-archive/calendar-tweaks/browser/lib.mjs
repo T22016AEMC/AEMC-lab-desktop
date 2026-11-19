@@ -14,7 +14,7 @@ export const pet = (id, species, variant, extra = {}) => ({ id, species, variant
 /** v3.9.x（dataRev 4）的存檔：預設今天已領每日獎勵 */
 export const save = (extra = {}) => ({
   schemaVersion: 5, dataRev: 4, points: 80, lastSeen: T0, lastDailyClaim: TODAY, gifts: { date: TODAY, count: 9 }, nextPetId: 4, createdAt: T0 - 9e8,
-  pets: [pet('p1', 'dog', 'shiba'), pet('p2', 'cat', 'orange'), pet('p3', 'dog', 'golden')], ownedBuildings: ['kennel', 'bowls', 'catTree'],
+  pets: [pet('p1', 'dog', 'shiba'), pet('p2', 'cat', 'tabby'), pet('p3', 'dog', 'golden')], ownedBuildings: ['kennel', 'bowls', 'catTree'],
   earning: { date: TODAY, programCoins: 0, gameCoins: 0, lastAward: {}, digCoins: 0 }, bowl: { date: TODAY, used: 1 },
   collection: {}, finds: [], events: {}, skins: { owned: [], equipped: {} }, notes: [], picnic: { date: TODAY, count: 0, lastEnd: 0 }, ...extra,
 })
@@ -90,3 +90,28 @@ export const stored = (page) => page.evaluate((k) => { const r = localStorage.ge
 export const storedRaw = (page) => page.evaluate((k) => localStorage.getItem(k), KEY)
 export const toasts = (page) => page.evaluate(() => window.__toasts ?? [])
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** 開始野餐（自動選位置）並等到 n 隻坐好；回傳墊子外框（邏輯座標） */
+export async function startPicnic(page, n = 1) {
+  await page.getByTestId('picnic-button').click()
+  await page.getByTestId('picnic-pick-auto').click()
+  await page.waitForFunction(() => window.__farm.picnicMat() !== null, null, { timeout: 15000 })
+  await page.waitForFunction((n) => window.__farm.picnicSeated() >= n, n, { timeout: 30000 })
+  return page.evaluate(() => window.__farm.picnicMat())
+}
+
+/** 用引擎把場景畫到一張邏輯像素 1:1 的畫布（和拍照的快照相同），裁一塊放大後存成 PNG */
+export async function saveSceneCrop(page, rect, file, k = 4) {
+  const url = await page.evaluate(([r, k]) => {
+    const c = window.__farm.snapshot()
+    const o = document.createElement('canvas')
+    o.width = (r.x1 - r.x0) * k
+    o.height = (r.y1 - r.y0) * k
+    const g = o.getContext('2d')
+    g.imageSmoothingEnabled = false
+    g.drawImage(c, r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0, 0, 0, o.width, o.height)
+    return o.toDataURL('image/png')
+  }, [rect, k])
+  const { writeFileSync } = await import('node:fs')
+  writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'))
+}

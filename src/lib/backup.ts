@@ -15,7 +15,8 @@ export const BACKUP_FORMAT = 'aemc-desktop-backup'
  * 匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受：2、3 的檔案沒有 notes（就算檔案裡有也不讀，一律視為空），
  * 其他缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 4 會顯示「較新版本」）。
  */
-export const BACKUP_FORMAT_VERSION = 6
+export const BACKUP_FORMAT_VERSION = 7
+// v3.10.0：7 = 養殖場存檔多了簽到紀錄（checkins）。讀取 2～6：就算檔案裡有 checkins 也不讀（月曆是空的，「今天領過沒」照備份的 lastDailyClaim）。v3.9.x 的舊程式讀到 7 會顯示「較新版本」並拒絕。
 // v3.9.0：6 = 養殖場存檔多了農場擺放（farmLayout）。讀取 2～5：就算檔案裡有 farmLayout 也不讀（全部預設）。v3.8.x 的舊程式讀到 6 會顯示「較新版本」並拒絕。
 // v3.8.0：5 = 寵物多了個性（personality）、上次互動（lastInteract），存檔多了野餐紀錄（picnic）。
 // 讀取舊格式（2～4）：這些欄位本來就不在檔案裡，parseSave 照一般存檔的規則補上（個性 = 用寵物 id 算出的固定那一種，和直接載入舊存檔得到的一樣；
@@ -24,6 +25,8 @@ export const BACKUP_FORMAT_VERSION = 6
 export const NOTES_FORMAT_VERSION = 4
 /** 從這個格式版本起，備份裡的 farmLayout（農場擺放）才會被讀取 */
 export const LAYOUT_FORMAT_VERSION = 6
+/** 從這個格式版本起，備份裡的 checkins（簽到紀錄）才會被讀取 */
+export const CHECKINS_FORMAT_VERSION = 7
 export const MIN_BACKUP_FORMAT_VERSION = 2
 export const PRE_RESET_MESSAGE = '這個備份來自重置前的版本，無法匯入'
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024
@@ -114,6 +117,7 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   const farmIn: Record<string, unknown> = { ...farmRaw }
   if (r.formatVersion < NOTES_FORMAT_VERSION) farmIn.notes = undefined
   if (r.formatVersion < LAYOUT_FORMAT_VERSION) farmIn.farmLayout = undefined
+  if (r.formatVersion < CHECKINS_FORMAT_VERSION) farmIn.checkins = undefined
   const farm = parseSave(farmIn)
   if (!farm) return fail('備份檔裡的養殖場存檔無法辨識或已損毀')
   const appList = parseAppList(listRaw)

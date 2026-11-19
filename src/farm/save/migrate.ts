@@ -194,6 +194,31 @@ export function cleanFarmLayout(raw: unknown): FarmLayout | undefined {
   return { items }
 }
 
+/** 簽到紀錄最多保留幾筆（月曆顯示當月與上個月，最多 31 + 31 天） */
+export const CHECKIN_MAX = 62
+
+/** YYYY-MM-DD 而且是真的日期（不收 2026-02-30） */
+export function isDayKey(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+  const y = Number(v.slice(0, 4))
+  const m = Number(v.slice(5, 7))
+  const d = Number(v.slice(8, 10))
+  if (m < 1 || m > 12 || d < 1) return false
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate()
+}
+
+/**
+ * v3.10.0 簽到紀錄的防呆：不是陣列 = 沒有這個欄位；只留合法日期、去重、由舊到新、最多 CHECKIN_MAX 筆（留最新的）。
+ * 不在這裡刪未來日期（讀檔用的時間和測試平移的遊戲時間不一定一樣）；簽到時才修剪（sim/points.ts 的 trimCheckins）。
+ * 清完是空的 = 沒有這個欄位（不重置、不影響其他欄位）。
+ */
+export function cleanCheckins(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out = [...new Set(raw.filter(isDayKey))].sort()
+  const kept = out.slice(-CHECKIN_MAX)
+  return kept.length > 0 ? kept : undefined
+}
+
 /** 儲存的資料是不是比這份程式更新（schemaVersion 較大，或同一個 schema 內 dataRev 較大）：是的話不讀、不覆寫 */
 export function isNewerData(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return false
@@ -253,6 +278,9 @@ export function parseSave(raw: unknown): SaveData | null {
   // v3.9.0：農場擺放（可缺少；不是物件或 items 不是陣列 = 沒有這個欄位）
   const layout = cleanFarmLayout(r.farmLayout)
   if (layout) save.farmLayout = layout
+  // v3.10.0：簽到紀錄（可缺少；清完是空的就不放這個欄位）
+  const checkins = cleanCheckins(r.checkins)
+  if (checkins) save.checkins = checkins
   if (r.resetNotice === true) save.resetNotice = true
   return save
 }

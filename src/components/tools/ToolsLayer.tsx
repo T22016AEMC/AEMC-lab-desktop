@@ -1,5 +1,6 @@
 import { useUIStore } from '../../store/uiStore'
 import { CalculatorDialog } from './CalculatorDialog'
+import { CalendarDialog } from './CalendarDialog'
 import { NotesDialog } from './NotesDialog'
 import { TimerDialog } from './TimerDialog'
 
@@ -9,5 +10,6 @@ export function ToolsLayer() {
   if (tool === 'calc') return <CalculatorDialog />
   if (tool === 'timer') return <TimerDialog />
   if (tool === 'notes') return <NotesDialog />
+  if (tool === 'calendar') return <CalendarDialog />
   return null
 }

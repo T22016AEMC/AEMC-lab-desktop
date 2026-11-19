@@ -149,13 +149,13 @@ await d1.save(S(41))
 eq(pts(), 41, '同一頁的兩個物件：前一個仍寫得進去')
 eq(lost, 0, '同一頁：不提示')
 
-// 8. 舊版 v3.9.1 的儲存層不認得寫入權（照樣寫）——由 DATA_REV 擋（C 那一件），這裡只記錄現況
+// 8. 舊版 v3.9.1 的儲存層不認得寫入權；新版寫的存檔 dataRev 比它新（C 起 DATA_REV 5），所以舊版不覆寫
 reset()
 LS.set(KEY, JSON.stringify(S(1)))
 const N1 = tab('N1')
 await N1.loadOrReset(() => S(0))
 await new OldAdapter().save(S(51))
-eq(pts(), 51, '舊版儲存層不看寫入權（預期；舊分頁由 DATA_REV 保護）')
+eq(pts(), DATA_REV > 4 ? 1 : 51, DATA_REV > 4 ? '舊版 v3.9.1 儲存層：讀到 dataRev 5 不覆寫（由 DATA_REV 保護）' : '舊版儲存層不看寫入權（C 之前：照樣寫）')
 
 // 9. 隨機交錯（500 回合）：任何時刻只有最後接手的分頁寫得進去，存檔一定等於擁有者最後一次寫入
 let seed = 9

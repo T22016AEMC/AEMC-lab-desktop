@@ -45,7 +45,7 @@ const W37 = (stored, raw, skip = []) => {
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') out[k] = S37(st[k])
   const want = {}
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') want[k] = r[k]
-  if (st.dataRev !== 4 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性')
+  if (st.dataRev !== 5 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5
   return [out, want]
 }
 process.on('exit', () => console.log('（v3.8.0 adapt：另外檢查了 ' + __n380 + ' 次「舊寵物個性 = 用 id 算的」）'))
@@ -129,7 +129,7 @@ const obj363 = JSON.parse(raw363)
   const { notes, dataRev, ...rest } = s
   const { dataRev: _o, ...orest } = obj363
   eq(S37(rest), orest, '除了 dataRev、notes（v3.8.0：與寵物的 personality/lastInteract）以外每個欄位都和原本一樣')
-  eq([notes, dataRev, DATA_REV], [[], 4, 4], 'notes 補成空、dataRev 3（v3.8.0）')
+  eq([notes, dataRev, DATA_REV], [[], 5, 5], 'notes 補成空、dataRev 3（v3.8.0；v3.10.0：5）')
   eq(isNewerData(obj363), false, 'v3.6.3 存檔不是「較新版本」')
   // 儲存層：載入不重置、沒有退款、沒有「較新版本」
   store.clear()
@@ -143,7 +143,7 @@ const obj363 = JSON.parse(raw363)
   const withNotes = { ...lr.save, notes: N.cleanNotes([goodNote(1), goodNote(2, { title: '第二張🐱', body: '多行\n內容', color: 'pink' })]) }
   await A.save(withNotes)
   const back = JSON.parse(store.get('aemc-desktop:farm-save'))
-  eq([back.dataRev, back.notes.length, back.pets.length, back.points, back.ownedBuildings], [4, 2, 3, 321, ['kennel', 'bowls', 'catTree']]) // v3.9.0：dataRev 4
+  eq([back.dataRev, back.notes.length, back.pets.length, back.points, back.ownedBuildings], [5, 2, 3, 321, ['kennel', 'bowls', 'catTree']]) // v3.9.0：dataRev 4；v3.10.0：5
   const lr2 = await new LocalStorageAdapter().loadOrReset(() => { throw new Error('x') })
   eq(lr2.save.notes, withNotes.notes, '存檔後再讀，notes 完全相同')
   eq(lr2.save.pets, lr.save.pets, '寵物相同')
@@ -158,10 +158,10 @@ const obj363 = JSON.parse(raw363)
   // 更新版本保護（本版）：dataRev 3 的存檔不讀、不覆寫
   let warned = 0
   setNewerDataHandler(() => warned++)
-  store.set('aemc-desktop:farm-save', JSON.stringify({ ...back, dataRev: 5 }))
+  store.set('aemc-desktop:farm-save', JSON.stringify({ ...back, dataRev: 6 })) // v3.10.0：較新的是 dataRev 6
   eq((await new LocalStorageAdapter().loadOrReset(() => { throw new Error('x') })).newer, true, 'dataRev 4 → 不讀（v3.8.0：3 是目前版本）')
   await new LocalStorageAdapter().save(withNotes)
-  eq([warned, JSON.parse(store.get('aemc-desktop:farm-save')).dataRev], [1, 5], 'dataRev 5 → 不覆寫（v3.8.0）')
+  eq([warned, JSON.parse(store.get('aemc-desktop:farm-save')).dataRev], [1, 6], 'dataRev 5 → 不覆寫（v3.8.0；v3.10.0：6）')
   // 存檔裡有壞掉的便利貼：載入時單張捨棄
   store.set('aemc-desktop:farm-save', JSON.stringify({ ...back, notes: [goodNote(1), goodNote(2, { color: 'x' }), 'bad'] }))
   eq((await new LocalStorageAdapter().loadOrReset(() => { throw new Error('x') })).save.notes.map((x) => x.id), ['g1'], '存檔裡壞的單張捨棄，其他照讀')
@@ -175,9 +175,9 @@ const obj363 = JSON.parse(raw363)
 {
   const list0 = { schemaVersion: 1, apps: [] }
   const farm = { ...parseSave(obj363), notes: N.cleanNotes([goodNote(1), goodNote(2, { title: '標題🐶', body: '第一行\n第二行', color: 'green' }), goodNote(3, { color: 'pink' })]) }
-  eq(BACKUP_FORMAT_VERSION, 6, '匯出檔格式版本 5（v3.8.0）')
+  eq(BACKUP_FORMAT_VERSION, 7, '匯出檔格式版本 5（v3.8.0；v3.10.0：7）')
   const b = buildBackup(farm, list0, '3.7.0', new Date(T0))
-  eq(b.formatVersion, 6) // v3.8.0
+  eq(b.formatVersion, 7) // v3.8.0；v3.10.0：7
   const text = JSON.stringify(b)
   const p = parseBackup(text, text.length)
   ok(p.ok, '匯入 v4')
@@ -194,7 +194,7 @@ const obj363 = JSON.parse(raw363)
   const p2 = parseBackup(JSON.stringify({ ...b3, formatVersion: 2, data: { farm: farm2, appList: list0 } }), 100)
   ok(p2.ok, '匯入 v2 不報錯'); eq([p2.backup.data.farm.notes, p2.backup.data.farm.points, p2.backup.data.farm.pets.length], [[], 321, 3])
   // v5 → 較新版本
-  eq(parseBackup(JSON.stringify({ ...b, formatVersion: 7 }), 100).error, NEWER_VERSION_MESSAGE, 'v7 → 較新版本（v3.9.0：6 是目前版本）')
+  eq(parseBackup(JSON.stringify({ ...b, formatVersion: 8 }), 100).error, NEWER_VERSION_MESSAGE, 'v7 → 較新版本（v3.9.0：6 是目前版本；v3.10.0：v8）')
   // 匯入資料裡壞的便利貼：單張捨棄，不是整份失敗
   const bad = { ...b, data: { ...b.data, farm: { ...b.data.farm, notes: [goodNote(1), goodNote(2, { title: 'x'.repeat(30) }), goodNote(3, { color: 1 }), ...Array.from({ length: 12 }, (_, i) => goodNote(100 + i))] } } }
   const pb = parseBackup(JSON.stringify(bad), 100)

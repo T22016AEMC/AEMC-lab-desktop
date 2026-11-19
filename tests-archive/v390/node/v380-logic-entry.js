@@ -146,7 +146,7 @@ const farm371 = { ...exp370.data.farm, lastSeen: NOW - 3600000 }
   eq(strip(s).pets, farm371.pets, '寵物：拿掉新欄位後每個欄位都相同（名字、品種、數值、領養時間…）')
   eq(s.pets.map((p) => p.personality), farm371.pets.map((p) => personalityFromId(p.id)), '舊寵物補上「用 id 算的」固定個性')
   eq(s.pets.map((p) => p.lastInteract), [farm371.lastSeen, farm371.lastSeen, farm371.lastSeen], 'lastInteract 補成存檔的 lastSeen')
-  eq([s.dataRev, DATA_REV, 'picnic' in s], [4, 4, false], 'dataRev 3、沒有野餐紀錄')
+  eq([s.dataRev, DATA_REV, 'picnic' in s], [5, 5, false], 'dataRev 3、沒有野餐紀錄（v3.10.0：dataRev 5）')
   const written = JSON.parse(store.get('aemc-desktop:farm-save'))
   eq(written.pets.map((p) => p.personality), s.pets.map((p) => p.personality), '載入後立刻寫回存檔（補上的個性）')
   ok(!needsPersonalityFill(written), '寫回後不再缺個性')
@@ -154,7 +154,7 @@ const farm371 = { ...exp370.data.farm, lastSeen: NOW - 3600000 }
   eq(lr2.save, s, '再載入一次：完全相同（個性不會變）')
   // 匯出再匯入
   const b = buildBackup(s, { schemaVersion: 1, apps: [] }, '3.8.0', new Date(NOW))
-  eq([b.formatVersion, BACKUP_FORMAT_VERSION, MIN_BACKUP_FORMAT_VERSION], [6, 6, 2], '匯出格式 6、匯入接受 2～6（v3.9.0）')
+  eq([b.formatVersion, BACKUP_FORMAT_VERSION, MIN_BACKUP_FORMAT_VERSION], [7, 7, 2], '匯出格式 6、匯入接受 2～6（v3.9.0；v3.10.0：7、2～7）')
   const p = parseBackup(JSON.stringify(b), 100)
   ok(p.ok, '匯入成功'); eq(p.backup.data.farm, s, '匯出再匯入完全相同（含個性）')
   // v3.7.x 的匯出檔（格式 4）匯入：個性同樣用 id 補上
@@ -163,7 +163,7 @@ const farm371 = { ...exp370.data.farm, lastSeen: NOW - 3600000 }
   eq(p4.backup.data.farm.pets.map((q) => q.personality), exp370.data.farm.pets.map((q) => personalityFromId(q.id)), '格式 4 匯入：個性 = 用 id 算的（和直接載入舊存檔一樣）')
   eq(strip(p4.backup.data.farm).pets, exp370.data.farm.pets, '格式 4 匯入：寵物其他欄位相同')
   for (const fv of [2, 3]) { const pv = parseBackup(JSON.stringify({ ...exp370, formatVersion: fv }), 100); ok(pv.ok, `格式 ${fv} 可匯入`); eq(pv.backup.data.farm.pets.map((q) => q.personality), ['timid', 'greedy', 'lazy']) }
-  eq(parseBackup(JSON.stringify({ ...b, formatVersion: 7 }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', '格式 7 → 較新版本（v3.9.0）')
+  eq(parseBackup(JSON.stringify({ ...b, formatVersion: 8 }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', '格式 7 → 較新版本（v3.9.0；v3.10.0：格式 8）')
   // v3.7.x 舊程式讀到 v3.8.0 的存檔：dataRev 3 > 2 → 舊程式的保護機制會停止存檔（這裡用 isNewerData 的規則模擬：schemaVersion 相同、dataRev 較大）
   ok(written.dataRev > 2, 'v3.7.x 的舊分頁看到 dataRev 3 會停止自動存檔，不會洗掉個性')
   // 壞掉的個性欄位 → 用 id 補

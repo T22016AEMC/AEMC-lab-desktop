@@ -37,6 +37,8 @@ function shiftTime(save: SaveData, ms: number): SaveData {
     lastAward: Object.fromEntries(Object.entries(save.earning.lastAward).map(([k, v]) => [k, v - ms])),
   }
   shifted.bowl = { ...save.bowl, date: shiftDate(save.bowl.date) }
+  // v3.10.0 簽到紀錄也一起往前推（和 lastDailyClaim 一樣）
+  if (save.checkins) shifted.checkins = save.checkins.map(shiftDate)
   // v3.8.0 野餐：次數的日期、冷卻、進行中那一場的時間也一起往前推
   if (save.picnic) {
     const a = save.picnic.active

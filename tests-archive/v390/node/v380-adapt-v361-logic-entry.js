@@ -37,7 +37,7 @@ const W37 = (stored, raw, skip = []) => {
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') out[k] = S37(st[k])
   const want = {}
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') want[k] = r[k]
-  if (st.dataRev !== 4 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性')
+  if (st.dataRev !== 5 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5
   return [out, want]
 }
 process.on('exit', () => console.log('（v3.8.0 adapt：另外檢查了 ' + __n380 + ' 次「舊寵物個性 = 用 id 算的」）'))
@@ -166,14 +166,14 @@ const pet = (extra = {}) => ({ id: 'p', species: 'dog', variant: 'shiba', name: 
     events: { dogLeak: NOW - 86400000 }, skins: { owned: ['house.gold'], equipped: { house: 'house.gold' } },
   }
   const parsed = parseSave(JSON.parse(JSON.stringify(v360)))
-  eq(S37(parsed), { ...v360, dataRev: 4, notes: [] }, 'v3.6.0 存檔 → v3.8.0：除了 dataRev 3、notes: []、寵物的 personality/lastInteract 之外每個欄位都逐欄相同')
+  eq(S37(parsed), { ...v360, dataRev: 5, notes: [] }, 'v3.6.0 存檔 → v3.8.0（v3.10.0：dataRev 5）：除了 dataRev 3、notes: []、寵物的 personality/lastInteract 之外每個欄位都逐欄相同')
   eq(parsed.schemaVersion, 5)
   // 匯出 v3 → 匯入
   const list = { schemaVersion: 1, apps: [] }
   const b3 = buildBackup(parsed, list, '3.6.1', new Date(NOW))
-  eq(b3.formatVersion, 6) // v3.8.0：匯出格式 5
+  eq(b3.formatVersion, 7) // v3.8.0：匯出格式 5；v3.10.0：7
   const p3 = parseBackup(JSON.stringify(b3), 100)
-  ok(p3.ok, 'v3 匯入'); eq(S37(p3.backup.data.farm), { ...v360, dataRev: 4, notes: [] }, '匯出再匯入完全相同（v3.8.0：dataRev 3、notes: []、寵物新欄位另外檢查）')
+  ok(p3.ok, 'v3 匯入'); eq(S37(p3.backup.data.farm), { ...v360, dataRev: 5, notes: [] }, '匯出再匯入完全相同（v3.10.0：dataRev 5）（v3.8.0：dataRev 3、notes: []、寵物新欄位另外檢查）')
   // v2（v3.5.1 的匯出）：補預設值，其餘欄位相同
   const old = { schemaVersion: 5, pets: v360.pets, points: 10, lastSeen: NOW, lastDailyClaim: null, gifts: { date: '', count: 0 }, nextPetId: 3, createdAt: NOW, ownedBuildings: ['kennel'], earning: { date: '', programCoins: 0, gameCoins: 0, lastAward: {} }, bowl: { date: '', used: 0 } }
   const p2 = parseBackup(JSON.stringify({ format: 'aemc-desktop-backup', formatVersion: 2, exportedAt: 'x', appVersion: '3.5.1', data: { farm: old, appList: list } }), 100)
