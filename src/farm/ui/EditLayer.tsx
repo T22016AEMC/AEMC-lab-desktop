@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
-import { LAYOUT_ITEMS, layoutItemDef } from '../config/layoutItems'
+import { LAYOUT_ITEMS, isInstanceId, layoutItemDef, parseInstanceId, type LayoutItemDef } from '../config/layoutItems'
 import type { PixelEngine } from '../pixel/engine'
 import { beginInventoryDrag, beginSceneDrag, cantStoreText, dropDecision, footAt, isDragMove, type EditDrag } from '../pixel/editDrag'
 import { fromCss, rectCss } from '../pixel/layout'
@@ -20,7 +20,7 @@ export const EDIT_TEXT = {
   store: '收進倉庫',
   cantStore: '不能收進倉庫',
   confirmTitle: '還原預設擺設',
-  confirmBody: '所有擺設會回到預設位置；花槽、珊瑚石堆、灌木、高草叢會收進倉庫。確定嗎？',
+  confirmBody: '所有擺設會回到預設位置；花槽、珊瑚石堆、灌木、高草叢，以及商店買的裝飾，會收進倉庫。確定嗎？',
   confirmOk: '確定還原',
   cancel: '取消',
   restored: '擺設已還原成預設',
@@ -251,7 +251,19 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   }
 
   const L = engine.layout
-  const stored = LAYOUT_ITEMS.filter((d) => P.stored.has(d.id))
+  // 倉庫列：內建物件一格一個（物件表的順序）；商店買的實例依種類合併成一格（「石頭 ×3」），拖曳時拿編號最小的那個
+  const stored: { key: string; def: LayoutItemDef; ids: string[] }[] = LAYOUT_ITEMS.filter((d) => P.stored.has(d.id)).map((d) => ({ key: d.id, def: d, ids: [d.id] }))
+  const groups = new Map<string, { key: string; def: LayoutItemDef; ids: string[] }>()
+  for (const id of P.order) {
+    if (!isInstanceId(id) || !P.stored.has(id)) continue
+    const kind = parseInstanceId(id)?.kind
+    const def = layoutItemDef(id)
+    if (!kind || !def) continue
+    const g = groups.get(kind)
+    if (g) g.ids.push(id)
+    else groups.set(kind, { key: 'buy-' + kind, def, ids: [id] })
+  }
+  stored.push(...groups.values())
   const sel = selected ? P.placed.get(selected) : undefined
   const selBox = sel ? rectCss(L, spriteBoxAt(sel.kind, sel.x, sel.y)) : null
   const cssW = L.backW / L.dpr
@@ -324,20 +336,24 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
         >
           <span className="shrink-0 text-xs font-bold text-[#3b2a1c]">{EDIT_TEXT.inventory}</span>
           {stored.length === 0 && <span className="px-2 text-xs text-[#5a3410]/80" data-testid="edit-inventory-empty">{EDIT_TEXT.inventoryEmpty}</span>}
-          {stored.map((d) => {
+          {stored.map(({ key: slot, def: d, ids }) => {
             const key = KIND_GEOM[d.kind].sprite
             return (
               <button
-                key={d.id}
+                key={slot}
                 type="button"
-                data-testid={`inv-${d.id}`}
-                title={`${d.name}（拖到場景上擺放）`}
-                onPointerDown={(e) => onInventoryPointerDown(e, d.id)}
+                data-testid={`inv-${slot}`}
+                data-count={ids.length}
+                title={`${d.name}${ids.length > 1 ? ` ×${ids.length}` : ''}（拖到場景上擺放）`}
+                onPointerDown={(e) => onInventoryPointerDown(e, ids[0])}
                 className="flex h-14 w-14 shrink-0 cursor-grab flex-col items-center justify-end border-2 border-[#3b2a1c]/60 bg-white/70 pb-0.5 hover:bg-white"
                 style={{ touchAction: 'none' }}
               >
                 {key ? <PixelSprite frame={key} scale={1} fit={36} /> : <span className="text-[10px]">？</span>}
-                <span className="text-[10px] font-bold leading-tight text-[#3b2a1c]">{d.name}</span>
+                <span className="text-[10px] font-bold leading-tight text-[#3b2a1c]">
+                  {d.name}
+                  {ids.length > 1 && <span data-testid={`inv-count-${slot}`}> ×{ids.length}</span>}
+                </span>
               </button>
             )
           })}
