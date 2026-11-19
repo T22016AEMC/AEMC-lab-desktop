@@ -13,6 +13,7 @@ import { bowlLeft } from './sim/buildings'
 import { findsBlock } from './sim/dig'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { ShopDialog } from './ui/ShopDialog'
 import { EventDialog } from './ui/EventDialog'
 import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
 import { NewerDataNotice } from './ui/NewerDataNotice'
@@ -90,7 +91,8 @@ export function Farm() {
   const petCount = useFarmStore((s) => s.save?.pets.length ?? 0)
   /** 還沒有任何寵物（全新玩家，或一次性重置之後）：走第一次領養流程（第一隻免費）；重置提示或失敗說明顯示期間先不顯示 */
   const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed && !s.newerData)
-  const adoptOpen = useUIStore((s) => s.adoptOpen)
+  /** v4.0：商店開著（取代領養視窗） */
+  const shopOpen = useUIStore((s) => s.shopTab !== null)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const aboutOpen = useUIStore((s) => s.aboutOpen)
   const collectionOpen = useUIStore((s) => s.collectionOpen)
@@ -395,12 +397,12 @@ export function Farm() {
   }, [engine])
   // 開啟啟動台、領養、建築模式、關於、收藏冊、工具、匯入、找新主人、拍立得、視窗被蓋住：滑鼠互動立即解除（引擎每個影格看這個旗標）
   useEffect(() => {
-    engine.hover.blocked = Boolean(adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
-  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
+    engine.hover.blocked = Boolean(shopOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
+  }, [engine, shopOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
-    if (adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
-  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState])
+    if (shopOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
+  }, [engine, shopOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState])
   // 開工具視窗：關掉氣泡選單（建築模式由 setToolOpen 自己關）
   useEffect(() => {
     if (toolOpen) setSelected(null)
@@ -428,12 +430,12 @@ export function Farm() {
   }, [engine])
   // 領養視窗或啟動台開著時，關掉氣泡選單
   useEffect(() => {
-    if (adoptOpen || launchpadOpen) {
+    if (shopOpen || launchpadOpen) {
       setSelected(null)
       useUIStore.getState().setBuildMode(false)
       useUIStore.getState().setPicnicPick(false)
     }
-  }, [adoptOpen, launchpadOpen])
+  }, [shopOpen, launchpadOpen])
   // 農場（擺設）模式、選野餐位置：關掉氣泡選單、清掉入口的滑鼠停留狀態；沒有存檔（還沒領養）時不能進入
   useEffect(() => {
     if (buildMode || picnicPick) {
@@ -451,7 +453,7 @@ export function Farm() {
       const ui = useUIStore.getState()
       const st = useFarmStore.getState()
       const windowsOpen = Object.values(useWindowStore.getState().windows).some((w) => !w.minimized)
-      const blocked = ui.adoptOpen || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
+      const blocked = ui.shopTab !== null || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
       const canEnter = !!st.save && st.save.pets.length > 0
       if (ui.picnicPick) return // v3.9.1：選野餐位置中不能進出編輯農場（要先取消）
       if (!isFarmHotkey(e, blocked)) return
@@ -468,7 +470,7 @@ export function Farm() {
   }, [hasSave, petCount, buildMode, picnicPick])
   // v3.9.1 選野餐位置中：有對話框打開（關於、收藏冊、匯入、找新主人、拍立得、事件與存檔提示）或視窗最大化 → 取消選位置
   const farmDialog = useFarmStore((s) => s.pendingEvents.length > 0 || s.save?.resetNotice === true || s.resetFailed || s.legacyRefund > 0 || s.newerData)
-  const dialogOpen = Boolean(adoptOpen || aboutOpen || collectionOpen || !!importState || rehomeId !== null || shot !== null || covered || farmDialog)
+  const dialogOpen = Boolean(shopOpen || aboutOpen || collectionOpen || !!importState || rehomeId !== null || shot !== null || covered || farmDialog)
   useEffect(() => {
     if (dialogOpen && useUIStore.getState().picnicPick) useUIStore.getState().setPicnicPick(false)
   }, [dialogOpen])
@@ -974,7 +976,7 @@ export function Farm() {
       {status === 'ready' && assetsReady && <LegacyRefundNotice />}
       {status === 'ready' && assetsReady && <NewerDataNotice />}
       {status === 'ready' && assetsReady && <EventDialog />}
-      {hasSave && !needFirst && adoptOpen && <AdoptDialog />}
+      {hasSave && !needFirst && shopOpen && assetsReady && <ShopDialog engine={engine} />}
 
       {DevPanel && (
         <Suspense fallback={null}>

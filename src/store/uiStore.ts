@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ShopCategory } from '../farm/config/shop'
 import type { BackupFile, BackupSummary } from '../lib/backup'
 import type { Size } from '../types'
 import type { ToolId } from '../config/tools'
@@ -36,8 +37,8 @@ interface UIState {
   toastQueue: ToastItem[]
   launchpadOpen: boolean
   aboutOpen: boolean
-  /** 領養視窗 */
-  adoptOpen: boolean
+  /** v4.0 商店：開著的分類分頁（null = 沒開）。「＋領養」改成商店的寵物分頁（第一次領養仍是 AdoptDialog first） */
+  shopTab: ShopCategory | null
   /** v3.9.0 編輯農場（購買與擺設）模式：寵物暫停；分頁見 farmTab */
   buildMode: boolean
   /** v3.9.0 編輯農場的分頁：購買（虛線框）／編輯（拖曳、倉庫）。只記在這次開著的網頁（重新整理回到編輯），不存檔；進入時沿用上次的分頁 */
@@ -77,7 +78,8 @@ interface UIState {
   setToolOpen: (v: ToolId | null) => void
   setLaunchpadOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
-  setAdoptOpen: (v: boolean) => void
+  /** 打開商店的某個分類（null = 關閉）。打開時離開編輯農場、選野餐位置、關掉工具視窗 */
+  setShopTab: (v: ShopCategory | null) => void
   setBuildMode: (v: boolean) => void
   setLogoMenuOpen: (v: boolean) => void
   setImportState: (v: ImportState | null) => void
@@ -97,7 +99,7 @@ export const useUIStore = create<UIState>((set) => ({
   setToolOpen: (toolOpen) => set(toolOpen ? { toolOpen, buildMode: false, picnicPick: false } : { toolOpen }),
   launchpadOpen: false,
   aboutOpen: false,
-  adoptOpen: false,
+  shopTab: null,
   buildMode: false,
   farmTab: 'edit',
   setFarmTab: (farmTab) => set(farmTab === 'edit' ? { farmTab, farmBuyNotice: null } : { farmTab }),
@@ -127,7 +129,7 @@ export const useUIStore = create<UIState>((set) => ({
     }),
   setLaunchpadOpen: (launchpadOpen) => set({ launchpadOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
-  setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
+  setShopTab: (shopTab) => set(shopTab ? { shopTab, buildMode: false, picnicPick: false, toolOpen: null } : { shopTab }),
   // v3.9.1：進入編輯農場時離開選野餐位置（兩者不同時開著）
   setBuildMode: (buildMode) => set(buildMode ? { buildMode, picnicPick: false } : { buildMode, farmBuyNotice: null }),
   picnicReq: 0,

@@ -62,11 +62,12 @@ export function MenuBar() {
         {petCount !== null && (
           <button
             type="button"
-            onClick={() => useUIStore.getState().setAdoptOpen(true)}
+            data-testid="shop-button"
+            onClick={() => useUIStore.getState().setShopTab('pet')}
             className="rounded px-2 py-px font-semibold hover:bg-white/20"
-            title="領養寵物"
+            title="商店：領養寵物、購買裝飾品與建築"
           >
-            ＋領養
+            商店
           </button>
         )}
         {petCount !== null && (

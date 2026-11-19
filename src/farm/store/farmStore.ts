@@ -13,6 +13,7 @@ import { CHECKIN_TEXT, checkIn, collectGift, giftCandidates, isCheckedIn, newSav
 import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { rehomePet } from '../sim/rehome'
+import { SHOP_TEXT, purchase as purchaseItem, type PurchaseOptions } from '../sim/shop'
 import { useUIStore } from '../../store/uiStore'
 import { addNote, deleteNote, updateNote } from '../../tools/notes'
 import { TOOLS, type NoteColor } from '../../config/tools'
@@ -30,6 +31,8 @@ const NO_PETS: ReadonlySet<string> = new Set()
 export function getSaveStorage(): SaveStorage {
   return storage
 }
+
+export type ShopPurchaseResult = { ok: true; instanceId?: string } | { ok: false; error: string }
 
 interface FarmState {
   status: 'loading' | 'ready'
@@ -85,6 +88,13 @@ interface FarmState {
    * 扣金幣、加進 ownedBuildings、寫入擺放紀錄在同一次存檔完成。
    */
   buyBuilding: (id: string, storeIt?: boolean) => string | null
+  /**
+   * v4.0 商店購買（裝飾、建築、外觀）：先確認這個分頁還有寫入權，再用「當下的存檔」重新算一次（連點、兩個分頁都不會重複扣或重複給），
+   * 扣金幣與得到的東西在同一份存檔裡、立刻寫入。回傳成功與否、錯誤原因、新的實例 id。
+   */
+  purchase: (itemId: string, opts?: PurchaseOptions) => Promise<ShopPurchaseResult>
+  /** v4.0 從商店領養（不是第一隻）：先確認寫入權，再走 adoptPet，立刻寫入。回傳錯誤訊息或 null */
+  shopAdopt: (req: Omit<AdoptRequest, 'free'>) => Promise<string | null>
   /** v3.9.0 擺設模式：寫入農場擺放（只記和預設不同的；全部預設 = 拿掉欄位），立刻存檔。不動 ownedBuildings */
   setFarmLayout: (layout: FarmLayout | undefined) => void
   /** v3.9.0 還原預設：有預設位置的物件全部回到預設位置；花槽、珊瑚、灌木、高草叢（沒有預設位置）收進庫存。已購買的建築不變 */
@@ -346,6 +356,44 @@ export const useFarmStore = create<FarmState>((set, get) => ({
       if (def) next = { ...next, farmLayout: { items: [...(next.farmLayout?.items ?? []), { id, kind: def.kind, state: 'stored' }] } }
     }
     set({ save: next })
+    flushSave()
+    return null
+  },
+
+  purchase: async (itemId, opts) => {
+    const st = get()
+    if (st.otherTab) return { ok: false, error: SHOP_TEXT.otherTab }
+    if (st.newerData) return { ok: false, error: SHOP_TEXT.newer }
+    if (!st.save) return { ok: false, error: SHOP_TEXT.noSave }
+    // 先用目前的存檔檢查一次（不能買就不必去問寫入權）
+    const pre = purchaseItem(st.save, itemId, opts)
+    if (!pre.ok) return { ok: false, error: pre.error }
+    if (!(await storage.isOwner())) {
+      markOtherTab()
+      return { ok: false, error: SHOP_TEXT.otherTab }
+    }
+    // await 之後重新讀存檔再算一次：中間可能已經買過（連點）或金幣變了
+    const cur = get().save
+    if (!cur || get().otherTab) return { ok: false, error: SHOP_TEXT.otherTab }
+    const r = purchaseItem(cur, itemId, opts)
+    if (!r.ok) return { ok: false, error: r.error }
+    set({ save: r.save })
+    flushSave() // 金幣與購買的東西：立刻寫入（不等節流）
+    return r.instanceId ? { ok: true, instanceId: r.instanceId } : { ok: true }
+  },
+
+  shopAdopt: async (req) => {
+    const st = get()
+    if (st.otherTab) return SHOP_TEXT.otherTab
+    if (st.newerData) return SHOP_TEXT.newer
+    if (!st.save || st.save.pets.length === 0) return SHOP_TEXT.noSave
+    if (!(await storage.isOwner())) {
+      markOtherTab()
+      return SHOP_TEXT.otherTab
+    }
+    if (get().otherTab) return SHOP_TEXT.otherTab
+    const err = get().adoptPet(req)
+    if (err) return err
     flushSave()
     return null
   },

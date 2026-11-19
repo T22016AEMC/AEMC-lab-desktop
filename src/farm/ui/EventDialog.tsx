@@ -12,7 +12,8 @@ import { PixelSprite } from './PixelSprite'
 export function EventDialog() {
   const notice = useFarmStore((s) => s.pendingEvents[0])
   const blocked = useFarmStore((s) => s.save?.resetNotice === true || s.resetFailed || s.legacyRefund > 0 || s.newerData)
-  const toolOpen = useUIStore((s) => s.toolOpen !== null)
+  // v4.0：商店（同樣是 z-9900 的工具視窗外框）開著時也先排隊
+  const toolOpen = useUIStore((s) => s.toolOpen !== null || s.shopTab !== null)
   const dismiss = useFarmStore((s) => s.dismissEvent)
   const def = notice ? eventDef(notice.id) : undefined
   if (!notice || !def || blocked || toolOpen) return null
