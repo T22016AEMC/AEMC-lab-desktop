@@ -1,5 +1,5 @@
-import { LAYOUT_ITEMS, layoutItemDef, type LayoutKind } from '../config/layoutItems'
-import type { FarmLayout } from '../save/types'
+import { LAYOUT_ITEMS, isInstanceId, layoutItemDef, parseInstanceId, type LayoutKind } from '../config/layoutItems'
+import type { DecorInstance, FarmLayout, SaveData } from '../save/types'
 import { ENVELOPES, type Envelope } from './envelopes'
 
 /**
@@ -9,6 +9,7 @@ import { ENVELOPES, type Envelope } from './envelopes'
  *  - 沒有紀錄：有預設位置的擺在 DEFAULT_POS；沒有預設位置的（灌木、高草叢、花槽、珊瑚石堆）在庫存
  *  - 建築（狗窩、食盆水盆、貓跳台）沒買就不存在（不擺也不在庫存；紀錄保留）
  *  - 紀錄是 stored → 庫存；placed 有座標 → 那裡；placed 沒座標 → 預設位置
+ *  - v4.0 商店買來的實例（存檔 shop.decor，id「種類#編號」）：沒有紀錄 = 在庫存（擁有與擺放分開記）；不在 shop.decor 裡的實例紀錄一律忽略
  * 載入時不檢查重疊、連通（照存檔畫，不改寫）；擺放規則在 placeRules.ts，只在玩家放下物件時用。
  */
 
@@ -40,6 +41,8 @@ export interface Placement {
   placed: ReadonlyMap<string, PlacedItem>
   /** 在庫存裡的物件 id */
   stored: ReadonlySet<string>
+  /** 物件的固定順序（v4.0）：PLACE_ORDER，商店實例依編號插在珊瑚石堆之後、建築之前（畫圖時腳底 y 相同的物件依這個順序） */
+  order: readonly string[]
 }
 
 /**
@@ -117,17 +120,27 @@ export function spriteBoxAt(kind: LayoutKind, x: number, y: number): Box {
 
 let revCounter = 0
 
+/** v4.0：物件順序 = PLACE_ORDER，商店實例依編號插在建築（kennel）之前；沒有實例時就是 PLACE_ORDER 本身 */
+export function orderWith(decor: readonly DecorInstance[] | undefined): readonly string[] {
+  if (!decor || decor.length === 0) return PLACE_ORDER
+  const ids = decor.filter((d) => isInstanceId(d.id)).map((d) => d.id)
+  ids.sort((a, b) => (parseInstanceId(a)?.n ?? 0) - (parseInstanceId(b)?.n ?? 0))
+  const at = PLACE_ORDER.indexOf('kennel')
+  return [...PLACE_ORDER.slice(0, at), ...new Set(ids), ...PLACE_ORDER.slice(at)]
+}
+
 /**
  * 算出擺放結果。owned = 存檔的 ownedBuildings；layout = 存檔的 farmLayout（已由 parseSave 清理過；沒有 = 全部預設）。
  * 純函式（除了 rev 遞增），同樣的輸入得到同樣的 placed／stored。
  */
-export function resolvePlacement(owned: readonly string[], layout?: FarmLayout | null): Placement {
+export function resolvePlacement(owned: readonly string[], layout?: FarmLayout | null, decor?: readonly DecorInstance[]): Placement {
   const own = new Set(owned)
+  const order = orderWith(decor)
   const rec = new Map<string, FarmLayout['items'][number]>()
   for (const it of layout?.items ?? []) if (!rec.has(it.id)) rec.set(it.id, it)
   const placed = new Map<string, PlacedItem>()
   const stored = new Set<string>()
-  for (const id of PLACE_ORDER) {
+  for (const id of order) {
     const def = layoutItemDef(id)
     if (!def) continue
     if (def.building && !own.has(id)) continue
@@ -144,8 +157,11 @@ export function resolvePlacement(owned: readonly string[], layout?: FarmLayout |
     if (d) placed.set(id, { id, kind: def.kind, x: d.x, y: d.y })
     else stored.add(id)
   }
-  return { rev: ++revCounter, owned: own, placed, stored }
+  return { rev: ++revCounter, owned: own, placed, stored, order }
 }
+
+/** 存檔的擺放結果（已購買的建築、擺放紀錄、商店實例）。介面與引擎一律用這個，不要漏掉實例 */
+export const placementOf = (save: Pick<SaveData, 'ownedBuildings' | 'farmLayout' | 'shop'>): Placement => resolvePlacement(save.ownedBuildings, save.farmLayout, save.shop?.decor)
 
 /** 預設擺放（沒有存檔紀錄）。owned 省略 = 沒買任何建築 */
 export const defaultPlacement = (owned: readonly string[] = []): Placement => resolvePlacement(owned, null)
@@ -153,7 +169,14 @@ export const defaultPlacement = (owned: readonly string[] = []): Placement => re
 /** 把擺放結果寫回存檔用的紀錄：只記和預設不同的物件（編輯模式用） */
 export function placementToLayout(P: Placement): FarmLayout {
   const items: FarmLayout['items'] = []
-  for (const def of LAYOUT_ITEMS) {
+  // 內建物件依物件表的順序（和 v3.9.x 寫出的紀錄順序相同），之後是商店實例（依編號）；實例沒有預設位置，所以在倉庫的不寫紀錄（擁有記在 shop.decor）
+  const defs = [...LAYOUT_ITEMS]
+  for (const id of P.order) {
+    if (!isInstanceId(id)) continue
+    const d = layoutItemDef(id)
+    if (d) defs.push(d)
+  }
+  for (const def of defs) {
     if (def.building && !P.owned.has(def.id)) continue
     const p = P.placed.get(def.id)
     const d = DEFAULT_POS[def.id]
@@ -169,8 +192,8 @@ export function placementToLayout(P: Placement): FarmLayout {
  * 擺設介面寫入存檔時一律走這裡：同一個影格內連續兩次寫入（例如剛買下建築放進倉庫、緊接著又放下別的東西）時，
  * 第二次要看得到第一次的結果，否則第一次的變更會被覆蓋。
  */
-export function layoutAfterMove(owned: readonly string[], layout: FarmLayout | undefined, id: string, x: number | null, y: number | null): FarmLayout {
-  return placementToLayout(withMove(resolvePlacement(owned, layout), id, x, y))
+export function layoutAfterMove(owned: readonly string[], layout: FarmLayout | undefined, id: string, x: number | null, y: number | null, decor?: readonly DecorInstance[]): FarmLayout {
+  return placementToLayout(withMove(resolvePlacement(owned, layout, decor), id, x, y))
 }
 
 /** 拿掉某個物件的擺放紀錄（買建築時忽略存檔裡這棟建築以前殘留的紀錄）；沒有紀錄可拿時原樣回傳 */
@@ -256,14 +279,14 @@ export function withMove(P: Placement, id: string, x: number | null, y: number |
     stored.delete(id)
     // 保持 PLACE_ORDER 的順序（畫圖時腳底 y 相同的物件前後不變）
     const ordered = new Map<string, PlacedItem>()
-    for (const k of PLACE_ORDER) {
+    for (const k of P.order) {
       if (k === id) ordered.set(id, { id, kind: def.kind, x, y })
       else {
         const it = placed.get(k)
         if (it) ordered.set(k, it)
       }
     }
-    return { rev: ++revCounter, owned: P.owned, placed: ordered, stored }
+    return { rev: ++revCounter, owned: P.owned, placed: ordered, stored, order: P.order }
   }
-  return { rev: ++revCounter, owned: P.owned, placed, stored }
+  return { rev: ++revCounter, owned: P.owned, placed, stored, order: P.order }
 }

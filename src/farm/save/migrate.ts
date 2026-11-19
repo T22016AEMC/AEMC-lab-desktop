@@ -4,9 +4,9 @@ import { isCollectionKey } from '../config/items'
 import { SPECIES, isSpeciesId, isVariantId } from '../config/species'
 import { isPersonalityId, personalityFromId } from '../config/personality'
 import { cleanNotes } from '../../tools/notes'
-import { LAYOUT_MAX_ITEMS, isLayoutKind, layoutItemDef } from '../config/layoutItems'
+import { INSTANCE_N_MAX, LAYOUT_MAX_ITEMS, isInstanceKind, isLayoutKind, layoutItemDef, parseInstanceId } from '../config/layoutItems'
 import { SCENE_H, SCENE_W } from '../pixel/layout'
-import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type FarmLayout, type Find, type LayoutItem, type Pet, type PicnicActive, type PicnicState, type SaveData, type SkinState } from './types'
+import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type FarmLayout, type Find, type LayoutItem, type Pet, type PicnicActive, type PicnicState, type SaveData, type ShopState, type SkinState } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
@@ -158,6 +158,7 @@ function cleanSkins(raw: unknown): SkinState {
  *  - farmLayout 不是物件、items 不是陣列 → 整個忽略（回傳 undefined = 全部預設）
  *  - 原始陣列只看前 LAYOUT_MAX_ITEMS（300）筆
  *  - 單筆不是物件、kind 不認得、id 不在物件表或和 kind 對不上 → 丟掉；重複 id 留第一筆
+ *  - v4.0：商店實例「種類#編號」（INSTANCE_KINDS 的種類）也認得；有沒有擁有不在這裡判斷（resolvePlacement 只用 shop.decor 裡有的，其他的紀錄被忽略、下次寫回時消失）
  *  - state 不是 placed／stored → 擺放；不能收的（住家、鐘樓、池塘、公佈欄）寫成 stored → 擺放
  *  - 擺放：x、y 有一個不是有限數字 → 兩個都拿掉（回到預設位置）；沒有預設位置的（花槽、珊瑚石堆）改成在庫存
  *  - 座標夾回 0～SCENE_W、0～SCENE_H 並取整數；在庫存的不帶座標
@@ -192,6 +193,36 @@ export function cleanFarmLayout(raw: unknown): FarmLayout | undefined {
     items.push(item)
   }
   return { items }
+}
+
+/** 存檔 shop.decor 最多讀幾筆（防壞檔用，不是遊戲上限；遊戲上限只在購買時檢查，以後調低上限也不會刪掉已買的） */
+export const SHOP_DECOR_SAFETY_MAX = 200
+
+/**
+ * v4.0 商店（可缺少）。不是物件 → 沒有這個欄位。只依「可複製種類表」（INSTANCE_KINDS）驗證，不看商品表：
+ *  - decor 每筆要是 { id: 種類#編號, kind }，id 的種類要和 kind 一樣、種類在表裡；重複 id 留第一筆；最多 SHOP_DECOR_SAFETY_MAX 筆
+ *  - nextDecorId 至少 = 現有最大編號 + 1（用過的編號不再用）
+ * 清理兩次和一次結果相同。
+ */
+export function cleanShop(raw: unknown): ShopState | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const decor: ShopState['decor'] = []
+  const seen = new Set<string>()
+  let maxN = 0
+  const list = Array.isArray(r.decor) ? r.decor : []
+  for (let i = 0; i < list.length && decor.length < SHOP_DECOR_SAFETY_MAX; i++) {
+    const e = list[i]
+    if (!e || typeof e !== 'object' || Array.isArray(e)) continue
+    const d = e as Record<string, unknown>
+    const p = parseInstanceId(d.id)
+    if (!p || !isInstanceKind(d.kind) || p.kind !== d.kind || seen.has(d.id as string)) continue
+    seen.add(d.id as string)
+    decor.push({ id: d.id as string, kind: p.kind })
+    if (p.n > maxN) maxN = p.n
+  }
+  const next = Math.floor(num(r.nextDecorId, 1, 1, INSTANCE_N_MAX + 1))
+  return { decor, nextDecorId: Math.max(next, maxN + 1) }
 }
 
 /** 簽到紀錄最多保留幾筆（月曆顯示當月與上個月，最多 31 + 31 天） */
@@ -281,6 +312,9 @@ export function parseSave(raw: unknown): SaveData | null {
   // v3.10.0：簽到紀錄（可缺少；清完是空的就不放這個欄位）
   const checkins = cleanCheckins(r.checkins)
   if (checkins) save.checkins = checkins
+  // v4.0：商店（可缺少；不是物件 = 沒有這個欄位）
+  const shop = cleanShop(r.shop)
+  if (shop) save.shop = shop
   if (r.resetNotice === true) save.resetNotice = true
   return save
 }

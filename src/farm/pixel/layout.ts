@@ -1,4 +1,4 @@
-import { DEFAULT_POS, PLACE_ORDER, defaultPlacement, footprintAt, type Placement } from './placement'
+import { DEFAULT_POS, defaultPlacement, footprintAt, type Placement } from './placement'
 import type { LayoutKind } from '../config/layoutItems'
 
 /**
@@ -388,13 +388,13 @@ const sceneCache = new WeakMap<Layout, { P: Placement; list: SceneObject[] }>()
 
 /**
  * 擺出來的場景物件：路燈、鐘樓、水池、樹、裝飾物、花槽、珊瑚石堆（v3.9.0：位置來自擺放結果；在庫存裡的不在清單裡）。
- * 順序固定（PLACE_ORDER），腳底 y 相同時畫圖的前後和 v3.8.1 一樣。
+ * 順序固定（擺放結果的 order = PLACE_ORDER＋商店實例），腳底 y 相同時畫圖的前後和 v3.8.1 一樣。
  */
 export function sceneObjects(L: Layout): SceneObject[] {
   const c = sceneCache.get(L)
   if (c && c.P === L.placement) return c.list
   const list: SceneObject[] = []
-  for (const id of PLACE_ORDER) {
+  for (const id of L.placement.order) {
     if (NOT_SCENE.has(id)) continue
     const it = L.placement.placed.get(id)
     if (it) list.push({ key: SCENE_KEY[it.kind] ?? it.kind, id, kind: it.kind, x: it.x, y: it.y })

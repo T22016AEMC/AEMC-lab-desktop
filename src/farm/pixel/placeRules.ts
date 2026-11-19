@@ -1,4 +1,4 @@
-import { layoutItemDef, type LayoutKind } from '../config/layoutItems'
+import { isInstanceId, layoutItemDef, type LayoutKind } from '../config/layoutItems'
 import type { BuildingId } from '../config/buildings'
 import {
   BACK_BASE, CAT_TREE_H, KENNEL_AX, KENNEL_H, TOWER_H, boardGreenRect, catTreeHitsTower, doorRect, ownedSlots, setPlacement, towerClockRect, towerDoorRect,
@@ -183,6 +183,8 @@ export function canPlace(L: Layout, id: string, x: number, y: number): PlaceResu
     const def = layoutItemDef(id)
     if (!def) return { ok: false, reason: 'unknown', detail: '物件表沒有 ' + id }
     if (def.building && !L.placement.owned.has(id)) return { ok: false, reason: 'unknown', detail: '還沒買 ' + id }
+    // v4.0 商店實例：要在擺放結果裡（擺著或在倉庫）才算擁有
+    if (isInstanceId(id) && !L.placement.placed.has(id) && !L.placement.stored.has(id)) return { ok: false, reason: 'unknown', detail: '沒有擁有 ' + id }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false, reason: 'outside', detail: '座標不是數字' }
     // 1. 範圍
     const r = placeRange(L, def.kind)

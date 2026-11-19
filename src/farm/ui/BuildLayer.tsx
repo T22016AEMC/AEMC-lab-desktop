@@ -34,7 +34,7 @@ export function BuildLayer({ engine, layoutVersion }: { engine: PixelEngine; lay
     const save = useFarmStore.getState().save
     // 預設位置現在放得下嗎：假設已經買了（擺在預設位置），用擺放規則判斷；存檔裡這棟建築以前殘留的紀錄一律忽略（買下時 buyBuilding 也會拿掉）
     const d = DEFAULT_POS[id]
-    const T = save ? layoutWith(L, resolvePlacement([...save.ownedBuildings, id], withoutRecord(save.farmLayout, id))) : null
+    const T = save ? layoutWith(L, resolvePlacement([...save.ownedBuildings, id], withoutRecord(save.farmLayout, id), save.shop?.decor)) : null
     const blocked = !T || !d || !canPlace(T, id, d.x, d.y).ok
     const err = useFarmStore.getState().buyBuilding(id, blocked)
     if (err) useUIStore.getState().showToast(err)

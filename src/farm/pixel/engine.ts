@@ -126,7 +126,7 @@ import { layoutWith } from './placeRules'
 import { pickObject } from './editDrag'
 import { picnicMatFitsAt } from './picnic'
 import type { LayoutKind } from '../config/layoutItems'
-import type { FarmLayout } from '../save/types'
+import type { DecorInstance, FarmLayout } from '../save/types'
 
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
 export class PixelEngine {
@@ -152,6 +152,8 @@ export class PixelEngine {
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
   /** v3.9.0：存檔的 farmLayout 與算出來的擺放結果（setLayoutData 時換新的） */
   private farmLayout: FarmLayout | undefined = undefined
+  /** v4.0：存檔 shop.decor（商店買來的擺設實例） */
+  private decor: readonly DecorInstance[] | undefined = undefined
   placement: Placement = defaultPlacement()
   /**
    * v3.9.0 擺設模式（農場模式）：寵物暫停（位置與動畫都停住）、滑鼠互動關閉；畫面層同時隱藏畫布上的透明入口。
@@ -305,17 +307,18 @@ export class PixelEngine {
    * 設定已購買的建築（存檔變動時呼叫）：保留目前的擺放紀錄，重新算擺放結果（見 setLayoutData）。
    */
   setOwned(ids: readonly string[]): void {
-    this.setLayoutData(ids, this.farmLayout)
+    this.setLayoutData(ids, this.farmLayout, this.decor)
   }
 
   /**
    * v3.9.0：設定已購買的建築與存檔的擺放紀錄（任一個變動時呼叫）→ 換一個新的擺放結果（擺放版本 +1，所有版面快取跟著失效）。
    * 擺出來的物件腳下佔地是障礙，寵物繞行；站在新障礙裡的寵物會被推出來。載入時不檢查重疊、不改寫存檔。
    */
-  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined): void {
+  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined, decor?: readonly DecorInstance[]): void {
     const before = this.buildings()
     this.farmLayout = farmLayout
-    this.placement = resolvePlacement(owned, farmLayout)
+    this.decor = decor
+    this.placement = resolvePlacement(owned, farmLayout, decor)
     setPlacement(this.layout, this.placement)
     // v3.9.0：建築收進庫存或換了位置 → 正在使用（走過去、坐著、睡著、吃著）的寵物離開那個建築，回到座位旁的地面
     // （睡著的繼續睡，之後照一般規則睡在地上或走去新位置）。座位旁剛好被別的物件佔住就推到最近的可站位置

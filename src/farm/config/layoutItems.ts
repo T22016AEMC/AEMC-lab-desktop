@@ -58,7 +58,43 @@ export const LAYOUT_ITEMS: readonly LayoutItemDef[] = [
 const BY_ID: ReadonlyMap<string, LayoutItemDef> = new Map(LAYOUT_ITEMS.map((d) => [d.id, d]))
 const KINDS: ReadonlySet<string> = new Set(LAYOUT_ITEMS.map((d) => d.kind))
 
-export const layoutItemDef = (id: unknown): LayoutItemDef | undefined => (typeof id === 'string' ? BY_ID.get(id) : undefined)
+/**
+ * v4.0：可以從商店買來「再多一個」的擺設種類（實例 id「種類#編號」，例如 rocks#3；存檔 shop.decor）。
+ * 這張表和商品設定表（config/shop.ts）分開管理：商品可以增減，種類只增不減（已經買的實例永遠認得）；
+ * 存檔驗證（migrate.ts 的 cleanShop、cleanFarmLayout）只看這張表，不看商品表。
+ * 路燈（有燈光）、樹（樹根有特別處理、很大）、住家等有特殊機制的不在表裡。
+ */
+export const INSTANCE_KINDS: readonly LayoutKind[] = ['mushroom', 'flowers', 'rocks', 'bush', 'planter', 'coral', 'stump', 'tall_grass']
+const INSTANCE_KIND_SET: ReadonlySet<string> = new Set(INSTANCE_KINDS)
+export const isInstanceKind = (v: unknown): v is LayoutKind => typeof v === 'string' && INSTANCE_KIND_SET.has(v)
+
+/** 實例編號上限（防壞檔；正常遊戲一輩子也到不了） */
+export const INSTANCE_N_MAX = 999999
+export const instanceId = (kind: LayoutKind, n: number): string => `${kind}#${n}`
+/** 「種類#編號」→ 種類與編號；格式不對、種類不在表裡 → null */
+export function parseInstanceId(id: unknown): { kind: LayoutKind; n: number } | null {
+  if (typeof id !== 'string') return null
+  const m = /^([a-z_]+)#([1-9]\d{0,5})$/.exec(id)
+  if (!m || !isInstanceKind(m[1])) return null
+  return { kind: m[1], n: Number(m[2]) }
+}
+export const isInstanceId = (id: unknown): boolean => parseInstanceId(id) !== null
+
+const instanceCache = new Map<string, LayoutItemDef>()
+/** 實例的物件定義：名稱沿用同種類內建擺設的名稱、可以收進倉庫、沒有預設位置（沒有擺放紀錄 = 在倉庫） */
+function instanceDef(id: string): LayoutItemDef | undefined {
+  const hit = instanceCache.get(id)
+  if (hit) return hit
+  const p = parseInstanceId(id)
+  if (!p) return undefined
+  const base = LAYOUT_ITEMS.find((d) => d.kind === p.kind)
+  const def: LayoutItemDef = { id, kind: p.kind, name: base?.name ?? p.kind, storable: true, hasDefault: false }
+  if (instanceCache.size < 4096) instanceCache.set(id, def)
+  return def
+}
+
+/** 物件定義：內建的 18 個固定 id，或商店買來的實例「種類#編號」（實例是否真的擁有看存檔 shop.decor） */
+export const layoutItemDef = (id: unknown): LayoutItemDef | undefined => (typeof id === 'string' ? (BY_ID.get(id) ?? instanceDef(id)) : undefined)
 export const isLayoutKind = (v: unknown): v is LayoutKind => typeof v === 'string' && KINDS.has(v)
 
 /** 存檔 farmLayout.items 原始陣列最多看這麼多筆（再多的直接略過，避免壞檔吃光時間） */
