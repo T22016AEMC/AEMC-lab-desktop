@@ -52,7 +52,7 @@ export interface EarningState {
   date: string
   /** 今日從啟動台程式賺到的金幣（上限 BALANCE.earn.program.dailyMax） */
   programCoins: number
-  /** 今日玩遊戲賺到的金幣（上限 BALANCE.earn.game.dailyMax） */
+  /** 今日玩遊戲賺到的金幣。v3.10.0 起小遊戲不再給金幣：只為了和舊存檔、舊版程式相容而保留（讀寫照舊、每天歸零、不再增加） */
   gameCoins: number
   /** 各程式上次給金幣的時間（毫秒時間戳，程式 id → 時間）；冷卻跨日也有效 */
   lastAward: Record<string, number>

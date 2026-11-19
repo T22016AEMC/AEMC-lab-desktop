@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { BuiltinAppProps } from '../../types'
 import { FitCanvas, beginFrame } from '../shared/FitCanvas'
 import { GameShell } from '../shared/GameShell'
-import { useAnimationFrame, useBest, useGameStatus, useKeys, useRoundReward } from '../shared/hooks'
+import { useAnimationFrame, useBest, useGameStatus, useKeys } from '../shared/hooks'
 import { playSfx, type Sfx } from '../shared/sound'
 import { drawShooter } from './draw'
 import { H, W, createState, movePlayerBy, update, type ShooterState } from './engine'
@@ -19,7 +19,6 @@ const SFX_MAP: Record<string, Sfx> = {
 /** 觸控／滑鼠拖曳：飛機跟著手指移動的相對位移（邏輯座標） */
 export default function Shooter(props: BuiltinAppProps) {
   const game = useGameStatus(props)
-  const reward = useRoundReward('game-shooter')
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const state = useRef<ShooterState>(createState())
   const drag = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -35,7 +34,6 @@ export default function Shooter(props: BuiltinAppProps) {
     setScore(0)
     setWave(0)
     setNewRecord(false)
-    reward.arm()
     game.start()
   }
 
@@ -105,7 +103,6 @@ export default function Shooter(props: BuiltinAppProps) {
       setWave((w) => (w === s.wave ? w : s.wave))
       if (s.over) {
         setNewRecord(submit(s.score))
-        reward.report({ score: s.score })
         game.finish()
       }
     } else if (game.status === 'over') {

@@ -8,7 +8,7 @@ import { layoutItemDef } from '../config/layoutItems'
 import { withoutRecord } from '../pixel/placement'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
-import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
+import { claimProgram, earningToday } from '../sim/earning'
 import { claimDaily, collectGift, giftCandidates, newSave, registerGift, todayKey } from '../sim/points'
 import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
@@ -91,8 +91,6 @@ interface FarmState {
   eatAtBowl: (petId: string) => string | null
   /** 從啟動台成功開啟使用者的程式：依冷卻與每日上限給金幣，回傳實際給的數量 */
   earnProgram: (appId: string) => number
-  /** 一局遊戲結束：達標才給金幣，回傳實際給的數量 */
-  earnGame: (gameId: string, result: GameResult) => number
   /** 週期性擲禮物 */
   rollGift: (rand?: () => number) => void
   collectGift: (petId: string) => void
@@ -380,19 +378,6 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (r.coins > 0) {
       const p = earningToday(r.save, now)
       useUIStore.getState().showToast(`+${r.coins} 金幣（今日 ${p.programCoins}/${p.programMax}）`)
-    }
-    return r.coins
-  },
-
-  earnGame: (gameId, result) => {
-    const save = get().save
-    if (!save) return 0
-    const now = gameNow()
-    const r = claimGame(save, gameId, result, now)
-    if (r.save !== save) set({ save: r.save })
-    if (r.coins > 0) {
-      const p = earningToday(r.save, now)
-      useUIStore.getState().showToast(`+${r.coins} 金幣（今日 ${p.gameCoins}/${p.gameMax}）`)
     }
     return r.coins
   },

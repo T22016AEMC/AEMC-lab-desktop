@@ -1,0 +1,9 @@
+{
+  "name": "aemc-desktop-tests-calendar-tweaks",
+  "private": true,
+  "description": "v3.10.0 第一批（取消遊戲金幣、兩分頁寫入權、簽到月曆、四項小改）測試封存（不接進主專案的 npm scripts）。只裝瀏覽器測試用的 playwright-core。",
+  "type": "module",
+  "devDependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

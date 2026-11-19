@@ -128,28 +128,13 @@ export const BALANCE = {
   /**
    * 賺金幣（純前端、無法防作弊，之後帳號與雲端階段再處理）。
    * 冷卻與每日上限的時間一律用遊戲時間來源（overrides.gameNow），每日進度以本地日期 00:00 重置。
+   * v3.10.0 起小遊戲不再給金幣（遊戲本身保留）；存檔的 earning.gameCoins 只為相容保留。
    */
   earn: {
     /** 從啟動台開啟使用者的程式：每個程式每小時最多一次，所有程式合計每天上限 */
     program: { coin: 3, cooldownMs: 3_600_000, dailyMax: 10 },
-    /** 玩遊戲：每局達到「達標條件」給的金幣，所有遊戲合計每天上限 */
-    game: { coin: 1, dailyMax: 5 },
   },
-  /**
-   * 5 個遊戲的達標條件（遊戲結束時判定一次）。目標：容易達成、但不會一開局就給。
-   *  - minesweeper：獲勝（任一難度清完所有安全格）
-   *  - game2048：最大方塊達到 512
-   *  - snake：吃到 10 顆蘋果（分數 = 蘋果數）
-   *  - pinball：3 顆球合計 1500 分（撞一次彈跳器 100 分）
-   *  - shooter：1500 分（約打下 12 架小兵，或撐到第 2～3 波）
-   */
-  gameGoals: {
-    'game-minesweeper': { kind: 'win' },
-    'game-2048': { kind: 'maxTile', min: 512 },
-    'game-snake': { kind: 'score', min: 10 },
-    'game-pinball': { kind: 'score', min: 1500 },
-    'game-shooter': { kind: 'score', min: 1500 },
-  },
+
 
   /**
    * 建築（本版開放：食盆水盆、狗窩、貓跳台；其餘 5 種 v3.3.0 才開放）。價格單位是金幣。

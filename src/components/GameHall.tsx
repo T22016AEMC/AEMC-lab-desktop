@@ -1,6 +1,3 @@
-import { gameNow } from '../farm/overrides'
-import { earningToday } from '../farm/sim/earning'
-import { useFarmStore } from '../farm/store/farmStore'
 import { gameApps } from '../config/registry'
 import { useWindowStore } from '../store/windowStore'
 import { AppIcon } from './AppIcon'
@@ -15,8 +12,6 @@ const ICON_SIZE = 64
 export default function GameHall() {
   const openApp = useWindowStore((s) => s.openApp)
   const closeWindow = useWindowStore((s) => s.closeWindow)
-  const save = useFarmStore((s) => s.save)
-  const today = save ? earningToday(save, gameNow()) : null
 
   return (
     <div className="flex h-full w-full flex-col items-center overflow-y-auto bg-gradient-to-b from-[#3a2a1c] to-[#241a12] px-5 py-5 text-[#fff3d0]">
@@ -38,11 +33,6 @@ export default function GameHall() {
           </button>
         ))}
       </div>
-      {today && (
-        <div className="mt-auto pt-4 text-xs text-[#ffd98a]/80" data-testid="game-hall-earn">
-          今日遊戲金幣 {today.gameCoins}/{today.gameMax}
-        </div>
-      )}
     </div>
   )
 }
