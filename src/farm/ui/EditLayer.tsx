@@ -6,8 +6,8 @@ import type { PixelEngine } from '../pixel/engine'
 import { beginInventoryDrag, beginSceneDrag, cantStoreText, dropDecision, footAt, isDragMove, type EditDrag } from '../pixel/editDrag'
 import { BOUGHT_TO_INVENTORY } from './BuildLayer'
 import { fromCss, rectCss } from '../pixel/layout'
-import { KIND_GEOM, placementToLayout, resolvePlacement, spriteBoxAt, withMove } from '../pixel/placement'
-import { PLACE_REASON_TEXT, canPlace, canStore } from '../pixel/placeRules'
+import { KIND_GEOM, layoutAfterMove, resolvePlacement, spriteBoxAt } from '../pixel/placement'
+import { PLACE_REASON_TEXT, canPlace, canStore, layoutWith } from '../pixel/placeRules'
 import { useFarmStore } from '../store/farmStore'
 import { PixelSprite } from './PixelSprite'
 
@@ -147,13 +147,16 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   const finish = (st: DragState): void => {
     engine.editGhost = null
     checkKey.current = ''
-    const L = engine.layout
+    const store = useFarmStore.getState()
+    const save = store.save
+    if (!save) return
+    // 判斷與寫入都用「目前存檔」算出的擺放結果（引擎要到下一個影格才跟上存檔）
+    const L = layoutWith(engine.layout, resolvePlacement(save.ownedBuildings, save.farmLayout))
     const dec = dropDecision(L, st.d, st.foot, st.overInv)
     const name = layoutItemDef(st.d.id)?.name ?? ''
-    const store = useFarmStore.getState()
-    if (dec.kind === 'place') store.setFarmLayout(placementToLayout(withMove(L.placement, st.d.id, dec.x, dec.y)))
+    if (dec.kind === 'place') store.setFarmLayout(layoutAfterMove(save.ownedBuildings, save.farmLayout, st.d.id, dec.x, dec.y))
     else if (dec.kind === 'store') {
-      store.setFarmLayout(placementToLayout(withMove(L.placement, st.d.id, null, null)))
+      store.setFarmLayout(layoutAfterMove(save.ownedBuildings, save.farmLayout, st.d.id, null, null))
       ui().showToast(EDIT_TEXT.stored(name), 1800)
       setSelected(null)
     } else if (dec.kind === 'revert') ui().showToast(dec.reason, 2500)
@@ -247,10 +250,12 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   }
 
   const storeSelected = (): void => {
-    const L = engine.layout
-    if (!selected || !canStore(L, selected)) return
+    const save = useFarmStore.getState().save
+    if (!save || !selected) return
+    const L = layoutWith(engine.layout, resolvePlacement(save.ownedBuildings, save.farmLayout))
+    if (!canStore(L, selected)) return
     const name = layoutItemDef(selected)?.name ?? ''
-    useFarmStore.getState().setFarmLayout(placementToLayout(withMove(L.placement, selected, null, null)))
+    useFarmStore.getState().setFarmLayout(layoutAfterMove(save.ownedBuildings, save.farmLayout, selected, null, null))
     ui().showToast(EDIT_TEXT.stored(name), 1800)
     setSelected(null)
   }

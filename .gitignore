@@ -10,3 +10,9 @@ screenshots/
 # 像素素材原圖（不進 repo）
 像素風圖片/
 /assets-src/
+
+# 測試封存的暫存（舊版原始碼、輸出、截圖、playwright）
+tests-archive/**/.work/
+tests-archive/**/node_modules/
+tests-archive/**/shots/
+tests-archive/**/browser/diff-pixels.json

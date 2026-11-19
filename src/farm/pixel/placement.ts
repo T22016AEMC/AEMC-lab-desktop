@@ -164,6 +164,22 @@ export function placementToLayout(P: Placement): FarmLayout {
   return { items }
 }
 
+/**
+ * 依「目前存檔」（不是引擎上一個影格的擺放結果）算移動／收進庫存之後要寫回的擺放紀錄（x、y 皆 null = 收進庫存）。
+ * 擺設介面寫入存檔時一律走這裡：同一個影格內連續兩次寫入（例如剛買下建築放進倉庫、緊接著又放下別的東西）時，
+ * 第二次要看得到第一次的結果，否則第一次的變更會被覆蓋。
+ */
+export function layoutAfterMove(owned: readonly string[], layout: FarmLayout | undefined, id: string, x: number | null, y: number | null): FarmLayout {
+  return placementToLayout(withMove(resolvePlacement(owned, layout), id, x, y))
+}
+
+/** 拿掉某個物件的擺放紀錄（買建築時忽略存檔裡這棟建築以前殘留的紀錄）；沒有紀錄可拿時原樣回傳 */
+export function withoutRecord(layout: FarmLayout | undefined, id: string): FarmLayout | undefined {
+  if (!layout || !layout.items.some((it) => it.id === id)) return layout
+  const items = layout.items.filter((it) => it.id !== id)
+  return items.length > 0 ? { items } : undefined
+}
+
 // ---------------------------------------------------------------------------
 // 遮擋：寵物（腳底在 x、y）被「畫在牠前面的物件」蓋住多少
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { buildingDef } from '../farm/config/buildings'
+import { placementToLayout, resolvePlacement } from '../farm/pixel/placement'
 import { isNewerData, isResetSchema, legacyRefundOf, parseSave } from '../farm/save/migrate'
 import { CURRENT_SCHEMA_VERSION, type SaveData, type SaveStorage } from '../farm/save/types'
 import { APP_LIST_SCHEMA_VERSION, parseAppList, type AppListData } from '../store/appListStore'
@@ -79,7 +80,8 @@ export function summarize(b: BackupFile): BackupSummary {
     refund: 0,
     noteCount: b.data.farm.notes?.length ?? 0,
     hasNotes: b.formatVersion >= NOTES_FORMAT_VERSION,
-    layoutCount: b.data.farm.farmLayout?.items.length ?? 0,
+    // 只算清理後有效、而且和預設不同的物件（沒買的建築、和預設位置相同的紀錄不算）
+    layoutCount: placementToLayout(resolvePlacement(b.data.farm.ownedBuildings, b.data.farm.farmLayout)).items.length,
   }
 }
 

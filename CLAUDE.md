@@ -218,3 +218,6 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **倉庫的後果**：`sim/buildings.ts` 的 `isStored`／`isPlacedBuilding`；食盆收起＝沒買（不自動吃、手動餵 1 金幣、`bowl.used` 不動，不能靠收起刷份量）；狗窩、貓跳台收起後寵物睡地上、不躲雨。
 - **介面**：`ui/EditLayer.tsx`（編輯分頁）、`ui/BuildLayer.tsx`（購買分頁）、`ui/farmHotkey.ts`（E）、`pixel/editDrag.ts`（拖曳、點擊與拖曳的判斷）；`uiStore.buildMode`／`farmTab`／`farmBuyNotice` 只在記憶體，不存檔。
 - **素材**：花槽 62×45、珊瑚 59×50（`PLANTER_SCALE`／`CORAL_SCALE` 預設 0.7）；`process-assets.mjs` 用 `isBgNear`＋`trimMagentaFringe` 只處理這兩格，其他素材逐像素不變。
+- **擺設寫入一律用「目前存檔」算**：`EditLayer` 放下／收進倉庫時用 `layoutAfterMove(save.ownedBuildings, save.farmLayout, id, x, y)`（`placement.ts`），不能用 `engine.layout.placement`（引擎要到下一個影格才跟上存檔；同一影格內連續兩次寫入，第二次會蓋掉第一次）。買建築時 `farmStore.buyBuilding` 用 `withoutRecord` 忽略存檔裡這棟建築以前殘留的擺放紀錄；匯入摘要的 `layoutCount` 只算 `placementToLayout(resolvePlacement(...))` 的項目。
+- **已知限制（不修）**：(1) 還開著的 v3.8.x 舊分頁匯出的備份不含擺放（舊版已出貨，新版分不出來）；(2) 兩個 v3.9.0 分頁同時開，後存的覆蓋先存的（寵物、金幣一直如此，4.0.0 再考慮跨分頁偵測）；(3) `backupActions.exportBackup` 先 `flushSave()` 再立刻 `load()`，因為 `LocalStorageAdapter.save` 會先 `await snapshot()` 才寫入，匯出檔可能少掉最後一個節流區間的變動（以前就有；擺放不受影響，`setFarmLayout` 放下就立刻寫入）。
+- **測試**：`tests-archive/v390/`（不接 npm scripts；環境、執行方式、已知例外見該資料夾的 README.md）。

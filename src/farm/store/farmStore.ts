@@ -5,6 +5,7 @@ import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, 
 import { LocalStorageAdapter, setNewerDataHandler } from '../save/storage'
 import type { FarmLayout, Find, SaveData, SaveStorage } from '../save/types'
 import { layoutItemDef } from '../config/layoutItems'
+import { withoutRecord } from '../pixel/placement'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimGame, claimProgram, earningToday, type GameResult } from '../sim/earning'
@@ -333,10 +334,16 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const r = buyBuilding(save, id)
     if (r.error) return r.error
     let next = r.save
+    // 存檔裡這棟（還沒買的）建築以前殘留的擺放紀錄一律忽略：不論放不放進倉庫，都從預設位置規則重新來
+    const kept = withoutRecord(next.farmLayout, id)
+    if (kept !== next.farmLayout) {
+      next = { ...next }
+      if (kept) next.farmLayout = kept
+      else delete next.farmLayout
+    }
     if (storeIt) {
       const def = layoutItemDef(id)
-      const items = (next.farmLayout?.items ?? []).filter((it) => it.id !== id)
-      if (def) next = { ...next, farmLayout: { items: [...items, { id, kind: def.kind, state: 'stored' }] } }
+      if (def) next = { ...next, farmLayout: { items: [...(next.farmLayout?.items ?? []), { id, kind: def.kind, state: 'stored' }] } }
     }
     set({ save: next })
     flushSave()
