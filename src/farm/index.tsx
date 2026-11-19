@@ -720,10 +720,12 @@ export function Farm() {
       if (!scene || !frame || !win) throw new Error('相框還沒載入')
       const { w, h } = cropSizeFor(win)
       const crop = photoCrop(engine.layout, mat, w, h)
-      const photo = composePolaroid(scene, crop, frame, win)
+      // v3.10.0：拍照當下取一次時間（遊戲時間來源），相框日期與下載檔名用同一個
+      const shotAt = new Date(gameNow())
+      const photo = composePolaroid(scene, crop, frame, win, shotAt)
       const [b1, b2] = await Promise.all([canvasBlob(photo), canvasBlob(upscale(photo, DOWNLOAD_SCALE))])
       if (!b1 || !b2) throw new Error('瀏覽器無法產生圖片')
-      setShot({ url: URL.createObjectURL(b1), downloadUrl: URL.createObjectURL(b2), fileName: photoFileName(new Date(gameNow())), w: photo.width, h: photo.height, frame: key })
+      setShot({ url: URL.createObjectURL(b1), downloadUrl: URL.createObjectURL(b2), fileName: photoFileName(shotAt), w: photo.width, h: photo.height, frame: key })
     } catch (e) {
       useUIStore.getState().showToast('拍照失敗：' + (e instanceof Error ? e.message : String(e)))
     } finally {
