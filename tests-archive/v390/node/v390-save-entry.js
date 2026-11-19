@@ -87,14 +87,15 @@ const withoutLayout = (s) => { const c = { ...s }; delete c.farmLayout; return c
 {
   const a = parseSave(clone(BASE)), b = parse381(clone(BASE))
   ok(a && !('farmLayout' in a), 'S1 沒有欄位 → 結果沒有 farmLayout')
-  eq(a.dataRev, 5, 'S1 dataRev 4（v3.10.0：5）')
-  eq(DATA_REV, 5, 'DATA_REV = 4（v3.10.0：5）')
+  eq(a.dataRev, 6, 'S1 dataRev 4（v3.10.0：5；v4.0：6）')
+  eq(DATA_REV, 6, 'DATA_REV = 4（v3.10.0：5；v4.0：6）')
   eq(CURRENT_SCHEMA_VERSION, 5, 'schemaVersion 仍是 5')
   eq({ ...a, dataRev: 3 }, b, 'S1 其他欄位和 v3.8.1 的 parseSave 逐欄相同')
   eq(parseSave({ ...clone(BASE), farmLayout: undefined }), a, 'S1 farmLayout: undefined 一樣')
   ok(!isNewerData({ ...BASE, dataRev: 4 }), '新版自己寫的 dataRev 4 不算較新')
   ok(!isNewerData({ ...BASE, dataRev: 5 }), 'dataRev 5 不算較新（v3.10.0：5 是目前版本）')
-  ok(isNewerData({ ...BASE, dataRev: 6 }), 'dataRev 6 算較新（v3.10.0）')
+  ok(!isNewerData({ ...BASE, dataRev: 6 }), 'dataRev 6 不算較新（v4.0：6 是目前版本）')
+  ok(isNewerData({ ...BASE, dataRev: 7 }), 'dataRev 7 算較新（v4.0）')
 }
 
 // ================= S3：逐條規則的固定案例 =================
@@ -245,7 +246,7 @@ const withoutLayout = (s) => { const c = { ...s }; delete c.farmLayout; return c
 // ================= S5：舊分頁保護（v3.8.1、v3.8.0 讀到 dataRev 4）=================
 {
   const newSave = parseSave({ ...clone(BASE), farmLayout: { items: [{ id: 'lamp', kind: 'lamp', state: 'placed', x: 500, y: 290 }, { id: 'coral', kind: 'coral', state: 'placed', x: 200, y: 250 }] } })
-  eq(newSave.dataRev, 5, 'S5 新版存檔 dataRev 4（v3.10.0：5）')
+  eq(newSave.dataRev, 6, 'S5 新版存檔 dataRev 4（v3.10.0：5；v4.0：6）')
   for (const [tag, Adapter, setH] of [['v3.8.1', Adapter381, setNewer381], ['v3.8.0', Adapter380, setNewer380]]) {
     store.clear()
     const text = JSON.stringify(newSave)
@@ -270,7 +271,7 @@ const withoutLayout = (s) => { const c = { ...s }; delete c.farmLayout; return c
   const appList = { schemaVersion: APP_LIST_SCHEMA_VERSION, apps: [] }
   const LAY = { items: [{ id: 'lamp', kind: 'lamp', state: 'stored' }, { id: 'planter', kind: 'planter', state: 'placed', x: 333, y: 222 }, { id: 'house', kind: 'house', state: 'placed', x: 80, y: 314 }] }
   const REV = { 2: 1, 3: 1, 4: 2, 5: 3, 6: 4 }
-  eq(BACKUP_FORMAT_VERSION, 7, '匯出格式 6（v3.10.0：7）')
+  eq(BACKUP_FORMAT_VERSION, 8, '匯出格式 6（v3.10.0：7；v4.0：8）')
   eq(LAYOUT_FORMAT_VERSION, 6, '擺放從格式 6 起讀取')
   for (const fv of [2, 3, 4, 5, 6]) {
     const file = { format: 'aemc-desktop-backup', formatVersion: fv, exportedAt: '2026-11-18T00:00:00.000Z', appVersion: 'x', data: { farm: { ...clone(BASE), dataRev: REV[fv], farmLayout: clone(LAY) }, appList } }
@@ -286,7 +287,7 @@ const withoutLayout = (s) => { const c = { ...s }; delete c.farmLayout; return c
     }
   }
   // 格式 7、dataRev 5 → 較新
-  for (const [m, fv, rev] of [['格式 8', 8, 4], ['格式 6 但 dataRev 6', 6, 6]]) { // v3.10.0：較新的是格式 8、dataRev 6
+  for (const [m, fv, rev] of [['格式 9', 9, 4], ['格式 6 但 dataRev 7', 6, 7]]) { // v3.10.0：較新的是格式 8、dataRev 6；v4.0：格式 9、dataRev 7
     const t = JSON.stringify({ format: 'aemc-desktop-backup', formatVersion: fv, exportedAt: '', appVersion: '', data: { farm: { ...clone(BASE), dataRev: rev }, appList } })
     const r = parseBackup(t, t.length)
     ok(!r.ok && r.error === NEWER_VERSION_MESSAGE, `S6 ${m} 拒絕（較新版本）`)
@@ -294,7 +295,7 @@ const withoutLayout = (s) => { const c = { ...s }; delete c.farmLayout; return c
   // 匯出 → 匯入 往返
   const farm = parseSave({ ...clone(BASE), farmLayout: clone(LAY) })
   const exp = buildBackup(farm, appList, '3.9.0', new Date('2026-11-18T08:00:00Z'))
-  eq(exp.formatVersion, 7, 'S6 匯出 formatVersion 6（v3.10.0：7）')
+  eq(exp.formatVersion, 8, 'S6 匯出 formatVersion 6（v3.10.0：7；v4.0：8）')
   const text = JSON.stringify(exp)
   const back = parseBackup(text, text.length)
   ok(back.ok, 'S6 自己匯出的檔案匯入成功')

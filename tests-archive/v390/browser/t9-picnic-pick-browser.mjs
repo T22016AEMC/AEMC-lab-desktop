@@ -247,7 +247,7 @@ let chosen = null
   const CROWD = { items: [['coral', 165], ['planter', 260], ['stump', 355], ['rocks', 450], ['bush', 545], ['tall_grass', 608]].map(([id, x]) => ({ id, kind: id, state: 'placed', x, y: 200 })) }
   const { ctx, page } = await open(save({ farmLayout: CROWD }))
   await page.getByTestId('picnic-button').click()
-  ok((await toast(page, '草地太擠')) && !(await picking(page)), '9 草地太擠：提示「草地太擠…」、不進入選位置')
+  ok((await toast(page, '擺設太多')) && !(await picking(page)), '9 草地太擠：提示「草地太擠…」、不進入選位置（v4.0：「擺設太多…」）')
   await ctx.close()
 }
 

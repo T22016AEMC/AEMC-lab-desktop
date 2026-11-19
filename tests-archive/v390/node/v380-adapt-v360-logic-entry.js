@@ -41,7 +41,7 @@ const W37 = (stored, raw, skip = []) => {
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') out[k] = S37(st[k])
   const want = {}
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') want[k] = r[k]
-  if (st.dataRev !== 5 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5
+  if (st.dataRev !== 6 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5；v4.0：6
   return [out, want]
 }
 process.on('exit', () => console.log('（v3.8.0 adapt：另外檢查了 ' + __n380 + ' 次「舊寵物個性 = 用 id 算的」）'))
@@ -204,7 +204,7 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   eq(r.notices, [{ id: 'catAtlantis', coins: 100 }], '貓：L003＋L004'); eq(r.save.skins, { owned: ['tower.gold'], equipped: { tower: 'tower.gold' } }, '黃金鐘樓')
   s = { ...base(), collection: { L001: 1, L002: 1, L003: 1, L004: 1 } }
   r = checkEvents(s, NOW)
-  eq(r.notices.map((x) => x.id), ['dogVault', 'catAtlantis']); eq([...r.save.skins.owned].sort(), ['house.gold', 'tower.gold']); eq(r.save.skins.equipped, { house: 'house.gold', tower: 'tower.gold' })
+  eq(r.notices.map((x) => x.id), ['dogVault', 'catAtlantis', 'colLegend']); /* v4.0：L001～L004 全有時多了獨立的新事件「傳說全集齊」（+100），排在配對之後 */ eq([...r.save.skins.owned].sort(), ['house.gold', 'tower.gold']); eq(r.save.skins.equipped, { house: 'house.gold', tower: 'tower.gold' })
   eq(checkEvents({ ...base(), collection: { L001: 5 } }, NOW).notices, [], '只有 L001 不觸發')
   // 透過 revealFind 的最後一片觸發（rand 序列：結果→挑缺的項目→缺的片）
   const others = Object.fromEntries(itemsFor('dog', 'uncommon').filter((d) => d.id !== 'U002').map((d) => [d.id, 1]))
@@ -241,7 +241,7 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   ok(s, '舊存檔可讀（不重置）')
   for (const k of Object.keys(raw)) if (k !== 'earning') eq(S37(s[k]), raw[k], '逐欄相同：' + k)
   eq(s.earning, { ...raw.earning, digCoins: 0 }, 'earning 原欄位相同，多 digCoins: 0')
-  eq([s.collection, s.finds, s.events, s.skins, s.dataRev, s.schemaVersion], [{}, [], {}, { owned: [], equipped: {} }, 5, 5], '新欄位補預設；schemaVersion 維持 5（v3.8.0：dataRev 3；v3.10.0：dataRev 5）')
+  eq([s.collection, s.finds, s.events, s.skins, s.dataRev, s.schemaVersion], [{}, [], {}, { owned: [], equipped: {} }, 6, 5], '新欄位補預設；schemaVersion 維持 5（v3.8.0：dataRev 3；v3.10.0：dataRev 5；v4.0：6）')
   eq(isResetSchema(raw), false, '不是重置用的舊格式')
   eq(parseSave(JSON.parse(JSON.stringify(s))), s, '冪等')
   // 存檔含已移除／從沒發布過的建築 id（sandbox、campfire）：安全過濾、不重置、不報錯、其餘欄位逐欄相同（營火照舊退款 20）
@@ -274,7 +274,7 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   // 存檔保護
   let warned = 0
   setNewerDataHandler(() => warned++)
-  const newer = { ...raw, dataRev: 6, points: 999 } // v3.10.0：較新的是 dataRev 6
+  const newer = { ...raw, dataRev: 7, points: 999 } // v3.10.0：較新的是 dataRev 6；v4.0：7
   store.set('t-key', JSON.stringify(newer))
   const lr2 = await A.loadOrReset(() => base())
   eq([lr2.save, lr2.reset, lr2.newer], [null, 'none', true], '更新版本的資料：不讀、不重置'); eq(JSON.parse(store.get('t-key')), newer, '沒被動到')
@@ -284,23 +284,23 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   eq((await A.loadOrReset(() => base())).newer, true, 'schemaVersion 更大也一樣')
   store.set('t-key', JSON.stringify(raw))
   await A.save(s)
-  eq(JSON.parse(store.get('t-key')).dataRev, 5, '同版本正常寫入（v3.8.0：dataRev 3；v3.10.0：dataRev 5）'); eq(warned, 1)
-  eq(isNewerData({ schemaVersion: 5, dataRev: 1 }), false); eq(isNewerData({ schemaVersion: 5 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 2 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 3 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 4 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 5 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 6 }), true) // v3.10.0：5 是目前版本
+  eq(JSON.parse(store.get('t-key')).dataRev, 6, '同版本正常寫入（v3.8.0：dataRev 3；v3.10.0：dataRev 5；v4.0：6）'); eq(warned, 1)
+  eq(isNewerData({ schemaVersion: 5, dataRev: 1 }), false); eq(isNewerData({ schemaVersion: 5 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 2 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 3 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 4 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 5 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 6 }), false); eq(isNewerData({ schemaVersion: 5, dataRev: 7 }), true) // v3.10.0：5 是目前版本；v4.0：6 是目前版本
   setNewerDataHandler(null)
   // 匯出入
   const list = { schemaVersion: 1, apps: [] }
   const col = { ...s, collection: { C001: 2, 'U002-1': 1 }, finds: [{ id: 'x', kind: 'mound', by: 'dog', fx: 0.4, fy: 0.6, at: NOW }], events: { dogLeak: NOW }, skins: { owned: ['house.gold'], equipped: { house: 'house.gold' } } }
-  eq(BACKUP_FORMAT_VERSION, 7, '匯出檔格式版本 5（v3.8.0；v3.10.0：7）')
+  eq(BACKUP_FORMAT_VERSION, 8, '匯出檔格式版本 5（v3.8.0；v3.10.0：7；v4.0：8）')
   const b3 = buildBackup(col, list, '3.6.0', new Date(NOW))
-  eq(b3.formatVersion, 7) // v3.8.0；v3.10.0：7
+  eq(b3.formatVersion, 8) // v3.8.0；v3.10.0：7；v4.0：8
   const p3 = parseBackup(JSON.stringify(b3), 100)
   ok(p3.ok, 'v3 匯入'); eq(p3.backup.data.farm, col, 'v3 來回完全相同')
   const b2 = { format: 'aemc-desktop-backup', formatVersion: 2, exportedAt: 'x', appVersion: '3.5.1', data: { farm: raw, appList: list } }
   const p2 = parseBackup(JSON.stringify(b2), 100)
   ok(p2.ok, 'v2 匯入'); eq(p2.backup.data.farm, s, 'v2 補預設值，其餘欄位相同')
-  eq(parseBackup(JSON.stringify({ ...b2, formatVersion: 8 }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', 'v7 → 較新版本（v3.9.0：6 是目前版本；v3.10.0：v8，7 是目前版本）')
+  eq(parseBackup(JSON.stringify({ ...b2, formatVersion: 9 }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', 'v7 → 較新版本（v3.9.0：6 是目前版本；v3.10.0：v8，7 是目前版本；v4.0：v9，8 是目前版本）')
   eq(parseBackup(JSON.stringify({ ...b2, formatVersion: 1 }), 100).error, '這個備份來自重置前的版本，無法匯入', 'v1 拒絕')
-  eq(parseBackup(JSON.stringify({ ...b3, data: { farm: { ...col, dataRev: 6 }, appList: list } }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', 'dataRev 較新 → 較新版本')
+  eq(parseBackup(JSON.stringify({ ...b3, data: { farm: { ...col, dataRev: 7 }, appList: list } }), 100).error, '這個存檔來自較新版本，請重新整理網頁更新後再試', 'dataRev 較新 → 較新版本（v4.0：dataRev 7）')
 }
 
 // ============ 6. 離線與時鐘 ============
@@ -339,7 +339,7 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   for (const [id, toy] of [['d', 'dig'], ['c', 'hunt']]) { r = startPlay(full, ctx(), id, toy); eq(r.error, '先點開土堆', '滿了：提示'); eq(r.save, full, '滿了：存檔完全不變（不扣金幣）') }
   r = startPlay(full, ctx(), 'd', 'ball'); ok(!r.error, '寶物滿了不影響丟球'); eq(r.save.points, 9)
   const three = sv([dog], 10, { finds: full.finds.slice(0, 3) })
-  eq(startPlay(three, ctx({ findCap: 3 }), 'd', 'dig').error, '草地太擠，寶物最多放 3 個，先點開土堆', '草地擠、上限 3（v3.9.0 明確提示）'); ok(!startPlay(three, ctx({ findCap: 4 }), 'd', 'dig').error)
+  eq(startPlay(three, ctx({ findCap: 3 }), 'd', 'dig').error, '擺設太多，寶物最多放 3 個，先點開土堆', '草地擠、上限 3（v3.9.0 明確提示；v4.0：文字改成「擺設太多」）'); ok(!startPlay(three, ctx({ findCap: 4 }), 'd', 'dig').error)
   ok(startPlay(sv([dog], 0), ctx(), 'd', 'dig').error.startsWith('金幣不足'), '金幣不足'); ok(startPlay(sv([dog]), ctx({ hour: 23.5 }), 'd', 'dig').error.includes('睡覺'), '睡覺不能開始')
   eq(digDelta(0), {}); eq(settlePlay(sv([dog]), ctx(), 'd', 0, 'dig').save.pets[0], sv([dog]).pets[0], '0 個不動')
   eq(digDelta(1).mood, 3.5); eq(digDelta(5).mood, 8, '上限 8'); eq(digDelta(8).mood, 8); ok(digDelta(5).weight >= -2 && digDelta(5).satiety >= -4)

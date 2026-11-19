@@ -44,7 +44,7 @@ for (const [w, h] of [[1024, 768], [1366, 768], [1920, 988]]) {
   ok((await page.getByTestId('calendar-dialog').count()) === 1, `${w}：點按鈕打開月曆`)
   ok((await menuPoints(page)) === before + 5, `${w}：+5 金幣（${before} → ${await menuPoints(page)}）`)
   const st = await stored(page)
-  ok(st.points === before + 5 && st.lastDailyClaim === TODAY && st.checkins.includes(TODAY) && st.dataRev === 5, `${w}：立刻寫入（金幣、lastDailyClaim、紀錄、dataRev 5）`)
+  ok(st.points === before + 5 && st.lastDailyClaim === TODAY && st.checkins.includes(TODAY) && st.dataRev === 6, `${w}：立刻寫入（金幣、lastDailyClaim、紀錄、dataRev 5；v4.0：6）`)
   ok((await cell(page, TODAY).getAttribute('data-signed')) === '1' && (await cell(page, TODAY).getAttribute('data-today')) === '1', `${w}：今天那格「簽」且高亮`)
   ok((await toasts(page)).some((t) => t.includes('簽到 +5 金幣')), `${w}：toast「簽到 +5 金幣」`)
   ok((await page.getByTestId('calendar-note').textContent()).includes('簽到成功'), `${w}：月曆內提示簽到成功`)
@@ -232,7 +232,7 @@ for (const w of [1024, 1366, 1920]) {
   await q.evaluate(() => { const s = window.__farmStore.getState(); window.__farmStore.setState({ save: { ...s.save, lastSeen: s.save.lastSeen + 1 } }) })
   await sleep(1200)
   const after = await stored(q)
-  ok(after.dataRev === 5 && after.points === oldSave.points && JSON.stringify(after.farmLayout) === JSON.stringify(oldSave.farmLayout), '新版自動存檔後：dataRev 5、金幣與擺放不變')
+  ok(after.dataRev === 6 && after.points === oldSave.points && JSON.stringify(after.farmLayout) === JSON.stringify(oldSave.farmLayout), '新版自動存檔後：dataRev 5、金幣與擺放不變（v4.0：dataRev 6）')
   // 新版匯入 v3.9.1 的匯出檔（格式 6）
   await q.getByTestId('import-file').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) })
   await q.getByRole('button', { name: '匯入', exact: true }).waitFor({ state: 'visible' })

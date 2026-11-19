@@ -16,3 +16,4 @@ tests-archive/**/.work/
 tests-archive/**/node_modules/
 tests-archive/**/shots/
 tests-archive/**/browser/diff-pixels.json
+tests-archive/**/__pycache__/

@@ -24,7 +24,7 @@ const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 42
 const p2 = (x) => String(x).padStart(2, '0')
 
 // ---------- 1. 版本號 ----------
-eq([CURRENT_SCHEMA_VERSION, DATA_REV, BK.BACKUP_FORMAT_VERSION, BK.CHECKINS_FORMAT_VERSION, M.CHECKIN_MAX], [5, 5, 7, 7, 62], 'schema 5、DATA_REV 5、匯出格式 7、checkins 從 7 起讀、上限 62')
+eq([CURRENT_SCHEMA_VERSION, DATA_REV, BK.BACKUP_FORMAT_VERSION, BK.CHECKINS_FORMAT_VERSION, M.CHECKIN_MAX], [5, 6, 8, 7, 62], 'schema 5、DATA_REV 5、匯出格式 7、checkins 從 7 起讀、上限 62（v4.0：DATA_REV 6、匯出格式 8）')
 
 // ---------- 2. isDayKey／cleanCheckins ----------
 for (const [v, want] of [['2026-11-19', true], ['2024-02-29', true], ['2026-02-29', false], ['2026-02-30', false], ['2026-13-01', false], ['2026-00-10', false], ['2026-11-31', false], ['2026-12-31', true], ['2026-1-01', false], [' 2026-11-19', false], ['2026-11-19T00', false], [20261119, false], [null, false], ['', false], ['１２３４-11-19', false]]) eq(M.isDayKey(v), want, `isDayKey(${JSON.stringify(v)}) = ${want}`)
@@ -97,13 +97,13 @@ const v4 = { schemaVersion: 5, dataRev: 4, points: 321, lastSeen: T0, lastDailyC
 const np = M.parseSave(v4)
 const op = oldParse(v4)
 eq({ ...np, dataRev: 0 }, { ...op, dataRev: 0 }, 'v3.9.0 格式（dataRev 4）：新版讀出來和 v3.9.1 逐欄相同（除了 dataRev）')
-eq([np.dataRev, 'checkins' in np], [5, false], '新版：dataRev 5、沒有 checkins 欄位')
+eq([np.dataRev, 'checkins' in np], [6, false], '新版：dataRev 5、沒有 checkins 欄位（v4.0：dataRev 6）')
 eq(np.farmLayout, op.farmLayout, '擺放不變')
 eq(np.points, 321, '金幣不變')
 const withC = M.parseSave({ ...v4, dataRev: 5, checkins: ['2026-11-18', 'bad', '2026-11-17'] })
 eq(withC.checkins, ['2026-11-17', '2026-11-18'], 'dataRev 5 存檔的 checkins 清理後讀入')
 eq(M.parseSave(JSON.parse(JSON.stringify(withC))), withC, '寫出再讀回相同')
-ok(M.isNewerData({ ...v4, dataRev: 6 }) && !M.isNewerData({ ...v4, dataRev: 5 }), 'dataRev 6 是較新、5 不是')
+ok(M.isNewerData({ ...v4, dataRev: 7 }) && !M.isNewerData({ ...v4, dataRev: 6 }) && !M.isNewerData({ ...v4, dataRev: 5 }), 'dataRev 6 是較新、5 不是（v4.0：7 是較新、6 不是）')
 
 // ---------- 5. 舊版 v3.9.0 讀到 dataRev 5：不讀、不覆寫 ----------
 LS.clear()
@@ -121,19 +121,19 @@ ok(oldNewer >= 1, 'v3.9.0 顯示「存檔來自更新的版本」')
 const appList = { schemaVersion: 1, apps: [] }
 const file = (fv, farm) => JSON.stringify({ format: 'aemc-desktop-backup', formatVersion: fv, exportedAt: '', appVersion: '', data: { farm, appList } })
 const farm5 = { ...v4, dataRev: 5, checkins: ['2026-11-01', '2026-11-18'] }
-for (const fv of [2, 3, 4, 5, 6, 7, 8]) {
-  for (const dr of [3, 4, 5, 6]) {
+for (const fv of [2, 3, 4, 5, 6, 7, 8, 9]) { // v4.0：多一格（格式 8、dataRev 6 是目前版本）
+  for (const dr of [3, 4, 5, 6, 7]) {
     const res = BK.parseBackup(file(fv, { ...farm5, dataRev: dr }))
-    const want = fv <= 7 && dr <= 5
+    const want = fv <= 8 && dr <= 6 // v4.0：原本 fv <= 7 && dr <= 5
     eq(res.ok, want, `匯入 格式 ${fv} × dataRev ${dr}：${want ? '接受' : '拒絕'}`)
     if (res.ok) eq(res.backup.data.farm.checkins, fv >= 7 ? ['2026-11-01', '2026-11-18'] : undefined, `格式 ${fv}：checkins ${fv >= 7 ? '讀入' : '不讀'}`)
-    if (!res.ok && (fv > 7 || dr > 5)) eq(res.error, BK.NEWER_VERSION_MESSAGE, `格式 ${fv} × dataRev ${dr}：較新版本訊息`)
+    if (!res.ok && (fv > 8 || dr > 6)) eq(res.error, BK.NEWER_VERSION_MESSAGE, `格式 ${fv} × dataRev ${dr}：較新版本訊息`)
   }
 }
 const b6 = BK.parseBackup(file(6, { ...v4, checkins: ['2026-11-18'] }))
 ok(b6.ok && b6.backup.data.farm.lastDailyClaim === '2026-11-18' && b6.backup.data.farm.checkins === undefined, '格式 6：夾帶的 checkins 不讀、lastDailyClaim 照備份')
 const built = BK.buildBackup(withC, appList, '3.10.1', new Date(T0))
-eq([built.formatVersion, built.data.farm.checkins], [7, ['2026-11-17', '2026-11-18']], '匯出：格式 7、帶 checkins')
+eq([built.formatVersion, built.data.farm.checkins], [8, ['2026-11-17', '2026-11-18']], '匯出：格式 7、帶 checkins（v4.0：格式 8）')
 const ores = OBK.parseBackup(JSON.stringify(built))
 ok(!ores.ok && ores.error === OBK.NEWER_VERSION_MESSAGE, 'v3.9.0 匯入格式 7 → 較新版本')
 
@@ -167,7 +167,7 @@ ok(cr.claimed && cr.message === P.CHECKIN_TEXT.claimed(5), 'checkIn：簽到成�
 eq(useFarmStore.getState().save.points, 45, 'checkIn：+5')
 eq(JSON.parse(LS.get(KEY)).points, 45, 'checkIn：立刻寫入（不等節流）')
 eq(JSON.parse(LS.get(KEY)).checkins, [todayReal], 'checkIn：紀錄寫入')
-eq(JSON.parse(LS.get(KEY)).dataRev, 5, '寫入的 dataRev 5')
+eq(JSON.parse(LS.get(KEY)).dataRev, 6, '寫入的 dataRev 5（v4.0：6）')
 cr = await useFarmStore.getState().checkIn()
 ok(!cr.claimed && cr.message === P.CHECKIN_TEXT.already, '再呼叫：' + cr.message)
 const results = await Promise.all([1, 2, 3, 4, 5].map(() => useFarmStore.getState().checkIn()))

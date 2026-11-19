@@ -245,3 +245,20 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **拍立得日期**（`ui/photo.ts`）：`composePolaroid(..., date)` 在倒數第 3 列與最後 2 列之間插入 `DATE_STRIP`（8）列白邊，左右邊框照倒數第 3 列延伸，日期用 3×5 點陣（`DATE_FONT`）＋`fillRect`，深灰 `DATE_COLOR`；日期與下載檔名用按快門當下的同一個 `gameNow()`。
 - **測試**：`tests-archive/calendar-tweaks/`（見該資料夾 README.md；`adapt-c.py` 是對 `tests-archive/v390` 舊測試寫死版本號的修改）。
 
+
+## v4.0（開發中，A、B1、B2、C 全部做完才一次上線；版本字串到上線 commit 才改）
+
+### 階段 A：商店骨架、實例 id、集齊獎勵
+
+- **商店**（`farm/ui/ShopDialog.tsx`，外框用 `ToolDialog`）：選單列「商店」（取代「＋領養」，`uiStore.shopTab`：`pet`／`decor`／`building`／`farm`；打開時離開編輯農場、選野餐位置、關工具視窗；開著時事件彈窗排隊）。分類 寵物、裝飾品、建築、農場（`SHOP_COMING_SOON`：灰色、不可點、「即將開放」）。購買前一定有確認列（品名＋金額＋購買後剩餘），確認按下後停用到結果回來。**不做賣回或退款**（寵物找新主人退 10 維持原樣）。
+- **商品設定表** `config/shop.ts`（`SHOP_ITEMS`：id、名稱、分類、group 小標題、價格、repeatable、maxOwned、requires 前置條件、size 尺寸級別、sprite、grant、temp）。grant 四種：`pet`（走領養表單）、`building`（`ownedBuildings`）、`decor`（新的擺設實例）、`skin`（`skins.owned`＋穿到 slot）。之後的階段只加資料，不改商店程式。尺寸價格 `SIZE_PRICE` 小 3／中 6／大 10；`SHOP_LIMITS` 每種 10、全體 60（只算購買的）、環境主題 30。
+- **購買規則** `sim/shop.ts`（純函式 `purchase`：扣金幣＋得到東西＋編號遞增一次完成；不行就原樣回傳存檔與原因）；`farmStore.purchase`／`shopAdopt`：先確認寫入權 → await 之後用當下的存檔重算 → 一次 set → `flushSaveNow()` 等寫完；寫入前一刻被別的分頁接手（或遇到較新版本）→ 記憶體回到購買前、回傳失敗（畫面由 OtherTabNotice 鎖定）。
+- **實例 id**（`config/layoutItems.ts`）：`種類#編號`（例 `rocks#3`，編號全體共用、只增不減）。**可複製種類表 `INSTANCE_KINDS` 和商品表分開：種類只增不減**；存檔驗證（`cleanShop`、`cleanFarmLayout`）只看種類表。`layoutItemDef` 認得實例（沒有預設位置、可收進倉庫）。路燈（燈光）、樹（樹根特別處理）不可複製。
+- **擁有與擺放分開記**：存檔可缺少的 `shop: { decor: [{ id, kind }], nextDecorId }` 是擁有紀錄；`farmLayout` 沒有實例的紀錄 = 在倉庫（`placementToLayout` 不寫「沒有預設位置又在倉庫」的紀錄，所以不能只靠擺放紀錄）。不在 `shop.decor` 的實例紀錄一律忽略。介面與引擎一律用 `placementOf(save)`（或 `resolvePlacement(owned, layout, decor)`），不要漏掉實例；`Placement.order` = `PLACE_ORDER`＋實例（依編號插在建築之前）。買來的東西一律先放進倉庫（不自動擺放）。倉庫列把同種類的實例合併成一格（`inv-buy-<種類>`，×N）。
+- **建築只在商店買**：`BuildLayer.tsx` 已刪，編輯農場只剩擺放（沒有分頁、`farmTab`／`farmBuyNotice` 已拿掉）；預設位置被佔住仍是「買下放進倉庫」（商店顯示提示）。
+- **寵物**：之後的領養在商店寵物分頁（`AdoptPicker`／`useAdoptForm` 與第一次領養共用）；零寵物的第一次領養（`needFirst`、`AdoptDialog first`）不動。
+- **環境主題**（地板＋小路＋遠景）預留為 skin 商品：slot `env`（`ENV_SLOT`），預設草地 `env.grass` 免費、永遠擁有、**不寫進存檔**（`equipped.env` 沒有 = 草地）；`envTheme()` 商品工廠放在裝飾品分頁「環境主題」小標題；`farmStore.equipSkin` 切換。階段 A 沒有任何主題內容。
+- **集齊獎勵**（`config/events.ts`，數值 `BALANCE.dig.collectionRewards`，一次性、不算每日上限）：`colCommon` 15、`colUncommon` 30（套組 6 片集滿才算）、`colRare` 50、`colLegend` 100（傳說 4 件，和舊配對事件分開）、`colAll` 100。`EVENTS` 的順序就是同時觸發的順序：罰款 → 常見 → 少見 → 稀有 → 傳說配對 → 傳說全集齊 → 全圖鑑。**載入時補發**（`retroEvents`，只查這 5 個；旗標保證只發一次；有發就立刻寫入）；2 個以上合併成一個彈窗（`retroBatch`），開頭「（更新補發）」。收藏冊各等級與頁首顯示「集齊獎勵 N 金幣（已領取）」，罰款字樣不出現（原始碼也不能寫，有測試掃）。
+- **擺設太多的提示**：寶物與野餐放不下一律「擺設太多…請收起一些擺設」（場景固定 640×320，和視窗大小無關，不提示放大視窗）。
+- **存檔版本**：`schemaVersion` 5（**不能升**）、`DATA_REV` 6、匯出格式 8（`SHOP_FORMAT_VERSION`；匯入 2～7 的 shop 一律當空）。
+- **測試**：`tests-archive/v400a/`（見 README；`adapt-a.py` 是對既有測試的預期值異動）。

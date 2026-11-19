@@ -51,7 +51,7 @@ const W37 = (stored, raw, skip = []) => {
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') out[k] = S37(st[k])
   const want = {}
   for (const k of Object.keys(r)) if (!skip.includes(k) && k !== 'dataRev') want[k] = r[k]
-  if (st.dataRev !== 5 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5
+  if (st.dataRev !== 6 || !st.pets.every((p) => typeof p.personality === 'string')) throw new Error('寫回的存檔沒有 dataRev 3 或缺個性') // v3.10.0：dataRev 5；v4.0：6
   return [out, want]
 }
 process.on('exit', () => console.log('（v3.8.0 adapt：另外檢查了 ' + __n380 + ' 次「舊寵物個性 = 用 id 算的」）'))
@@ -386,7 +386,7 @@ const run = (e, secs, hour = 12, weather = 'sunny', until) => {
   eq([lr.reset, lr.newer ?? false, lr.refund ?? 0], ['none', false, 0], '載入：不重置、不報錯、沒有退款')
   eq(S37({ ...lr.save, dataRev: 2 }), farm370, '載入結果與原始存檔完全相同（v3.8.0：除了新欄位與 dataRev 3）')
   const b = buildBackup(lr.save, exp370.data.appList, '3.7.1', new Date(NOW))
-  eq(b.formatVersion, 7, '匯出格式 6（v3.9.0；v3.10.0：7）'); eq(BACKUP_FORMAT_VERSION, 7)
+  eq(b.formatVersion, 8, '匯出格式 6（v3.9.0；v3.10.0：7；v4.0：8）'); eq(BACKUP_FORMAT_VERSION, 8)
   const text = JSON.stringify(b)
   const p = parseBackup(text, text.length)
   ok(!p.error, '匯入成功 ' + p.error)
