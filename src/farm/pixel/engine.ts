@@ -1,6 +1,6 @@
 import type { Find, Pet, PicnicActive } from '../save/types'
 import { picnicEligible } from '../sim/picnic'
-import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, cameraRect, picnicMatRect, type PicnicSeat } from './picnic'
+import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, cameraRect, picnicMatRect, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
 import { skinDef } from '../config/skins'
 import type { RevealResult } from '../sim/dig'
@@ -117,7 +117,7 @@ export interface RenderView {
   ext?: LayoutRect
 }
 
-import { KIND_GEOM, defaultPlacement, footprintAt, resolvePlacement, spriteBoxAt, withMove, type Placement } from './placement'
+import { KIND_GEOM, PET_BOX, defaultPlacement, footprintAt, resolvePlacement, spriteBoxAt, withMove, type Placement } from './placement'
 import { layoutWith } from './placeRules'
 import { pickObject } from './editDrag'
 import { picnicMatFitsAt } from './picnic'
@@ -177,6 +177,13 @@ export class PixelEngine {
    * 墊子落地後才把座位分給參加的寵物（a.picnic）；存檔的 active 消失（結束）就收掉墊子、放掉所有座位。
    */
   private picnicState: { active: PicnicActive; key: number; dropT: number; landed: boolean; mat: LayoutRect | null } | null = null
+  /**
+   * v3.9.1 選位置：預覽的墊子外框（ok = 可以放；seat = 出問題的座位編號，畫紅色）。畫面層（ui/PicnicPickLayer）每次游標換位置時設定；null = 不畫。
+   * 選位置期間 editing 也是 true（寵物暫停、入口隱藏，和編輯農場相同）。
+   */
+  picnicGhost: { rect: LayoutRect; ok: boolean; seat: number | null } | null = null
+  /** v3.9.1 手動選好的墊子位置：下一次 syncPicnic 開始新的一場時用它（用過就清掉）；null = 自動找位置 */
+  private picnicChoice: LayoutRect | null = null
 
   /** 設定畫布大小（裝置像素）；既有寵物依新範圍夾回 */
   setSize(backW: number, backH: number, dpr: number): void {
@@ -683,6 +690,7 @@ export class PixelEngine {
     // v3.8.1 小名字標籤（拍照不畫）
     if (!view) this.drawLabel(ctx)
     if (!view) this.drawEditMarks(ctx, L)
+    if (!view) this.drawPicnicGhost(ctx)
   }
 
   /**
@@ -1272,7 +1280,15 @@ export class PixelEngine {
     if (this.picnicState?.key === active.startedAt) return
     if (this.picnicState) this.clearPicnic()
     // v3.9.0：墊子的位置在野餐開始時決定，之後固定（擺設模式移動東西時墊子不會跟著跳）
-    this.picnicState = { active, key: active.startedAt, dropT: 0, landed: false, mat: picnicMatRect(this.layout) }
+    // v3.9.1：手動選了位置就用選的，否則自動找
+    const mat = this.picnicChoice ?? picnicMatRect(this.layout)
+    this.picnicChoice = null
+    this.picnicState = { active, key: active.startedAt, dropT: 0, landed: false, mat }
+  }
+
+  /** v3.9.1：下一場野餐用手動選的位置（呼叫端已用 picnicSpotCheck 確認可以放）；null = 自動找位置 */
+  choosePicnicMat(r: LayoutRect | null): void {
+    this.picnicChoice = r ? { ...r } : null
   }
 
   private clearPicnic(): void {
@@ -1490,6 +1506,55 @@ export class PixelEngine {
     }
     const sel = this.editSelected ? L.placement.placed.get(this.editSelected) : undefined
     if (sel && (!g || g.id !== sel.id)) dashed(spriteBoxAt(sel.kind, sel.x, sel.y), '#ffffff')
+  }
+
+  /**
+   * v3.9.1 選位置的預覽：半透明的墊子（不能放時疊紅色）、外框虛線（綠＝可以、紅＝不行）、6 個座位（腳底點＋寵物身體範圍的框；出問題的座位紅色）。
+   * 畫在所有東西的最上面（被物件擋住也看得到）；拍照（view）不畫。
+   */
+  private drawPicnicGhost(ctx: CanvasRenderingContext2D): void {
+    const g = this.picnicGhost
+    if (!g) return
+    const r = g.rect
+    const spr = assets.get(MAT_KEYS[0])
+    if (spr) {
+      const img = g.ok ? null : this.tinted(spr)
+      ctx.globalAlpha = 0.6
+      if (img) ctx.drawImage(img, Math.round(r.x0), Math.round(r.y1 - spr.ay))
+      else drawSprite(ctx, spr, r.x0 + spr.ax, r.y1)
+      ctx.globalAlpha = 1
+    }
+    const ok = '#7dff7a'
+    const bad = '#ff3b30'
+    const color = g.ok ? ok : bad
+    ctx.fillStyle = color
+    const x0 = Math.round(r.x0), x1 = Math.round(r.x1), y0 = Math.round(r.y0), y1 = Math.round(r.y1)
+    for (let x = x0; x < x1; x += 4) {
+      ctx.fillRect(x, y0, Math.min(2, x1 - x), 1)
+      ctx.fillRect(x, y1 - 1, Math.min(2, x1 - x), 1)
+    }
+    for (let y = y0; y < y1; y += 4) {
+      ctx.fillRect(x0, y, 1, Math.min(2, y1 - y))
+      ctx.fillRect(x1 - 1, y, 1, Math.min(2, y1 - y))
+    }
+    MAT_SEATS.forEach(([sx, sy], i) => {
+      const x = x0 + sx
+      const y = y0 + sy
+      // 有指出是哪個座位出問題時：那個座位紅色、其他座位白色（看得出是哪一個）
+      const c = g.ok ? ok : g.seat === null ? bad : g.seat === i ? bad : '#ffffff'
+      // 寵物身體範圍（淡）
+      ctx.globalAlpha = 0.45
+      ctx.fillStyle = c
+      ctx.fillRect(x - PET_BOX.hw, y - PET_BOX.h, PET_BOX.hw * 2, 1)
+      ctx.fillRect(x - PET_BOX.hw, y - PET_BOX.h, 1, PET_BOX.h)
+      ctx.fillRect(x + PET_BOX.hw - 1, y - PET_BOX.h, 1, PET_BOX.h)
+      ctx.globalAlpha = 1
+      // 腳底點（深色描邊的 5×3）
+      ctx.fillStyle = '#1b2a10'
+      ctx.fillRect(x - 3, y - 2, 7, 5)
+      ctx.fillStyle = c
+      ctx.fillRect(x - 2, y - 1, 5, 3)
+    })
   }
 
   houseSize(): { w: number; h: number } {

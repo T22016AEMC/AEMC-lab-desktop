@@ -19,6 +19,7 @@ import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
 import { BuildLayer } from './ui/BuildLayer'
 import { EditLayer } from './ui/EditLayer'
+import { PICK_TEXT, PicnicPickLayer } from './ui/PicnicPickLayer'
 import { isFarmHotkey } from './ui/farmHotkey'
 import { PetMenu } from './ui/PetMenu'
 import { RehomeDialog } from './ui/RehomeDialog'
@@ -28,7 +29,8 @@ import { toyOf, type PlayToyId } from './sim/commands'
 import { TOOLS } from '../config/tools'
 import { BoardThumbs } from './ui/BoardThumbs'
 import { PICNIC_TEXT, picnicBlock, picnicEndDue, rollDecor } from './sim/picnic'
-import { photoCrop } from './pixel/picnic'
+import { photoCrop, picnicSpotCheck } from './pixel/picnic'
+import type { Rect } from './pixel/layout'
 import { POLAROID_KEYS, DOWNLOAD_SCALE, canvasBlob, composePolaroid, cropSizeFor, photoFileName, upscale } from './ui/photo'
 import { PolaroidDialog, type PolaroidShot } from './ui/PolaroidDialog'
 import { PixelSprite } from './ui/PixelSprite'
@@ -96,9 +98,11 @@ export function Farm() {
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
   const farmTab = useUIStore((s) => s.farmTab)
-  /** v3.9.0 農場（擺設）模式：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
+  /** v3.9.1 野餐選位置中（寵物暫停、入口與相機隱藏，和編輯農場一致） */
+  const picnicPick = useUIStore((s) => s.picnicPick)
+  /** v3.9.0 農場（擺設）模式、v3.9.1 選野餐位置：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
   const editingRef = useRef(false)
-  editingRef.current = buildMode
+  editingRef.current = buildMode || picnicPick
   /** 視窗大小改變（版面重算）時遞增，建築模式的虛線框跟著重新定位 */
   const [layoutVersion, setLayoutVersion] = useState(0)
 
@@ -388,12 +392,12 @@ export function Farm() {
   }, [engine])
   // 開啟啟動台、領養、建築模式、關於、收藏冊、工具、匯入、找新主人、拍立得、視窗被蓋住：滑鼠互動立即解除（引擎每個影格看這個旗標）
   useEffect(() => {
-    engine.hover.blocked = Boolean(adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
-  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
+    engine.hover.blocked = Boolean(adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
+  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
-    if (adoptOpen || launchpadOpen || buildMode || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
-  }, [engine, adoptOpen, launchpadOpen, buildMode, aboutOpen, collectionOpen, toolOpen, importState])
+    if (adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
+  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState])
   // 開工具視窗：關掉氣泡選單（建築模式由 setToolOpen 自己關）
   useEffect(() => {
     if (toolOpen) setSelected(null)
@@ -424,11 +428,12 @@ export function Farm() {
     if (adoptOpen || launchpadOpen) {
       setSelected(null)
       useUIStore.getState().setBuildMode(false)
+      useUIStore.getState().setPicnicPick(false)
     }
   }, [adoptOpen, launchpadOpen])
-  // 農場（擺設）模式：關掉氣泡選單、清掉入口的滑鼠停留狀態；沒有存檔（還沒領養）時不能進入
+  // 農場（擺設）模式、選野餐位置：關掉氣泡選單、清掉入口的滑鼠停留狀態；沒有存檔（還沒領養）時不能進入
   useEffect(() => {
-    if (buildMode) {
+    if (buildMode || picnicPick) {
       setSelected(null)
       engine.doorHover = false
       engine.towerHover = false
@@ -436,7 +441,7 @@ export function Farm() {
       setTowerHover(false)
       setToolHover(null)
     }
-  }, [engine, buildMode])
+  }, [engine, buildMode, picnicPick])
   // v3.9.0 快捷鍵 E：進出農場（擺設）模式。輸入文字、有對話框或視窗開著時不觸發（isFarmHotkey）
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -445,6 +450,7 @@ export function Farm() {
       const windowsOpen = Object.values(useWindowStore.getState().windows).some((w) => !w.minimized)
       const blocked = ui.adoptOpen || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
       const canEnter = !!st.save && st.save.pets.length > 0
+      if (ui.picnicPick) return // v3.9.1：選野餐位置中不能進出編輯農場（要先取消）
       if (!isFarmHotkey(e, blocked)) return
       if (!ui.buildMode && !canEnter) return
       e.preventDefault()
@@ -455,7 +461,14 @@ export function Farm() {
   }, [rehomeId])
   useEffect(() => {
     if ((!hasSave || petCount === 0) && buildMode) useUIStore.getState().setBuildMode(false)
-  }, [hasSave, petCount, buildMode])
+    if ((!hasSave || petCount === 0) && picnicPick) useUIStore.getState().setPicnicPick(false)
+  }, [hasSave, petCount, buildMode, picnicPick])
+  // v3.9.1 選野餐位置中：有對話框打開（關於、收藏冊、匯入、找新主人、拍立得、事件與存檔提示）或視窗最大化 → 取消選位置
+  const farmDialog = useFarmStore((s) => s.pendingEvents.length > 0 || s.save?.resetNotice === true || s.resetFailed || s.legacyRefund > 0 || s.newerData)
+  const dialogOpen = Boolean(adoptOpen || aboutOpen || collectionOpen || !!importState || rehomeId !== null || shot !== null || covered || farmDialog)
+  useEffect(() => {
+    if (dialogOpen && useUIStore.getState().picnicPick) useUIStore.getState().setPicnicPick(false)
+  }, [dialogOpen])
 
   const local = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -613,36 +626,80 @@ export function Farm() {
     ui.showToast(toy === 'ball' ? `點草地或走道把球丟出去・${BALANCE.play.seconds} 秒・Esc 或右鍵結束` : toy === 'dig' ? `狗狗開始挖寶・${BALANCE.dig.seconds} 秒・點土堆揭曉・Esc 或右鍵結束` : `貓咪出門尋寶・${BALANCE.dig.seconds} 秒・點布包揭曉・Esc 或右鍵結束`, 3200)
   }
 
-  /** 選單列按了「野餐」：檢查條件 → 引擎挑參加的寵物 → 存檔開始（次數、清潔、心情）→ 墊子在下一個影格飛下來 */
-  useEffect(() => {
-    if (picnicReq === 0) return
-    const ui = useUIStore.getState()
+  /** 現在能不能開始野餐（存檔條件、墊子放得下、有寵物可以參加）；可以 = null，否則提示文字 */
+  const picnicStartBlock = (): string | null => {
     const st = useFarmStore.getState()
     const nowMs = gameNow()
     const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
     const why = picnicBlock(st.save, ctx)
+    if (why) return why
+    if (!engine.picnicMatFits()) return PICNIC_TEXT.noRoom
+    if (engine.picnicCandidates(st.save!.pets, ctx).length === 0) return PICNIC_TEXT.busy
+    return null
+  }
+
+  /**
+   * 開始野餐：mat = 手動選的墊子位置（null = 自動找位置，和 v3.9.0 完全相同）。
+   * 檢查條件 → 引擎挑參加的寵物 → 存檔開始（次數、清潔、心情）→ 墊子在下一個影格飛下來。回傳 true = 開始了
+   */
+  const beginPicnic = (mat: Rect | null): boolean => {
+    const ui = useUIStore.getState()
+    const st = useFarmStore.getState()
+    const nowMs = gameNow()
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const why = picnicStartBlock()
+    if (why) {
+      ui.showToast(why)
+      return false
+    }
+    if (mat && !picnicSpotCheck(engine.layout, mat).ok) return false
+    const ids = engine.picnicCandidates(st.save!.pets, ctx)
+    engine.choosePicnicMat(mat)
+    const err = st.startPicnic(ids, rollDecor())
+    if (err) {
+      engine.choosePicnicMat(null)
+      ui.showToast(err)
+      return false
+    }
+    setSelected(null)
+    ui.setBuildMode(false)
+    ui.setPicnicPick(false)
+    assets.loadGroup('polaroid').catch(() => {}) // 相框先載入，拍照時不用等
+    ui.showToast(`野餐開始！${ids.length} 隻寵物參加・${BALANCE.picnic.seconds / 60} 分鐘・寵物坐好後點相機拍照`, 3600)
+    return true
+  }
+
+  /**
+   * v3.9.1 選單列按了「野餐」：條件都符合才進入選位置（不符合沿用原本的提示，例如「草地太擠…」）。
+   * 選位置中再按一次 = 取消。對話框開著不進入；啟動台、工具視窗自動關掉；編輯農場先離開（拖到一半的退回原位）；
+   * 正在被拖著的寵物先放下。
+   */
+  useEffect(() => {
+    if (picnicReq === 0) return
+    const ui = useUIStore.getState()
+    if (ui.picnicPick) {
+      ui.setPicnicPick(false)
+      return
+    }
+    if (dialogOpen) {
+      ui.showToast(PICK_TEXT.closeFirst)
+      return
+    }
+    const why = picnicStartBlock()
     if (why) {
       ui.showToast(why)
       return
     }
-    if (!engine.picnicMatFits()) {
-      ui.showToast(PICNIC_TEXT.noRoom)
-      return
-    }
-    const ids = engine.picnicCandidates(st.save!.pets, ctx)
-    if (ids.length === 0) {
-      ui.showToast(PICNIC_TEXT.busy)
-      return
-    }
-    const err = st.startPicnic(ids, rollDecor())
-    if (err) {
-      ui.showToast(err)
-      return
+    if (ui.launchpadOpen) ui.setLaunchpadOpen(false)
+    if (ui.toolOpen) ui.setToolOpen(null)
+    if (ui.buildMode) ui.setBuildMode(false)
+    if (engine.isDragging()) {
+      gesture.current = null
+      engine.endDrag()
+      if (canvasRef.current) canvasRef.current.style.cursor = 'default'
     }
     setSelected(null)
-    ui.setBuildMode(false)
-    assets.loadGroup('polaroid').catch(() => {}) // 相框先載入，拍照時不用等
-    ui.showToast(`野餐開始！${ids.length} 隻寵物參加・${BALANCE.picnic.seconds / 60} 分鐘・寵物坐好後點相機拍照`, 3600)
+    ui.setPicnicPick(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picnicReq])
 
@@ -899,6 +956,9 @@ export function Farm() {
       {shot && <PolaroidDialog shot={shot} onClose={closeShot} />}
 
       {buildMode && hasSave && assetsReady && <EditLayer engine={engine} layoutVersion={layoutVersion} />}
+      {picnicPick && !buildMode && hasSave && assetsReady && (
+        <PicnicPickLayer engine={engine} layoutVersion={layoutVersion} startBlock={picnicStartBlock} onStart={beginPicnic} />
+      )}
       {buildMode && hasSave && assetsReady && farmTab === 'buy' && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}

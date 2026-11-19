@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../../dist')
-const FORBIDDEN = ['測試模式', '生物圖鑑', '__farm', 'shiftTime', 'flowerbed', 'seesaw', 'butterfly_', 'polaroid_frames_a', 'polaroid_frames_c', 'picnic_decor', 'stickers_']
+const FORBIDDEN = ['測試模式', '生物圖鑑', '__farm', 'shiftTime', 'flowerbed', 'seesaw', 'butterfly_', 'polaroid_frames_a', 'polaroid_frames_c', 'picnic_decor', 'stickers_', 'coral_unused', 'farm_decor', '__overrides', '__layout', '庫存']
 const hits = new Map(FORBIDDEN.map((s) => [s, []]))
 const walk = (d) => {
   for (const f of readdirSync(d)) {

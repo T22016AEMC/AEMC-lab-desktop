@@ -222,3 +222,12 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **已知限制（不修）**：(1) 還開著的 v3.8.x 舊分頁匯出的備份不含擺放（舊版已出貨，新版分不出來）；(2) 兩個 v3.9.0 分頁同時開，後存的覆蓋先存的（寵物、金幣一直如此，4.0.0 再考慮跨分頁偵測）；(3) `backupActions.exportBackup` 先 `flushSave()` 再立刻 `load()`，因為 `LocalStorageAdapter.save` 會先 `await snapshot()` 才寫入，匯出檔可能少掉最後一個節流區間的變動（以前就有；擺放不受影響，`setFarmLayout` 放下就立刻寫入）。
 - **測試**：`tests-archive/v390/`（不接 npm scripts；環境、執行方式、已知例外見該資料夾的 README.md）。
 - **鐘樓與塔門保護**（`placeRules.ts`）：`TOWER_TOP_MIN` = -24（鐘樓腳底最小 y = 136 = 草地上緣，尖頂超出畫面 24 像素；`minFootY` 取 `max(草地上緣, 160 + TOWER_TOP_MIN)`，再改小也不會超過草地上緣）。塔門、招牌、鐘面三個互動區各自允許被前面物件的素材蓋住 `TOWER_ZONE_COVER_MAX`（0.25）以下（`coverStats` 數整數像素格：邊界往內取整、剛好等於上限可以；`coverExceeds`、`towerCoverBlock`）；窗戶與其他物件的互動區仍用 `runsHit`（完全不能蓋）；`catTreeHitsTower` 沒動；鐘樓腳下佔地間距維持 `MIN_GAP` 12、沒有塔門特例。能蓋到鐘面的物件一定先把塔門蓋過 25%，所以鐘面這一區在現有素材下不會單獨擋人。
+
+## v3.9.1：野餐選位置
+
+- **流程**：選單列「野餐」→ `uiStore.requestPicnic` → `farm/index.tsx` 的 picnicReq 效果：選位置中再按 = 取消；有對話框（領養、關於、收藏冊、匯入、找新主人、拍立得、事件與存檔提示）或視窗最大化 → 提示 `PICK_TEXT.closeFirst`、不進入；`picnicStartBlock()`（`picnicBlock` → 自動位置存在 → 有候選寵物）不過 → 原本的提示（含「草地太擠…」）；否則關掉啟動台／工具、離開編輯農場、放下拖曳中的寵物，`uiStore.picnicPick = true`。開始一律走 `beginPicnic(mat | null)`（null = 自動，和 v3.9.0 完全相同）；`engine.choosePicnicMat(r)` 把選的位置交給下一次 `syncPicnic`（用過就清掉）。
+- **畫面層** `ui/PicnicPickLayer.tsx`：游標 = 墊子中心（`matRectAtCursor`），只有整數位置或擺放版本變了才判斷；原因標籤位置直接改 style（不經 React）；點綠色 → 開始並記 `uiStore.picnicSpot`（只記手動點選的，「自動選位置」不記；只在記憶體）；點紅色 → 提示原因、留在選位置；Esc／右鍵／「取消」離開；每 0.5 秒重查條件，失效就提示並離開。初始預覽 `initialPickRect`：記憶的位置還能放就用它，否則自動位置。
+- **選位置期間** `editingRef = buildMode || picnicPick`：引擎 `editing = true`（寵物暫停）、入口與相機隱藏、`hover.blocked`、`endPlay('window')`、E 不作用；`setBuildMode(true)`、`setToolOpen(id)` 會清掉 `picnicPick`（兩種模式不同時開）。
+- **判斷規則**只有一個：`pixel/picnic.ts` 的 `picnicSpotCheck`（自動找位置 `picnicMatRect`、手動選位置、野餐中離開編輯農場的 `picnicMatFitsAt` 共用）：範圍 `matRange`（與 v3.9.0 的掃描範圍相同）＋邊緣保險 `matEdgeOk`（座位寵物 `PICNIC_PET_REACH`、相機、照片裁切 `PICNIC_CROP_MIN` 都在場景內；範圍內一律成立）→ 外框碰佔地 → 座位站得住（`isWalkable`，不另外查「走得到」，使用者決定）→ 座位被蓋 ≤ 50%。原因文字 `MAT_SPOT_TEXT`（outside、overlap 與 `PLACE_REASON_TEXT` 相同）。改素材（寵物、相框）要確認這兩個常數仍涵蓋（測試會比對 manifest）。
+- **預覽**由引擎畫（`engine.picnicGhost`，`drawPicnicGhost` 在 render 最後、拍照不畫）：半透明墊子（不行時用 `tinted` 紅色）、虛線外框、6 個座位的腳底點與寵物身體範圍（`PET_BOX`）；出問題的座位紅色、其他白色。
+- 測試：`tests-archive/v390/node/v391-picnic-pick-entry.js`、`browser/t9-picnic-pick-browser.mjs`。

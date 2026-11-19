@@ -4,7 +4,7 @@
 cd "$(dirname "$0")" || exit 2
 SUITES=(v350-logic v351-layout-test v351-logic v351-sim v360-cap v360-engine v360-sim v361-days v370-calc v370-layout v371-weather
   v380-adapt-v360-logic v380-adapt-v361-logic v380-adapt-v370-data v380-adapt-v371-logic v380-logic v381-hover
-  v390-save v390-layout v390-stage4 v390-stage5 v390-tower v390-review review-fuzz)
+  v390-save v390-layout v390-stage4 v390-stage5 v390-tower v390-review review-fuzz v391-picnic-pick)
 [ $# -gt 0 ] && SUITES=("$@")
 [ -d .work/v381src/src ] || { echo "先執行 node tests-archive/v390/setup.mjs"; exit 2; }
 FAILED=()

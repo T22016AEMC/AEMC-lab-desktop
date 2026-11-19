@@ -56,39 +56,120 @@ function matObstacles(L: Layout): Rect[] {
 export const PICNIC_PREF_X = 436
 
 /**
- * v3.9.0：已經鋪好的墊子（野餐進行中，位置固定）在目前的擺放下還放得下嗎：外框不碰任何物件的腳下佔地（間距 MAT_GAP）、
- * 6 個座位站得住而且不被前面的物件蓋住超過一半。擺設模式離開時用來決定要不要提前結束野餐。
+ * v3.9.1 墊子位置的判斷（自動找位置、手動選位置、野餐中離開編輯農場都用這一個）。依序：
+ *  1. outside：外框不在「草地中段」範圍內（左右在寵物活動範圍、頂端在後排景物腳底之下、底邊在走道上緣之上），
+ *     或座位上的寵物、相機提示、照片裁切範圍會超出場景（目前的範圍內不會發生，是保險；見 PICNIC_PET_REACH）
+ *  2. overlap：外框碰到 matObstacles（空隙 MAT_GAP）
+ *  3. seat：有座位站不住（isWalkable；v3.9.0 起的規則，不另外檢查「走得到」）
+ *  4. covered：有座位被前面的物件蓋住超過一半
+ * 回傳的 seat = 第一個出問題的座位編號（畫預覽時標紅）。
+ */
+export type MatSpotReason = 'outside' | 'overlap' | 'seat' | 'covered'
+export type MatSpotResult = { ok: true } | { ok: false; reason: MatSpotReason; seat?: number }
+
+/** 不能放的原因（和擺放規則 PLACE_REASON_TEXT 同樣的短句；outside、overlap 兩句完全相同） */
+export const MAT_SPOT_TEXT: Readonly<Record<MatSpotReason, string>> = {
+  outside: '超出可以擺放的範圍',
+  overlap: '離其他東西太近',
+  seat: '座位上站不下寵物',
+  covered: '座位會被前面的東西擋住',
+}
+
+/** 座位上的寵物（坐、開心、走路各姿勢）從腳底往左右、往上最多伸出多少（manifest 實測左 29、右 28、上 48；測試會比對） */
+export const PICNIC_PET_REACH = { side: 30, up: 50 }
+/** 照片裁切範圍的最小寬高（三款相框窗口換算；測試會用 manifest 比對） */
+export const PICNIC_CROP_MIN = { w: 150, h: 144 }
+
+/** 墊子外框可以放的範圍（x0、y0 的最小與最大值，整數） */
+export function matRange(L: Layout): { x0: number; x1: number; y0: number; y1: number } {
+  const b = petBounds(L)
+  const yTop = L.farBottom + BACK_BASE + 4
+  const yBot = pathTopOf(L)
+  return { x0: Math.ceil(b.x0), x1: Math.floor(b.x1 - MAT_W), y0: Math.ceil(yTop), y1: Math.floor(yBot - MAT_H) }
+}
+
+/** 墊子連同座位上寵物的外框（拍照要拍到、不能超出場景的範圍） */
+export function matGroupBox(mat: Rect): Rect {
+  let x0 = mat.x0, x1 = mat.x1, y0 = mat.y0
+  for (const [sx, sy] of MAT_SEATS) {
+    x0 = Math.min(x0, mat.x0 + sx - PICNIC_PET_REACH.side)
+    x1 = Math.max(x1, mat.x0 + sx + PICNIC_PET_REACH.side)
+    y0 = Math.min(y0, mat.y0 + sy - PICNIC_PET_REACH.up)
+  }
+  return { x0, y0, x1, y1: mat.y1 }
+}
+
+const inside = (a: Rect, b: Rect): boolean => a.x0 >= b.x0 && a.x1 <= b.x1 && a.y0 >= b.y0 && a.y1 <= b.y1
+
+/** 座位上的寵物、相機提示、照片裁切都在場景內，而且裁切範圍包住墊子與寵物 */
+export function matEdgeOk(L: Layout, mat: Rect): boolean {
+  const scene = { x0: 0, y0: 0, x1: L.W, y1: L.H }
+  const g = matGroupBox(mat)
+  if (!inside(g, scene)) return false
+  if (!inside(cameraRect(L, mat), scene)) return false
+  return inside(g, photoCrop(L, mat, PICNIC_CROP_MIN.w, PICNIC_CROP_MIN.h))
+}
+
+function spotCheck(L: Layout, r: Rect, obs: readonly Rect[]): MatSpotResult {
+  const R = matRange(L)
+  if (r.x0 < R.x0 || r.x0 > R.x1 || r.y0 < R.y0 || r.y0 > R.y1 || !matEdgeOk(L, r)) return { ok: false, reason: 'outside' }
+  if (obs.some((o) => hitR(r, o, MAT_GAP))) return { ok: false, reason: 'overlap' }
+  for (let i = 0; i < MAT_SEATS.length; i++) if (!isWalkable(L, r.x0 + MAT_SEATS[i][0], r.y0 + MAT_SEATS[i][1])) return { ok: false, reason: 'seat', seat: i }
+  for (let i = 0; i < MAT_SEATS.length; i++) if (coverFraction(L.placement, r.x0 + MAT_SEATS[i][0], r.y0 + MAT_SEATS[i][1]) > 0.5) return { ok: false, reason: 'covered', seat: i }
+  return { ok: true }
+}
+
+const obsCache = new WeakMap<Layout, { P: Placement; obs: Rect[] }>()
+function obstaclesOf(L: Layout): Rect[] {
+  const c = obsCache.get(L)
+  if (c && c.P === L.placement) return c.obs
+  const obs = matObstacles(L)
+  obsCache.set(L, { P: L.placement, obs })
+  return obs
+}
+
+/** 墊子外框放在 r（素材外框，邏輯座標）可以嗎；不行的話是哪個原因 */
+export function picnicSpotCheck(L: Layout, r: Rect): MatSpotResult {
+  return spotCheck(L, r, obstaclesOf(L))
+}
+
+/** 游標在場景座標 (x, y) 時的墊子外框：游標 = 墊子中心，取整數 */
+export function matRectAtCursor(x: number, y: number): Rect {
+  const x0 = Math.round(x - MAT_W / 2)
+  const y0 = Math.round(y - MAT_H / 2)
+  return { x0, y0, x1: x0 + MAT_W, y1: y0 + MAT_H }
+}
+
+/**
+ * v3.9.0：已經鋪好的墊子（野餐進行中，位置固定）在目前的擺放下還放得下嗎（picnicSpotCheck）。擺設模式離開時用來決定要不要提前結束野餐。
  */
 export function picnicMatFitsAt(L: Layout, r: Rect): boolean {
-  if (matObstacles(L).some((o) => hitR(r, o, MAT_GAP))) return false
-  return MAT_SEATS.every(([sx, sy]) => isWalkable(L, r.x0 + sx, r.y0 + sy) && coverFraction(L.placement, r.x0 + sx, r.y0 + sy) <= 0.5)
+  return picnicSpotCheck(L, r).ok
 }
 
 const matCache = new WeakMap<Layout, { P: Placement; r: Rect | null }>()
 
 /**
  * 野餐墊落地的位置（素材外框，邏輯座標）；這個視窗放不下 = null。
- * 規則（不手調座標，全部由版面算出）：在草地中段——頂端在後排景物腳底（草地上緣 + BACK_BASE）之下、底邊在走道上緣之上；
- * 左右在寵物活動範圍內；外框不碰 matObstacles（空隙 MAT_GAP）；6 個座位都站得住。
+ * 規則（不手調座標，全部由版面算出）：範圍內（matRange）每個整數位置用 picnicSpotCheck 判斷（和手動選位置同一個規則）。
  * 偏好位置：水平在「食盆水盆右緣」與「貓跳台左緣」的正中間，垂直在草地中段的中間；挑離偏好位置最近的。
  */
 export function picnicMatRect(L: Layout): Rect | null {
   const mc = matCache.get(L)
   if (mc && mc.P === L.placement) return mc.r
-  const b = petBounds(L)
   const yTop = L.farBottom + BACK_BASE + 4
   const yBot = pathTopOf(L)
+  const R = matRange(L)
   const ax = PICNIC_PREF_X
   const ay = (yTop + yBot) / 2 // 墊子中心
-  const obs = matObstacles(L)
+  const obs = obstaclesOf(L)
   let best: { r: Rect; cost: number } | null = null
-  for (let y0 = Math.ceil(yTop); y0 + MAT_H <= yBot; y0++)
-    for (let x0 = Math.ceil(b.x0); x0 + MAT_W <= b.x1; x0++) {
+  for (let y0 = R.y0; y0 <= R.y1; y0++)
+    for (let x0 = R.x0; x0 <= R.x1; x0++) {
       const r = { x0, y0, x1: x0 + MAT_W, y1: y0 + MAT_H }
       const cost = Math.abs(x0 + MAT_W / 2 - ax) + 1.6 * Math.abs(y0 + MAT_H / 2 - ay)
       if (best && cost >= best.cost) continue
-      if (obs.some((o) => hitR(r, o, MAT_GAP))) continue
-      if (!MAT_SEATS.every(([sx, sy]) => isWalkable(L, x0 + sx, y0 + sy) && coverFraction(L.placement, x0 + sx, y0 + sy) <= 0.5)) continue
+      if (!spotCheck(L, r, obs).ok) continue
       best = { r, cost }
     }
   const out = best?.r ?? null

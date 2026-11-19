@@ -49,6 +49,15 @@ interface UIState {
   /** v3.8.0 野餐：選單列按了「野餐」就遞增（養殖場畫面接手，開始條件與場景由養殖場判斷） */
   picnicReq: number
   requestPicnic: () => void
+  /**
+   * v3.9.1 野餐選位置中（按了「野餐」、條件都符合後進入；寵物暫停、入口隱藏，和編輯農場一致）。
+   * 點一下確認開始、Esc 或「取消」離開；不存檔。
+   */
+  picnicPick: boolean
+  setPicnicPick: (v: boolean) => void
+  /** v3.9.1 上次手動選的墊子位置（外框左上角，邏輯座標）。只記在這次開著的網頁（重新整理回到 null），不存檔；「自動選位置」不記 */
+  picnicSpot: { x0: number; y0: number } | null
+  setPicnicSpot: (v: { x0: number; y0: number } | null) => void
   /** 選單列 Logo 的下拉選單 */
   logoMenuOpen: boolean
   importState: ImportState | null
@@ -84,7 +93,8 @@ export const useUIStore = create<UIState>((set) => ({
   setCollectionOpen: (collectionOpen) => set({ collectionOpen }),
   toolOpen: null,
   // 開工具視窗時離開建築模式（Esc 只關工具視窗，不會同時離開建築模式）
-  setToolOpen: (toolOpen) => set(toolOpen ? { toolOpen, buildMode: false } : { toolOpen }),
+  // v3.9.1：選野餐位置中開了工具，也離開選位置
+  setToolOpen: (toolOpen) => set(toolOpen ? { toolOpen, buildMode: false, picnicPick: false } : { toolOpen }),
   launchpadOpen: false,
   aboutOpen: false,
   adoptOpen: false,
@@ -118,9 +128,14 @@ export const useUIStore = create<UIState>((set) => ({
   setLaunchpadOpen: (launchpadOpen) => set({ launchpadOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
-  setBuildMode: (buildMode) => set(buildMode ? { buildMode } : { buildMode, farmBuyNotice: null }),
+  // v3.9.1：進入編輯農場時離開選野餐位置（兩者不同時開著）
+  setBuildMode: (buildMode) => set(buildMode ? { buildMode, picnicPick: false } : { buildMode, farmBuyNotice: null }),
   picnicReq: 0,
   requestPicnic: () => set((s) => ({ picnicReq: s.picnicReq + 1 })),
+  picnicPick: false,
+  setPicnicPick: (picnicPick) => set({ picnicPick }),
+  picnicSpot: null,
+  setPicnicSpot: (picnicSpot) => set({ picnicSpot }),
   setLogoMenuOpen: (logoMenuOpen) => set({ logoMenuOpen }),
   setImportState: (importState) => set({ importState }),
   setPersisted: (persisted) => set({ persisted }),

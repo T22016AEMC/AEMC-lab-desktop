@@ -1,4 +1,4 @@
-// 準備舊版原始碼（逐項／逐像素比對用）：從 git 取出 v3.6.2、v3.8.0、v3.8.1 的原始碼放到 .work/，不碰工作目錄與分支。
+// 準備舊版原始碼（逐項／逐像素比對用）：從 git 取出 v3.6.2、v3.8.0、v3.8.1、v3.9.0 的原始碼放到 .work/，不碰工作目錄與分支。
 // 用法：node tests-archive/v390/setup.mjs
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
@@ -12,6 +12,7 @@ const SOURCES = [
   ['v362src', 'v3.6.2'], // v370-layout、v380-adapt-v370-data 比對
   ['v380src', 'v3.8.0'], // v390-save 比對
   ['v381src', '719a575'], // v3.8.1：v390-layout／save／stage4 與瀏覽器逐像素比對（也是 5182 舊版 dev server 的目錄）
+  ['v390src', 'v3.9.0'], // v3.9.1：v391-picnic-pick 比對自動選位置與 v3.9.0 相同
 ]
 mkdirSync(WORK, { recursive: true })
 for (const [dir, ref] of SOURCES) {

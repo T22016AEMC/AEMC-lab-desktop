@@ -1,6 +1,6 @@
-# v3.9.0 測試封存
+# v3.9.0 測試封存（含 v3.9.1）
 
-v3.9.0（農場自由擺放與倉庫）開發與審查時用的全部自動化測試。**不接進主專案的 npm scripts，也不是 CI**：改動存檔格式、版面、擺放、引擎之前後各跑一次，確認沒有退步。所有測試都不會修改專案原始碼。
+v3.9.0（農場自由擺放與倉庫）開發與審查時用的全部自動化測試，以及 v3.9.1（野餐選位置）新增的測試。**不接進主專案的 npm scripts，也不是 CI**：改動存檔格式、版面、擺放、引擎之前後各跑一次，確認沒有退步。所有測試都不會修改專案原始碼。
 
 ## 環境需求
 
@@ -11,7 +11,7 @@ v3.9.0（農場自由擺放與倉庫）開發與審查時用的全部自動化�
 ## 第一次準備
 
 ```bash
-node tests-archive/v390/setup.mjs                 # 從 git 取出 v3.6.2、v3.8.0、v3.8.1（719a575）原始碼到 .work/
+node tests-archive/v390/setup.mjs                 # 從 git 取出 v3.6.2、v3.8.0、v3.8.1（719a575）、v3.9.0 原始碼到 .work/
 cd tests-archive/v390 && npm install              # 只裝 playwright-core
 ```
 
@@ -26,14 +26,14 @@ mkdir -p tests-archive/v390/.work/v381src
 git archive --format=tar 719a575 | tar -x -C tests-archive/v390/.work/v381src
 ```
 
-（v3.6.2 = tag `v3.6.2`，v3.8.0 = tag `v3.8.0`，分別放 `.work/v362src`、`.work/v380src`。）測試引用它們的方式：Node 套件直接 `import` 舊版的 `layout.ts`、`migrate.ts`、`storage.ts`、`backup.ts` 和新版比；瀏覽器測試啟動一個 v3.8.1 的 dev server 當對照組（見下）。
+（v3.6.2 = tag `v3.6.2`，v3.8.0 = tag `v3.8.0`，v3.9.0 = tag `v3.9.0`，分別放 `.work/v362src`、`.work/v380src`、`.work/v390src`；v3.9.0 給 v391-picnic-pick 比對自動選位置。已經跑過舊版 setup 的人再跑一次就會補上 v390src。）測試引用它們的方式：Node 套件直接 `import` 舊版的 `layout.ts`、`migrate.ts`、`storage.ts`、`backup.ts` 和新版比；瀏覽器測試啟動一個 v3.8.1 的 dev server 當對照組（見下）。
 
 ## 跑法
 
 ```bash
-bash tests-archive/v390/runall.sh                       # 24 個 Node 套件；也可只跑 bash runall.sh v390-tower v390-review review-fuzz
-node tests-archive/v390/run-browser.mjs                 # 8 個瀏覽器測試（自己啟動／關閉兩個 dev server）
-npm run build && node tests-archive/v390/dist-check.mjs # 正式 build 不可含測試模式等 11 個字串
+bash tests-archive/v390/runall.sh                       # 25 個 Node 套件；也可只跑 bash runall.sh v390-tower v390-review review-fuzz
+node tests-archive/v390/run-browser.mjs                 # 9 個瀏覽器測試（自己啟動／關閉兩個 dev server）
+npm run build && node tests-archive/v390/dist-check.mjs # 正式 build 不可含測試模式等 16 個字串
 npx tsc -b                                              # 型別檢查
 ```
 
@@ -45,6 +45,7 @@ npx tsc -b                                              # 型別檢查
 
 | 套件 | 測什麼 |
 |---|---|
+| v391-picnic-pick | **v3.9.1 野餐選位置**：預設墊子 (384,167)～(488,230)；422 組擺放（原始隨機 300＋經擺放規則的合法隨機 120）自動位置與 `picnicMatFitsAt` 和 v3.9.0 逐項相同；四種原因與文字；靠近邊緣（範圍內外逐像素掃描：座位寵物、相機、三款相框裁切都在場景內並包住墊子與寵物；`PICNIC_PET_REACH`／`PICNIC_CROP_MIN` 對 manifest）；游標換算；記憶與失效；引擎 `choosePicnicMat`；`uiStore` 互斥；單次判斷耗時；「判斷可以但座位走不到」的量測（含對照組） |
 | v390-tower | **鐘樓放寬與塔門保護**：`TOWER_TOP_MIN` -24（腳底 136 可以、135 不行、互動區與引擎 CSS 平移 -30）、塔門／招牌／鐘面各自 25%（界線掃描 76 萬個位置）、面積對照報告、放寬後新增位置的連通與座位檢查與原因文字 |
 | v390-review | **審查修正**：同一影格連續兩次擺放寫入都保留（含「用過期擺放結果寫入」的負向對照）、買建築忽略舊紀錄、匯入摘要 `layoutCount` |
 | review-fuzz | **審查壓力測試**：300 組隨機擺放跑版面／導航／寶物草地／野餐墊／洗澡站位／`canPlace`／20 秒寵物模擬；損壞擺放資料（`__proto__`、極端座標、100 萬筆…）；匯入格式 2～7 × dataRev 的接受／拒絕矩陣 |
@@ -64,6 +65,7 @@ npx tsc -b                                              # 型別檢查
 
 | 測試 | 測什麼 |
 |---|---|
+| t9-picnic-pick-browser | **v3.9.1 野餐選位置**（真滑鼠，110 項）：進入、預覽跟著游標、綠紅切換與原因、點紅不開始、Esc／取消／右鍵／再按野餐、E 不作用、點綠開始且墊子在選的位置、記憶與失效、野餐中不能移動、自動選位置 = v3.9.0、重新整理回預設、從編輯農場進入、草地太擠、對話框／啟動台／工具／下雨／洗澡中／拖曳中、6 種視窗（含 dpr 1.25）、影格時間量測、截圖 `shots/v391-*.png` |
 | t1c-path | 預設畫面（新 5181 對舊 5182）逐像素比對：差異只在沙土路左段（x 0～36、y 249～313）；16 項（1280×640、1920×960 × 8 情境） |
 | t2-scale | 8 種視窗的縮放（整數倍優先、小於七成五才非整數倍）、畫面不出界 |
 | t3-follow-browser | 物件移到新位置後入口與互動跟著走（住家門、鐘樓、公佈欄、池塘洗澡） |
@@ -75,6 +77,11 @@ npx tsc -b                                              # 型別檢查
 
 通過條件：結束碼 0 且沒有「失敗」開頭的輸出行。
 
+## v3.9.1 對既有測試的預期異動
+
+- `t5-edit-browser.mjs` 第 11 段：按「野餐」後多按一下「自動選位置」（`picnic-pick-auto`），因為按野餐現在先進入選位置。其餘斷言不變。
+- `setup.mjs` 多取出 v3.9.0。其他套件沒有改預期值。
+
 ## 已知失敗與例外
 
 - **t1-pixel 已被 t1c-path 取代**（沙土路從場景左緣鋪滿，預設畫面和 v3.8.1 不再逐像素相同，t1c 只允許那塊差異）。舊腳本沒有放進來。
@@ -82,5 +89,5 @@ npx tsc -b                                              # 型別檢查
 - **t1c-path 會寫 `browser/diff-pixels.json`**（已在 `.gitignore`），只是除錯用。
 - dev server 熱更新後若素材索引換了，測試可能讀到另一個實例（skins 沒載入）→ 重啟 dev server 就好；`run-browser.mjs` 每次都重新啟動，不會遇到。
 - 測試用日期固定在 2026-11-19 前後（`T0`），睡覺時段 23～6 點，測試別用 22.5 點。
-- `dist-check.mjs` 的 11 個字串（測試模式、生物圖鑑、`__farm`、`shiftTime`、`flowerbed`、`seesaw`、`butterfly_`、`polaroid_frames_a`、`polaroid_frames_c`、`picnic_decor`、`stickers_`）是依 CLAUDE.md 與各階段測試記錄整理出來的清單，不是當年腳本的逐字複本；新增「不可進正式版」的字串時直接加在檔案最上面的 `FORBIDDEN`。
+- `dist-check.mjs` 的 16 個字串（測試模式、生物圖鑑、`__farm`、`shiftTime`、`flowerbed`、`seesaw`、`butterfly_`、`polaroid_frames_a`、`polaroid_frames_c`、`picnic_decor`、`stickers_`；v3.9.1 加上 `coral_unused`、`farm_decor`、`__overrides`、`__layout`、「庫存」）是依 CLAUDE.md 與各階段測試記錄整理出來的清單，不是當年腳本的逐字複本；新增「不可進正式版」的字串時直接加在檔案最上面的 `FORBIDDEN`。
 - 沒有整合進來的：其他版本的舊 Node／瀏覽器腳本（v3.7.x 的 t370*、v3.8.x 的 t380*／t381*、`live*.mjs` 線上測試、PWA 升級測試、各種 `dbg-*`／`patch-*` 一次性腳本）。它們在舊 session 的 scratchpad，不屬於 v3.9.0 的回歸範圍，也沒有針對 v3.9.0 重新確認過。

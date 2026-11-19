@@ -254,6 +254,8 @@ const inEdit = (page) => page.getByTestId('edit-layer').isVisible().catch(() => 
   // 進行中的野餐在載入時一律直接結束（v3.8.0 的規則），所以用選單列的「野餐」實際開始一場
   const { ctx, page, errors } = await open(save())
   await page.getByTestId('picnic-button').click()
+  // v3.9.1：按「野餐」先進入選位置，「自動選位置」= v3.9.0 的行為
+  await page.getByTestId('picnic-pick-auto').click()
   ok(await toast(page, '野餐開始'), '11 開始野餐')
   await page.waitForFunction(() => window.__farm.picnicMat() !== null, null, { timeout: 15000 }).catch(() => {})
   const mat = await page.evaluate(() => window.__farm.picnicMat())
