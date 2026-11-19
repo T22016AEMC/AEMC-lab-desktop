@@ -18,7 +18,6 @@ import { EventDialog } from './ui/EventDialog'
 import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
 import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
-import { BuildLayer } from './ui/BuildLayer'
 import { EditLayer } from './ui/EditLayer'
 import { PICK_TEXT, PicnicPickLayer } from './ui/PicnicPickLayer'
 import { isFarmHotkey } from './ui/farmHotkey'
@@ -99,7 +98,6 @@ export function Farm() {
   const toolOpen = useUIStore((s) => s.toolOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
-  const farmTab = useUIStore((s) => s.farmTab)
   /** v3.9.1 野餐選位置中（寵物暫停、入口與相機隱藏，和編輯農場一致） */
   const picnicPick = useUIStore((s) => s.picnicPick)
   /** v3.9.0 農場（擺設）模式、v3.9.1 選野餐位置：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
@@ -966,7 +964,6 @@ export function Farm() {
       {picnicPick && !buildMode && hasSave && assetsReady && (
         <PicnicPickLayer engine={engine} layoutVersion={layoutVersion} startBlock={picnicStartBlock} onStart={beginPicnic} />
       )}
-      {buildMode && hasSave && assetsReady && farmTab === 'buy' && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}
       {rehomeId && <RehomeDialog petId={rehomeId} onCancel={() => setRehomeId(null)} onConfirm={confirmRehome} />}

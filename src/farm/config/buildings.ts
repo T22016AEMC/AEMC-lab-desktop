@@ -23,7 +23,7 @@ export interface BuildingDef {
   sprite: string
 }
 
-/** 可購買的建築（建築模式的虛線空位只顯示這些；野餐墊還沒開放，留給之後的版本） */
+/** 可購買的建築（v4.0 起在商店的建築分類購買，見 config/shop.ts；野餐墊還沒開放，留給之後的版本） */
 export const PURCHASABLE: readonly BuildingId[] = ['kennel', 'bowls', 'catTree']
 
 const DEFS: Partial<Record<BuildingId, BuildingDef>> = {

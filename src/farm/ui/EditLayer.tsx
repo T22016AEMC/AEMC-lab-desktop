@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { LAYOUT_ITEMS, layoutItemDef } from '../config/layoutItems'
-import { PURCHASABLE } from '../config/buildings'
 import type { PixelEngine } from '../pixel/engine'
 import { beginInventoryDrag, beginSceneDrag, cantStoreText, dropDecision, footAt, isDragMove, type EditDrag } from '../pixel/editDrag'
-import { BOUGHT_TO_INVENTORY } from './BuildLayer'
 import { fromCss, rectCss } from '../pixel/layout'
 import { KIND_GEOM, layoutAfterMove, placementOf, resolvePlacement, spriteBoxAt } from '../pixel/placement'
 import { PLACE_REASON_TEXT, canPlace, canStore, layoutWith } from '../pixel/placeRules'
@@ -13,9 +11,6 @@ import { PixelSprite } from './PixelSprite'
 
 /** 擺設模式的文字（集中在這裡，不寫死在別處） */
 export const EDIT_TEXT = {
-  tabBuy: '購買',
-  tabEdit: '編輯',
-  hintBuy: '點虛線框購買建築',
   hintEdit: '拖曳移動，拖到倉庫收起',
   restore: '還原預設',
   done: '完成',
@@ -24,7 +19,6 @@ export const EDIT_TEXT = {
   inventoryEmpty: '倉庫是空的',
   store: '收進倉庫',
   cantStore: '不能收進倉庫',
-  toEdit: '到編輯分頁擺放',
   confirmTitle: '還原預設擺設',
   confirmBody: '所有擺設會回到預設位置；花槽、珊瑚石堆、灌木、高草叢會收進倉庫。確定嗎？',
   confirmOk: '確定還原',
@@ -57,8 +51,7 @@ interface DragState {
  *  - Esc：拖曳中取消（退回原位）；有選取時取消選取；否則離開擺設模式
  * 進入時引擎暫停寵物（engine.editing），畫面層隱藏畫布上的透明入口（farm/index.tsx）。
  *
- * 兩個分頁（uiStore.farmTab，只記在這次開著的網頁）：購買 = 只有建築的虛線框（BuildLayer）、透明遮罩擋住畫布（不能拖曳、點不到寵物）；
- * 編輯 = 拖曳、倉庫列、收進倉庫、還原預設。切換分頁時拖曳中的物件退回原位、清掉選取。兩個分頁都暫停寵物。
+ * v4.0：建築改在商店購買，編輯農場拿掉購買分頁，只留擺放（拖曳、倉庫列、收進倉庫、還原預設）。
  */
 export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layoutVersion: number }) {
   const farmLayout = useFarmStore((s) => s.save?.farmLayout)
@@ -75,9 +68,8 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   /** 庫存列與選取卡片用存檔直接算的擺放結果（引擎要到下一個影格才換新的，不能等它） */
   const P = useMemo(() => resolvePlacement(owned ?? [], farmLayout, decor), [owned, farmLayout, decor])
 
-  const tab = useUIStore((s) => s.farmTab)
-  const buyNotice = useUIStore((s) => s.farmBuyNotice)
-  const editing = tab === 'edit'
+  /** v4.0 起只有擺放（沒有購買分頁），一律可編輯 */
+  const editing = true
   const ui = useUIStore.getState
   const setD = (v: DragState | null): void => {
     dragRef.current = v
@@ -97,15 +89,6 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   useEffect(() => {
     engine.editSelected = selected
   }, [engine, selected])
-  // 切換分頁：拖曳中的物件退回原位（取消拖曳）、清掉選取與確認視窗
-  useEffect(() => {
-    engine.editGhost = null
-    checkKey.current = ''
-    dragRef.current = null
-    setDrag(null)
-    setSelected(null)
-    setConfirm(false)
-  }, [engine, tab])
 
   const localOf = (clientX: number, clientY: number): { x: number; y: number } => {
     const r = boxRef.current?.getBoundingClientRect()
@@ -224,7 +207,6 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
   }, [engine, confirm, selected, ui])
 
   const onScenePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
-    // 購買分頁：遮罩只擋住畫布，不能拖曳、不能選取
     if (e.button !== 0 || confirm || !editing) return
     const c = localOf(e.clientX, e.clientY)
     const L = engine.layout
@@ -281,23 +263,8 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
 
       <div className="pointer-events-none absolute inset-x-0 top-2 flex flex-col items-center gap-1 text-center">
         <div className="pointer-events-auto flex items-center gap-2 border-2 border-[#3b2a1c] bg-[#fff3d0]/95 px-2 py-1 text-xs font-bold text-[#3b2a1c] shadow-[2px_2px_0_rgba(0,0,0,0.4)]" data-testid="edit-banner">
-          <div role="tablist" aria-label="編輯農場" className="flex gap-1">
-            {(['buy', 'edit'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                data-testid={`farm-tab-${t}`}
-                onClick={() => ui().setFarmTab(t)}
-                className={`border-2 border-[#3b2a1c] px-2.5 py-px ${tab === t ? 'bg-[#3b2a1c] text-[#ffe28a]' : 'bg-white hover:bg-[#ffe9b0]'}`}
-              >
-                {t === 'buy' ? EDIT_TEXT.tabBuy : EDIT_TEXT.tabEdit}
-              </button>
-            ))}
-          </div>
           <span className="px-2" data-testid="edit-hint">
-            {editing ? EDIT_TEXT.hintEdit : EDIT_TEXT.hintBuy}
+            {EDIT_TEXT.hintEdit}
           </span>
           {editing && (
             <button type="button" data-testid="edit-restore" onClick={() => setConfirm(true)} className="border-2 border-[#3b2a1c] bg-white px-2 py-px hover:bg-[#ffe9b0]">
@@ -308,23 +275,6 @@ export function EditLayer({ engine, layoutVersion }: { engine: PixelEngine; layo
             {EDIT_TEXT.done}
           </button>
         </div>
-        {!editing && PURCHASABLE.every((id) => owned?.includes(id)) && (
-          <div data-testid="build-all-done" className="border-2 border-[#3b2a1c] bg-[#e4f5d0]/95 px-3 py-0.5 text-xs font-bold text-[#2f5a1c]">
-            本版的建築都買齊了
-          </div>
-        )}
-        {/* 購買分頁：預設位置被佔住、放進倉庫的提示卡（不自動消失） */}
-        {!editing && buyNotice && (
-          <div data-testid="buy-notice" className="pointer-events-auto flex max-w-[92%] items-center gap-2 border-2 border-[#7a4b1c] bg-[#fff0c8] px-3 py-1 text-xs font-bold text-[#5a3410] shadow-[2px_2px_0_rgba(0,0,0,0.4)]">
-            <span>{BOUGHT_TO_INVENTORY(buyNotice)}</span>
-            <button type="button" data-testid="buy-notice-go" onClick={() => ui().setFarmTab('edit')} className="shrink-0 border-2 border-[#3b2a1c] bg-[#e8892b] px-2 py-px text-white hover:brightness-110">
-              {EDIT_TEXT.toEdit}
-            </button>
-            <button type="button" aria-label="關閉" data-testid="buy-notice-close" onClick={() => ui().setFarmBuyNotice(null)} className="shrink-0 px-1 leading-none text-[#5a3410]/70">
-              ✕
-            </button>
-          </div>
-        )}
       </div>
 
       {/* 選取中的物件：小卡片（名稱、收進倉庫） */}
