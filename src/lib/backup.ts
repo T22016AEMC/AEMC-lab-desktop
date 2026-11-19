@@ -133,6 +133,8 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
  * 回傳 null = 成功，否則是失敗原因（現有資料保持原樣）。
  */
 export async function applyBackup(backup: BackupFile, farm: SaveStorage, appList: DocumentStorage<AppListData>): Promise<string | null> {
+  // v3.10.0：先接手寫入權，避免另一個分頁在「匯入後、重新整理前」把匯入的存檔蓋掉（舊的測試替身沒有 claim 也照常匯入）
+  await farm.claim?.()
   const before = { farm: await farm.snapshot(), appList: await appList.snapshot() }
   try {
     await farm.saveStrict(backup.data.farm)

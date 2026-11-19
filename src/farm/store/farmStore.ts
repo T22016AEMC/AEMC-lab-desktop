@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { BALANCE } from '../config/balance'
 import { gameNow, worldHour, worldWeather } from '../overrides'
 import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, type PicnicDecor, type PicnicEndReason } from '../sim/picnic'
-import { LocalStorageAdapter, setNewerDataHandler } from '../save/storage'
+import { LocalStorageAdapter, setNewerDataHandler, setOtherTabHandler } from '../save/storage'
 import type { FarmLayout, Find, SaveData, SaveStorage } from '../save/types'
 import { layoutItemDef } from '../config/layoutItems'
 import { withoutRecord } from '../pixel/placement'
@@ -46,6 +46,8 @@ interface FarmState {
   pendingEvents: EventNotice[]
   /** 儲存的資料來自比這份程式更新的版本：不讀、不覆寫，畫面提示重新整理 */
   newerData: boolean
+  /** v3.10.0：存檔已被另一個分頁接手（那個分頁繼續運作）：這個分頁停止自動存檔、畫面擋住並提示重新整理 */
+  otherTab: boolean
 
   init: () => Promise<void>
   /** init 的實作（init 保證同一時間只跑一次） */
@@ -142,6 +144,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
   gifts: [],
   pendingEvents: [],
   newerData: false,
+  otherTab: false,
 
   init: () => {
     // 開發模式的 StrictMode 會呼叫兩次：同一時間只跑一次（否則兩次載入、兩次重置檢查會各自更新存檔，畫面上的提醒計時被打斷）
@@ -486,6 +489,12 @@ setNewerDataHandler(() => {
   suspendSaves()
   useFarmStore.setState({ newerData: true })
   useUIStore.getState().showToast('存檔來自更新的版本，這個分頁不會覆寫它，請重新整理網頁', 10000, 'update')
+})
+// v3.10.0：另一個分頁接手了存檔：不再寫入（未寫入的變動放棄，不做合併），畫面由 OtherTabNotice 擋住
+setOtherTabHandler(() => {
+  if (useFarmStore.getState().otherTab) return
+  suspendSaves()
+  useFarmStore.setState({ otherTab: true })
 })
 window.addEventListener('beforeunload', flush)
 document.addEventListener('visibilitychange', () => document.hidden && flush())

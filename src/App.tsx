@@ -11,6 +11,7 @@ import { Launchpad } from './components/Launchpad'
 import { MenuBar } from './components/MenuBar'
 import { Toast } from './components/Toast'
 import { ToolsLayer } from './components/tools/ToolsLayer'
+import { OtherTabNotice } from './farm/ui/OtherTabNotice'
 import { useViewportSync } from './hooks/useViewportSync'
 import { useLaunchpadHotkey } from './hooks/useLaunchpadHotkey'
 import { MIN_DESKTOP_WIDTH } from './lib/layout'
@@ -55,6 +56,7 @@ function DesktopApp() {
       <ImportDialog />
       <BackupReminder />
       <Toast />
+      <OtherTabNotice />
       <BootScreen />
     </>
   )

@@ -193,4 +193,10 @@ export interface SaveStorage {
   saveStrict(data: SaveData): Promise<void>
   snapshot(): Promise<string | null>
   restore(snapshot: string | null): Promise<void>
+  /**
+   * 兩個分頁的寫入權（v3.10.0）：claim = 這個分頁接手（載入時、匯入前）；isOwner = 這個分頁現在還能寫。
+   * 寫入權本身讀寫失敗時一律當作可以寫（不鎖死）。換雲端儲存時一起實作。
+   */
+  claim(): Promise<void>
+  isOwner(): Promise<boolean>
 }

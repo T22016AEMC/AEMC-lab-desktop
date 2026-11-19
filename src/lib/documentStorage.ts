@@ -38,7 +38,7 @@ function reportFailure(): void {
 export class LocalStorageDocument<T> implements DocumentStorage<T> {
   /** parse 負責驗證與版本轉換；回傳 null 代表資料不可用 */
   constructor(
-    private readonly key: string,
+    protected readonly key: string,
     private readonly parse: (raw: unknown) => T | null,
   ) {}
 

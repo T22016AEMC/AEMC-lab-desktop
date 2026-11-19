@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '../..')
-const ALL = ['tb-games-browser']
+const ALL = ['tb-games-browser', 'te-writer-browser']
 const names = process.argv.length > 2 ? process.argv.slice(2) : ALL
 if (!existsSync(join(HERE, 'node_modules/playwright-core'))) {
   console.log('先在 tests-archive/calendar-tweaks 資料夾執行 npm install')
