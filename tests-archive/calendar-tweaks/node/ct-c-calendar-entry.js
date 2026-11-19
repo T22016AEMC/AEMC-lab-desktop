@@ -132,7 +132,7 @@ for (const fv of [2, 3, 4, 5, 6, 7, 8]) {
 }
 const b6 = BK.parseBackup(file(6, { ...v4, checkins: ['2026-11-18'] }))
 ok(b6.ok && b6.backup.data.farm.lastDailyClaim === '2026-11-18' && b6.backup.data.farm.checkins === undefined, '格式 6：夾帶的 checkins 不讀、lastDailyClaim 照備份')
-const built = BK.buildBackup(withC, appList, '3.10.0', new Date(T0))
+const built = BK.buildBackup(withC, appList, '3.10.1', new Date(T0))
 eq([built.formatVersion, built.data.farm.checkins], [7, ['2026-11-17', '2026-11-18']], '匯出：格式 7、帶 checkins')
 const ores = OBK.parseBackup(JSON.stringify(built))
 ok(!ores.ok && ores.error === OBK.NEWER_VERSION_MESSAGE, 'v3.9.0 匯入格式 7 → 較新版本')

@@ -32,6 +32,7 @@ npm run build && node tests-archive/calendar-tweaks/dist-check.mjs              
 | ct-d23-snack | D2-3：點心在墊面內、比座位低、不壓籃子與食物、依參加者 |
 | ct-d22-nap | D2-2：野餐睡覺的模擬（頻率、時長、上限、懶散）、引擎整場野餐 hooks 呼叫與不睡完全相同 |
 | ct-d21-date | D2-1：日期文字、點陣字型、白邊寬度 |
+| ct-v3101-compat | v3.10.1：常數與 v3.10.0 相同；3.10.0 的存檔與匯出檔在目前版本逐欄相同地載入／匯入；3.10.1 匯出檔 3.10.0 也能匯入（對照組 `.work/v3100src`） |
 
 ## 瀏覽器測試（`browser/*.mjs`）
 
@@ -46,6 +47,7 @@ npm run build && node tests-archive/calendar-tweaks/dist-check.mjs              
 | td23-snack-browser | D2-3：三種參加組合的點心像素 |
 | td22-nap-browser | D2-2：睡姿、ZZZ、拍照不叫醒、摸頭不醒、存檔與對照組相同 |
 | td21-date-browser | D2-1：三款相框的大小、日期點陣、上半部逐像素不變、下載 PNG |
+| te2-event-queue-browser | v3.10.1：月曆開著時觸發事件 → 排隊、旗標已存、關閉（Esc／關閉鈕／點外面）後彈窗出現、沒有兩個彈窗、再開月曆正常（截圖 `te2-*`） |
 
 截圖在 `browser/shots/`（`tc-*`、`te-*`、`td*-*`）。
 
@@ -58,3 +60,5 @@ npm run build && node tests-archive/calendar-tweaks/dist-check.mjs              
 - 在頁面裡用同一張畫布連續 `engine.render` 比對時，上一次留下的畫布狀態會造成 ±1 的顏色差 → 每次用新畫布（`willReadFrequently`）。
 - 貓的品種 id 是 `tabby`／`britishblue`（素材名稱是 orange／bluecat）。
 - 同一個 context 開第二個分頁時，注入存檔的旗標要放 localStorage（新分頁的 sessionStorage 是空的，會重新注入）。
+
+改版本號：`python tests-archive/calendar-tweaks/bump-version.py [OLD NEW]`（預設 3.10.0 → 3.10.1），只改 package.json 與測試裡寫死的 appVersion。

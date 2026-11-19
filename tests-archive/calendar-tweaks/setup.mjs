@@ -10,6 +10,7 @@ const ROOT = resolve(HERE, '../..')
 const WORK = join(HERE, '.work')
 const SOURCES = [
   ['v391src', '80c567a'], // v3.9.1：逐像素比對（也是 OLD_PORT 舊版 dev server 的目錄）、存檔與引擎逐項比對
+  ['v3100src', 'v3.10.0'], // v3.10.1：3.10.0 存下的存檔與匯出檔相容測試（ct-v3101-compat）
   ['v390src', 'v3.9.0'], // v3.9.0：舊版讀到 dataRev 5／format 7 的行為
 ]
 mkdirSync(WORK, { recursive: true })
