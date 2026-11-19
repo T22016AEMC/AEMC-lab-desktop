@@ -89,12 +89,20 @@ export function findsFull(save: SaveData, cap: number = BALANCE.dig.holdMax): bo
 }
 
 export const FULL_MESSAGE = '先點開土堆'
-/** 視窗小到草地完全放不下寶物（上限 0）時的提示 */
-export const TOO_SMALL_MESSAGE = '視窗太小，放不下寶物，請放大視窗'
-/** 現在不能開始挖寶、尋寶的原因（寶物已滿或視窗太小）；可以 = null */
+/** 草地完全放不下寶物（上限 0）時的提示（v3.9.0：場景固定，原因只會是擺設太多） */
+export const TOO_SMALL_MESSAGE = '草地太擠，放不下寶物，請移開或收起一些擺設'
+/** 草地太擠讓上限變小、而且已經滿了 */
+export const crowdedFullMessage = (cap: number): string => `草地太擠，寶物最多放 ${cap} 個，先點開土堆`
+/** 玩耍途中找不到地方埋寶物（提前結束時的提示） */
+export const NO_SPOT_MESSAGE = '草地太擠，找不到地方埋寶物'
+/**
+ * 現在不能開始挖寶、尋寶的原因（寶物已滿或草地放不下）；可以 = null。
+ * 已有的寶物比上限多時（擺設變擠了）全部保留，只是不能再挖。
+ */
 export function findsBlock(save: SaveData, cap: number = BALANCE.dig.holdMax): string | null {
   if (cap <= 0) return TOO_SMALL_MESSAGE
-  return findsFull(save, cap) ? FULL_MESSAGE : null
+  if (!findsFull(save, cap)) return null
+  return cap < BALANCE.dig.holdMax ? crowdedFullMessage(cap) : FULL_MESSAGE
 }
 
 export function makeFindId(nowMs: number, rand: () => number): string {

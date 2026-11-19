@@ -1,6 +1,7 @@
 import { BALANCE } from '../config/balance'
 import { SPECIES } from '../config/species'
 import { pickFindSpot } from './finds'
+import { NO_SPOT_MESSAGE, TOO_SMALL_MESSAGE, crowdedFullMessage } from '../sim/dig'
 import type { Pt } from './nav'
 import type { Actor, BehaviorEnv } from './pets'
 import type { PlayOps, PlayState } from './play'
@@ -58,7 +59,9 @@ export function updateFinder(a: Actor, dt: number, env: BehaviorEnv, ops: PlayOp
   switch (p.phase) {
     case 'search': {
       if (p.catches >= B.maxFinds || env.finds.length >= env.findCap) {
-        p.left = Math.min(p.left, 0) // 滿了：結束（下一個影格走時間到的 cheer）
+        // 滿了：結束（下一個影格走時間到的 cheer）。v3.9.0：上限是因為草地太擠變小的，要明確提示（不無聲結束）
+        if (p.left > 0 && p.catches < B.maxFinds && env.findCap < B.holdMax) env.notify(env.findCap > 0 ? crowdedFullMessage(env.findCap) : TOO_SMALL_MESSAGE)
+        p.left = Math.min(p.left, 0)
         break
       }
       if (a.action !== 'idle') ops.setAction(a, 'idle', 1e9)
@@ -71,6 +74,8 @@ export function updateFinder(a: Actor, dt: number, env: BehaviorEnv, ops: PlayOp
       // 附近擠滿了（寶物很多）：放寬到 3 倍距離再找一次，不要白白結束
       const spot = pickFindSpot(q) ?? pickFindSpot({ ...q, reach: reach * 3 })
       if (!spot) {
+        // v3.9.0：找不到地方埋（草地太擠）：提示後結束
+        if (p.left > 0) env.notify(NO_SPOT_MESSAGE)
         p.left = Math.min(p.left, 0)
         break
       }

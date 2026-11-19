@@ -6,7 +6,10 @@ import { isSleeping } from '../sim/rules'
 import type { Weather } from '../sim/worldTime'
 import { releaseUse, updateBuildingUse, type BuildingUse } from './buildingUse'
 import type { BuildingSlot, Layout } from './layout'
-import { blockers, clampToWalk, inWater, isWalkable, petBounds, pondStand, waterEllipse } from './layout'
+import { blockers, clampToWalk, inWater, isWalkable, petBounds, waterEllipse } from './layout'
+import { pondStand } from './reach'
+import { coverFraction } from './placement'
+import { isReachable } from './nav'
 import { findPath, lineClear, type FixedPet, type Pt } from './nav'
 import { updatePlay, type PlayState, type PlayToyId } from './play'
 import { updatePicnicSeat, type PicnicSeat } from './picnic'
@@ -167,6 +170,8 @@ export interface Actor {
   picnic: PicnicSeat | null
   /** 滑鼠互動（v3.8.1）：看著游標、走去游標旁邊、退開；null = 沒有 */
   hv: HoverAct | null
+  /** v3.9.0：走到被蓋住的地方後連續換目的地的次數（停下來時歸零；省略 = 0） */
+  hideHops?: number
 }
 
 export interface BehaviorEnv {
@@ -207,10 +212,24 @@ export interface BehaviorEnv {
 
 const rr = (rand: () => number, a: number, b: number): number => a + rand() * (b - a)
 
+/**
+ * v3.9.0：閒晃與停留（不是固定座位）的目的地要「露得出來、走得到」：不在主要連通區塊外的死角、
+ * 身體被畫在前面的物件（住家、鐘樓、樹…）蓋住不超過一半。有固定座位的行為（建築座位、洗澡、野餐、玩耍）不看這個。
+ */
+export const HIDE_MAX = 0.5
+export function goodSpot(L: Layout, x: number, y: number): boolean {
+  return isReachable(L, x, y) && coverFraction(L.placement, x, y) <= HIDE_MAX
+}
+
 export function createActor(pet: Pet, L: Layout, rand: () => number): Actor {
   const b = petBounds(L)
-  const x = rr(rand, b.x0, b.x1)
-  const y = rr(rand, b.y0, b.y1)
+  let x = rr(rand, b.x0, b.x1)
+  let y = rr(rand, b.y0, b.y1)
+  // v3.9.0：出生點也不要在死角或被蓋住的地方（試幾次，都不行就用第一個，之後 clampActor 推出來）
+  for (let i = 0; i < 24 && !(isWalkable(L, x, y) && goodSpot(L, x, y)); i++) {
+    x = rr(rand, b.x0, b.x1)
+    y = rr(rand, b.y0, b.y1)
+  }
   const actor: Actor = {
     id: pet.id, pet, x, y, tx: x, ty: y,
     facing: rand() < 0.5 ? 1 : -1, action: 'idle', t: 0, dur: rr(rand, 0.5, 2.5),
@@ -267,6 +286,7 @@ function pickTarget(a: Actor, env: BehaviorEnv, far = false): void {
     const x = rr(env.rand, b.x0, b.x1)
     const y = rr(env.rand, b.y0, b.y1)
     if (blocked(env.layout, x, y)) continue
+    if (!goodSpot(env.layout, x, y)) continue
     let near = Infinity
     for (const o of env.others) {
       if (o === a) continue
@@ -307,6 +327,7 @@ function pickSleepSpot(a: Actor, env: BehaviorEnv): void {
     const x = Math.min(b.x1, Math.max(b.x0, a.x + rr(env.rand, -110, 110)))
     const y = Math.min(b.y1, Math.max(b.y0, a.y + rr(env.rand, -40, 40)))
     if (!isWalkable(env.layout, x, y) || !lineClear(env.layout, a.x, a.y, x, y)) continue
+    if (!goodSpot(env.layout, x, y)) continue
     let ok = true
     for (const o of env.others) {
       if (o === a) continue
@@ -506,6 +527,17 @@ export function updateActor(a: Actor, dt: number, env: BehaviorEnv): void {
     case 'walk': {
       const d = Math.hypot(a.tx - a.x, a.ty - a.y)
       if (d < 3 || a.t > 14) {
+        // v3.9.0：停下來的地方被前面的物件蓋住超過一半（或在死角）→ 不停在這裡，再挑一個目的地（最多連續 3 次，避免一直走）
+        if (!goodSpot(env.layout, a.x, a.y) && (a.hideHops ?? 0) < 3) {
+          a.hideHops = (a.hideHops ?? 0) + 1
+          pickTarget(a, env)
+          setAction(a, 'walk', 0)
+          a.stuckT = 0
+          a.lastX = a.x
+          a.lastY = a.y
+          break
+        }
+        a.hideHops = 0
         const cat = a.pet.species === 'cat'
         const r = env.rand()
         if (r < (cat ? 0.5 : 0.3)) setAction(a, 'sit', rr(env.rand, 3, 8))

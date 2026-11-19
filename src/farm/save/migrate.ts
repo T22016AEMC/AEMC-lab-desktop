@@ -4,7 +4,9 @@ import { isCollectionKey } from '../config/items'
 import { SPECIES, isSpeciesId, isVariantId } from '../config/species'
 import { isPersonalityId, personalityFromId } from '../config/personality'
 import { cleanNotes } from '../../tools/notes'
-import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type Find, type Pet, type PicnicActive, type PicnicState, type SaveData, type SkinState } from './types'
+import { LAYOUT_MAX_ITEMS, isLayoutKind, layoutItemDef } from '../config/layoutItems'
+import { SCENE_H, SCENE_W } from '../pixel/layout'
+import { CURRENT_SCHEMA_VERSION, DATA_REV, type BowlState, type EarningState, type FarmLayout, type Find, type LayoutItem, type Pet, type PicnicActive, type PicnicState, type SaveData, type SkinState } from './types'
 
 const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
@@ -151,6 +153,47 @@ function cleanSkins(raw: unknown): SkinState {
   return { owned, equipped }
 }
 
+/**
+ * 農場擺放（v3.9.0）。不丟錯誤、不改寫存檔（只在讀進記憶體時清理）；清理兩次和一次結果相同。
+ *  - farmLayout 不是物件、items 不是陣列 → 整個忽略（回傳 undefined = 全部預設）
+ *  - 原始陣列只看前 LAYOUT_MAX_ITEMS（300）筆
+ *  - 單筆不是物件、kind 不認得、id 不在物件表或和 kind 對不上 → 丟掉；重複 id 留第一筆
+ *  - state 不是 placed／stored → 擺放；不能收的（住家、鐘樓、池塘、公佈欄）寫成 stored → 擺放
+ *  - 擺放：x、y 有一個不是有限數字 → 兩個都拿掉（回到預設位置）；沒有預設位置的（花槽、珊瑚石堆）改成在庫存
+ *  - 座標夾回 0～SCENE_W、0～SCENE_H 並取整數；在庫存的不帶座標
+ * 重疊、走不到之類的擺放規則不在這裡處理（載入後原樣保留，不自動挪位）。
+ */
+export function cleanFarmLayout(raw: unknown): FarmLayout | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const list = (raw as Record<string, unknown>).items
+  if (!Array.isArray(list)) return undefined
+  const items: LayoutItem[] = []
+  const seen = new Set<string>()
+  const n = Math.min(list.length, LAYOUT_MAX_ITEMS)
+  for (let i = 0; i < n; i++) {
+    const e = list[i]
+    if (!e || typeof e !== 'object' || Array.isArray(e)) continue
+    const r = e as Record<string, unknown>
+    const kind = r.kind
+    if (!isLayoutKind(kind)) continue
+    const def = layoutItemDef(r.id)
+    if (!def || def.kind !== kind || seen.has(def.id)) continue
+    seen.add(def.id)
+    let state: 'placed' | 'stored' = r.state === 'stored' && def.storable ? 'stored' : 'placed'
+    const x = r.x
+    const y = r.y
+    const okXY = typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y)
+    if (state === 'placed' && !okXY && !def.hasDefault) state = 'stored'
+    const item: LayoutItem = { id: def.id, kind: def.kind, state }
+    if (state === 'placed' && okXY) {
+      item.x = Math.round(Math.min(SCENE_W, Math.max(0, x)))
+      item.y = Math.round(Math.min(SCENE_H, Math.max(0, y)))
+    }
+    items.push(item)
+  }
+  return { items }
+}
+
 /** 儲存的資料是不是比這份程式更新（schemaVersion 較大，或同一個 schema 內 dataRev 較大）：是的話不讀、不覆寫 */
 export function isNewerData(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return false
@@ -207,6 +250,9 @@ export function parseSave(raw: unknown): SaveData | null {
   // v3.8.0：野餐紀錄（可缺少；沒有就不放這個欄位）
   const picnic = cleanPicnic(r.picnic)
   if (picnic) save.picnic = picnic
+  // v3.9.0：農場擺放（可缺少；不是物件或 items 不是陣列 = 沒有這個欄位）
+  const layout = cleanFarmLayout(r.farmLayout)
+  if (layout) save.farmLayout = layout
   if (r.resetNotice === true) save.resetNotice = true
   return save
 }

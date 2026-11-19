@@ -1,9 +1,9 @@
 import { BALANCE } from '../config/balance'
 import { SPECIES } from '../config/species'
 import {
-  BACK_BASE, HOUSE_H, LAMP_AX, LAMP_H, LAMP_W, POND_AX, POND_H, POND_W, TOWER_H, TOWER_W, buildingSlots, isWalkable, lampX, pathTopOf, petBounds, pondPos, pondStrip,
-  slotBox, towerBase, towerX, type Layout, type Rect,
+  BACK_BASE, buildingSlots, isWalkable, pathTopOf, petBounds, slotFootprint, type Layout, type Rect,
 } from './layout'
+import { coverFraction, footprintAt, type Placement } from './placement'
 import type { Action, Actor, BehaviorEnv } from './pets'
 
 /**
@@ -38,24 +38,33 @@ const MAT_GAP = 4
 const hitR = (a: Rect, b: Rect, g = 0): boolean => a.x0 < b.x1 + g && a.x1 > b.x0 - g && a.y0 < b.y1 + g && a.y1 > b.y0 - g
 
 /**
- * 不能和墊子外框重疊的東西：三個建築的空位外框（不管有沒有買，墊子的位置才不會因為買了建築而跳）、住家、路燈、水池與洗澡通道、鐘樓（含底部花叢）。
- * 樹與裝飾物的腳底在草地上緣 + 10，墊子頂端一定在它們之下（後排景物整個在墊子後面），所以不必另外列。
+ * 不能和墊子外框重疊的東西（v3.9.0）：所有擺出來的物件的「腳下佔地」（墊子平鋪在地上，物件的上半部可以畫在墊子前面），
+ * 加上還沒買的建築在預設位置的腳下佔地（買了會出現在那裡，墊子的位置才不會因為買了建築而跳）。收進庫存的不算。
+ * 另外 6 個座位要站得住、而且不被前面的物件蓋住超過一半（野餐的寵物要看得到，見 picnicMatRect）。
  */
 function matObstacles(L: Layout): Rect[] {
   const out: Rect[] = []
-  for (const s of buildingSlots(L)) if (s.id === 'kennel' || s.id === 'bowls' || s.id === 'catTree') out.push(slotBox(s))
-  out.push({ x0: L.house.x0, x1: L.house.x1, y0: L.house.baseY - HOUSE_H, y1: L.house.baseY })
-  out.push({ x0: lampX() - LAMP_AX, x1: lampX() - LAMP_AX + LAMP_W, y0: L.H - 12 - LAMP_H, y1: L.H - 12 })
-  const pd = pondPos(L)
-  out.push({ x0: pd.x - POND_AX, x1: pd.x - POND_AX + POND_W, y0: pd.y - POND_H, y1: pd.y })
-  const st = pondStrip(L)
-  if (st) out.push(st)
-  const tx = towerX(L)
-  out.push({ x0: tx - TOWER_W / 2 - 4, x1: tx + TOWER_W / 2 + 4, y0: towerBase(L) - TOWER_H, y1: towerBase(L) + 6 })
+  for (const it of L.placement.placed.values()) out.push(footprintAt(it.kind, it.x, it.y))
+  for (const s of buildingSlots(L)) if (!L.placement.owned.has(s.id)) out.push(slotFootprint(s))
   return out
 }
 
-const matCache = new WeakMap<Layout, Rect | null>()
+/**
+ * 墊子中心的偏好位置（v3.9.0 起固定）：水平 x = PICNIC_PREF_X（= v3.8.1 預設配置下「食盆右緣與貓跳台左緣的正中間」），
+ * 垂直在草地中段的中間。以前跟著食盆、貓跳台算，現在這兩個建築可以移動或收起來，所以改成固定值。
+ */
+export const PICNIC_PREF_X = 436
+
+/**
+ * v3.9.0：已經鋪好的墊子（野餐進行中，位置固定）在目前的擺放下還放得下嗎：外框不碰任何物件的腳下佔地（間距 MAT_GAP）、
+ * 6 個座位站得住而且不被前面的物件蓋住超過一半。擺設模式離開時用來決定要不要提前結束野餐。
+ */
+export function picnicMatFitsAt(L: Layout, r: Rect): boolean {
+  if (matObstacles(L).some((o) => hitR(r, o, MAT_GAP))) return false
+  return MAT_SEATS.every(([sx, sy]) => isWalkable(L, r.x0 + sx, r.y0 + sy) && coverFraction(L.placement, r.x0 + sx, r.y0 + sy) <= 0.5)
+}
+
+const matCache = new WeakMap<Layout, { P: Placement; r: Rect | null }>()
 
 /**
  * 野餐墊落地的位置（素材外框，邏輯座標）；這個視窗放不下 = null。
@@ -64,16 +73,12 @@ const matCache = new WeakMap<Layout, Rect | null>()
  * 偏好位置：水平在「食盆水盆右緣」與「貓跳台左緣」的正中間，垂直在草地中段的中間；挑離偏好位置最近的。
  */
 export function picnicMatRect(L: Layout): Rect | null {
-  if (matCache.has(L)) return matCache.get(L)!
+  const mc = matCache.get(L)
+  if (mc && mc.P === L.placement) return mc.r
   const b = petBounds(L)
   const yTop = L.farBottom + BACK_BASE + 4
   const yBot = pathTopOf(L)
-  const slots = buildingSlots(L)
-  const bowls = slots.find((s) => s.id === 'bowls')
-  const tree = slots.find((s) => s.id === 'catTree')
-  const left = bowls ? bowls.x + bowls.w / 2 : b.x0
-  const right = tree ? tree.x - tree.w / 2 : b.x1
-  const ax = (left + right) / 2
+  const ax = PICNIC_PREF_X
   const ay = (yTop + yBot) / 2 // 墊子中心
   const obs = matObstacles(L)
   let best: { r: Rect; cost: number } | null = null
@@ -83,11 +88,11 @@ export function picnicMatRect(L: Layout): Rect | null {
       const cost = Math.abs(x0 + MAT_W / 2 - ax) + 1.6 * Math.abs(y0 + MAT_H / 2 - ay)
       if (best && cost >= best.cost) continue
       if (obs.some((o) => hitR(r, o, MAT_GAP))) continue
-      if (!MAT_SEATS.every(([sx, sy]) => isWalkable(L, x0 + sx, y0 + sy))) continue
+      if (!MAT_SEATS.every(([sx, sy]) => isWalkable(L, x0 + sx, y0 + sy) && coverFraction(L.placement, x0 + sx, y0 + sy) <= 0.5)) continue
       best = { r, cost }
     }
   const out = best?.r ?? null
-  matCache.set(L, out)
+  matCache.set(L, { P: L.placement, r: out })
   return out
 }
 

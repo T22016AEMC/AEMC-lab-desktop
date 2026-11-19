@@ -14,8 +14,8 @@ import { assets, drawSprite, type Sprite } from './assets'
 import { drawClock } from './clock'
 import { drawEmptyIcon } from './icons'
 import {
-  DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, nearestWalkable, ownedSlots, pondPos, sceneObjects,
-  toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
+  DOOR, HOUSE_H, HOUSE_W, KENNEL_AX, KENNEL_H, TOWER_DOOR, TOWER_H, TOWER_W, computeLayout, doorRect, fromCss, inWater, isWalkable, nearestWalkable, ownedSlots, pondPos, sceneObjects,
+  POND_AX, POND_H, WATER, setPlacement, toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
   boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
 import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
@@ -105,6 +105,25 @@ interface Float {
   t: number
 }
 
+/**
+ * render 的指定視角（拍照、非整數倍的暫存畫布用）：放大倍率、平移（裝置像素）、畫布大小；ext = 要畫的可見範圍（邏輯座標，沒給 = 只畫場景本身）
+ */
+export interface RenderView {
+  scale: number
+  offsetX?: number
+  offsetY: number
+  w: number
+  h: number
+  ext?: LayoutRect
+}
+
+import { KIND_GEOM, defaultPlacement, footprintAt, resolvePlacement, spriteBoxAt, withMove, type Placement } from './placement'
+import { layoutWith } from './placeRules'
+import { pickObject } from './editDrag'
+import { picnicMatFitsAt } from './picnic'
+import type { LayoutKind } from '../config/layoutItems'
+import type { FarmLayout } from '../save/types'
+
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
 export class PixelEngine {
   layout: Layout = computeLayout(1280, 692, 1)
@@ -122,14 +141,25 @@ export class PixelEngine {
   hooks: EngineHooks = { requestBath: () => null, wake: () => {}, notify: () => {}, eatAtBowl: () => null, settlePlay: () => {}, addFind: () => false }
   /** 還沒揭曉的寶物（存檔 finds）、各部位穿的外觀（'gold' = 金色版；不在清單或圖集還沒載入就用預設圖） */
   private finds: readonly Find[] = []
-  private findPos: { L: Layout; owned: ReadonlySet<string>; list: readonly Find[]; pts: Map<string, { x: number; y: number }> } | null = null
+  private findPos: { L: Layout; P: Placement; list: readonly Find[]; pts: Map<string, { x: number; y: number }> } | null = null
   skins: Readonly<Record<string, string>> = {}
   /** 揭曉動畫：寶物位置、結果、已經過的時間 */
   private reveals: { x: number; y: number; result: RevealResult; t: number }[] = []
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
-  private ownedIds: ReadonlySet<string> = new Set()
+  /** v3.9.0：存檔的 farmLayout 與算出來的擺放結果（setLayoutData 時換新的） */
+  private farmLayout: FarmLayout | undefined = undefined
+  placement: Placement = defaultPlacement()
+  /**
+   * v3.9.0 擺設模式（農場模式）：寵物暫停（位置與動畫都停住）、滑鼠互動關閉；畫面層同時隱藏畫布上的透明入口。
+   * editGhost = 拖曳中的物件（畫在 x、y，ok = 擺放規則合法；不合法疊紅色）；editSelected = 點一下選取的物件（畫外框）。
+   */
+  editing = false
+  editGhost: { id: string; kind: LayoutKind; x: number; y: number; ok: boolean } | null = null
+  editSelected: string | null = null
+  private preview: { key: string; L: Layout } | null = null
+  private tintCache = new Map<string, HTMLCanvasElement>()
   bowlLeft = 0
-  private bmap: { L: Layout; owned: ReadonlySet<string>; map: Map<string, BuildingSlot> } | null = null
+  private bmap: { L: Layout; P: Placement; map: Map<string, BuildingSlot> } | null = null
   private anims: Anim[] = []
   private dragOff = { dx: 0, dy: 0 }
   private draggingId: string | null = null
@@ -146,16 +176,38 @@ export class PixelEngine {
    * 野餐（v3.8.0）：存檔裡進行中的那一場（active，由 syncPicnic 同步）、墊子飛下來的時間、是否已落地。
    * 墊子落地後才把座位分給參加的寵物（a.picnic）；存檔的 active 消失（結束）就收掉墊子、放掉所有座位。
    */
-  private picnicState: { active: PicnicActive; key: number; dropT: number; landed: boolean } | null = null
+  private picnicState: { active: PicnicActive; key: number; dropT: number; landed: boolean; mat: LayoutRect | null } | null = null
 
   /** 設定畫布大小（裝置像素）；既有寵物依新範圍夾回 */
   setSize(backW: number, backH: number, dpr: number): void {
     const old = this.layout
     this.layout = computeLayout(Math.max(1, backW), Math.max(1, backH), dpr)
-    this.layout.owned = this.ownedIds
+    setPlacement(this.layout, this.placement)
     for (const a of this.actors.values()) clampActor(a, this.layout)
-    // 版面真的變了（球與 home 的位置可能失效）：玩耍提前結算
-    if (old.backW !== this.layout.backW || old.backH !== this.layout.backH || old.dpr !== this.layout.dpr) this.endPlay('resize')
+    // v3.9.0：場景座標固定，改變視窗大小不影響場景裡的位置，只有邏輯尺寸變了才提前結算玩耍（目前不會發生）
+    if (old.W !== this.layout.W || old.H !== this.layout.H) this.endPlay('resize')
+  }
+
+  /** 非整數倍放大用的 1 倍暫存畫布 */
+  private scaledBuf: HTMLCanvasElement | null = null
+
+  private renderScaled(ctx: CanvasRenderingContext2D): void {
+    const L = this.layout
+    if (typeof document === 'undefined') return
+    const bx0 = Math.floor(L.view.x0)
+    const by0 = Math.floor(L.view.y0)
+    const bw = Math.ceil(L.view.x1) - bx0
+    const bh = Math.ceil(L.view.y1) - by0
+    const buf = this.scaledBuf ?? (this.scaledBuf = document.createElement('canvas'))
+    if (buf.width !== bw) buf.width = bw
+    if (buf.height !== bh) buf.height = bh
+    const bctx = buf.getContext('2d')
+    if (!bctx) return
+    this.render(bctx, { scale: 1, offsetX: -bx0, offsetY: -by0, w: bw, h: bh, ext: L.view })
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.imageSmoothingEnabled = false
+    ctx.clearRect(0, 0, L.backW, L.backH)
+    ctx.drawImage(buf, 0, 0, bw, bh, L.ox + bx0 * L.S, L.offsetY + by0 * L.S, bw * L.S, bh * L.S)
   }
 
   /** 設定還沒揭曉的寶物（存檔 finds 變動時呼叫） */
@@ -171,9 +223,9 @@ export class PixelEngine {
   /** 寶物在場景上的位置（id → 座標）；同一個 Layout、同一份 owned、同一份清單會快取 */
   findPoints(): Map<string, { x: number; y: number }> {
     const c = this.findPos
-    if (c && c.L === this.layout && c.owned === this.ownedIds && c.list === this.finds) return c.pts
+    if (c && c.L === this.layout && c.P === this.layout.placement && c.list === this.finds) return c.pts
     const pts = findPositions(this.layout, this.finds)
-    this.findPos = { L: this.layout, owned: this.ownedIds, list: this.finds, pts }
+    this.findPos = { L: this.layout, P: this.layout.placement, list: this.finds, pts }
     return pts
   }
 
@@ -239,12 +291,39 @@ export class PixelEngine {
   }
 
   /**
-   * 設定已購買的建築（存檔變動時呼叫）。購買後建築的腳下佔地加入障礙，寵物繞行；
-   * 站在新建築障礙裡的寵物（例如剛買下去、寵物剛好站在那裡）會被推出來。
+   * 設定已購買的建築（存檔變動時呼叫）：保留目前的擺放紀錄，重新算擺放結果（見 setLayoutData）。
    */
   setOwned(ids: readonly string[]): void {
-    this.ownedIds = new Set(ids)
-    this.layout.owned = this.ownedIds
+    this.setLayoutData(ids, this.farmLayout)
+  }
+
+  /**
+   * v3.9.0：設定已購買的建築與存檔的擺放紀錄（任一個變動時呼叫）→ 換一個新的擺放結果（擺放版本 +1，所有版面快取跟著失效）。
+   * 擺出來的物件腳下佔地是障礙，寵物繞行；站在新障礙裡的寵物會被推出來。載入時不檢查重疊、不改寫存檔。
+   */
+  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined): void {
+    const before = this.buildings()
+    this.farmLayout = farmLayout
+    this.placement = resolvePlacement(owned, farmLayout)
+    setPlacement(this.layout, this.placement)
+    // v3.9.0：建築收進庫存或換了位置 → 正在使用（走過去、坐著、睡著、吃著）的寵物離開那個建築，回到座位旁的地面
+    // （睡著的繼續睡，之後照一般規則睡在地上或走去新位置）。座位旁剛好被別的物件佔住就推到最近的可站位置
+    const after = this.buildings()
+    for (const a of this.actors.values()) {
+      const u = a.bld
+      if (!u) continue
+      const was = before.get(u.id)
+      const now = after.get(u.id)
+      if (now && was && now.x === was.x && now.y === was.y) continue
+      releaseUse(a)
+      if (!isWalkable(this.layout, a.x, a.y)) {
+        const p = nearestWalkable(this.layout, a.x, a.y)
+        a.x = p.x
+        a.y = p.y
+      }
+      a.tx = a.x
+      a.ty = a.y
+    }
     for (const a of this.actors.values()) {
       clampActor(a, this.layout)
       a.path = []
@@ -255,9 +334,9 @@ export class PixelEngine {
   /** 已購買、而且目前視窗放得下的建築空位（id → 空位）；放不下的建築紀錄還在，只是畫面上隱藏、寵物也不會去 */
   buildings(): ReadonlyMap<string, BuildingSlot> {
     const c = this.bmap
-    if (c && c.L === this.layout && c.owned === this.ownedIds) return c.map
+    if (c && c.L === this.layout && c.P === this.layout.placement) return c.map
     const map = new Map(ownedSlots(this.layout).map((s) => [s.id, s]))
-    this.bmap = { L: this.layout, owned: this.ownedIds, map }
+    this.bmap = { L: this.layout, P: this.layout.placement, map }
     return map
   }
 
@@ -320,6 +399,12 @@ export class PixelEngine {
   update(dt: number, f: FrameInfo): void {
     this.time += dt
     this.lastFrame = f
+    if (this.editing) {
+      // 擺設模式：寵物、野餐墊、粒子都停住；只有天氣照常
+      this.drops = makeDrops(this.layout, f.weather, this.drops, this.layout.view)
+      updateDrops(this.drops, this.layout, f.weather, dt, this.layout.view)
+      return
+    }
     this.updatePicnic(dt)
     const list = [...this.actors.values()]
     // 滑鼠互動：在寵物行為更新之前決定誰要看、靠近、退開、摸頭、貓拍狗吠（既有狀態優先：不符合的立刻解除）
@@ -334,7 +419,7 @@ export class PixelEngine {
       weather: f.weather, buildings: this.buildings(), bowlLeft: this.bowlLeft, eatAtBowl: (a) => this.hooks.eatAtBowl(a.id), settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
       finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
       fixed: list.filter((a) => !a.drag && !a.fly && !a.bath && (a.action === 'sleep' || a.bld?.phase === 'at')).map((a) => ({ id: a.id, x: a.x, y: a.y })),
-      picnicMat: this.picnicState?.landed ? picnicMatRect(this.layout) : null,
+      picnicMat: this.picnicState?.landed ? this.picnicState.mat : null,
     }
     for (const a of list) updateActor(a, dt, env)
     for (const an of this.anims) an.t += dt
@@ -354,8 +439,8 @@ export class PixelEngine {
     for (const r of this.reveals) r.t += dt
     this.reveals = this.reveals.filter((r) => r.t < BALANCE.dig.revealSeconds)
     // 天氣粒子
-    this.drops = makeDrops(this.layout, f.weather, this.drops)
-    updateDrops(this.drops, this.layout, f.weather, dt)
+    this.drops = makeDrops(this.layout, f.weather, this.drops, this.layout.view)
+    updateDrops(this.drops, this.layout, f.weather, dt, this.layout.view)
     this.giftT += dt
   }
 
@@ -367,26 +452,33 @@ export class PixelEngine {
    * 畫整個場景。view（v3.8.0 拍照用）：改用指定的放大倍率、平移與畫布大小，例如 { scale: 1, offsetY: 0, w: W, h: H } = 1 個邏輯像素畫成 1 個畫布像素；
    * 沒給就用版面（畫在主畫布上）。
    */
-  render(ctx: CanvasRenderingContext2D, view?: { scale: number; offsetY: number; w: number; h: number }): void {
-    const L = this.layout
+  render(ctx: CanvasRenderingContext2D, view?: RenderView): void {
+    const L = this.renderLayout()
     const f = this.lastFrame
     if (!assets.ready) return
+    // v3.9.0 非整數倍：先在 1 倍的暫存畫布畫出整個可見範圍，再關掉平滑等比放大貼上（不會有接縫，像素寬度會差 1 個裝置像素）
+    if (!view && !L.whole) {
+      this.renderScaled(ctx)
+      return
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.imageSmoothingEnabled = false
     ctx.clearRect(0, 0, view?.w ?? L.backW, view?.h ?? L.backH)
-    ctx.setTransform(view?.scale ?? L.S, 0, 0, view?.scale ?? L.S, 0, view?.offsetY ?? L.offsetY)
+    ctx.setTransform(view?.scale ?? L.S, 0, 0, view?.scale ?? L.S, view ? view.offsetX ?? 0 : L.ox, view?.offsetY ?? L.offsetY)
+    // 可見範圍（含延伸區）；拍照只畫場景本身
+    const ext = view ? view.ext : L.view
 
     const night = this.isHouseLit(f.hour)
-    drawSky(ctx, L, f.hour, f.weather)
-    drawStars(ctx, L, f.hour, this.time)
+    drawSky(ctx, L, f.hour, f.weather, ext)
+    drawStars(ctx, L, f.hour, this.time, ext)
     drawCelestial(ctx, L, f.hour, f.weather)
-    drawClouds(ctx, L, f.weather, this.time, 0)
-    drawFar(ctx, L)
-    drawGrass(ctx, L)
-    drawPath(ctx, L)
+    drawClouds(ctx, L, f.weather, this.time, 0, ext)
+    drawFar(ctx, L, ext)
+    drawGrass(ctx, L, ext)
+    drawPath(ctx, L, ext)
     // v3.8.0 野餐墊（落地後）：平鋪在地上，畫在所有物件與寵物之前（墊子頂端在後排景物腳底之下，所以不會蓋到樹與裝飾）
     const pst = this.picnicState
-    const mat = pst ? picnicMatRect(L) : null
+    const mat = pst?.mat ?? null
     const matSpr = pst ? assets.get(MAT_KEYS[pst.active.mat] ?? MAT_KEYS[0]) : null
     if (pst?.landed && mat && matSpr) drawSprite(ctx, matSpr, mat.x0 + matSpr.ax, mat.y1)
 
@@ -413,7 +505,8 @@ export class PixelEngine {
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
-      const s = o.key === 'clocktower' ? this.towerSprite() : assets.get(o.key)
+      const key = KIND_GEOM[o.kind].sprite
+      const s = o.key === 'clocktower' ? this.towerSprite() : key ? assets.get(key) : null
       if (!s) continue
       items.push({
         y: o.y,
@@ -423,7 +516,7 @@ export class PixelEngine {
       })
     }
     // 已購買的建築（這個視窗放得下的才畫）：依腳底 y 排前後；食盆空了在上方顯示「空」
-    for (const slot of this.buildings().values()) {
+    for (const slot of ownedSlots(L)) {
       const def = buildingDef(slot.id)
       const spr = def?.sprite ? assets.get(def.sprite) : null
       if (spr) items.push({ y: slot.y, draw: () => drawSprite(ctx, spr, slot.x, slot.y) })
@@ -517,7 +610,7 @@ export class PixelEngine {
     if (f.weather === 'rain' || f.weather === 'snow') drawDrops(ctx, this.drops, f.weather)
 
     // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
-    const dark = drawDarkness(ctx, L, f.hour, f.weather)
+    const dark = drawDarkness(ctx, L, f.hour, f.weather, ext)
     // 鐘面完全由程式畫，疊在鐘樓上、蓋過原圖那個小鐘面；畫在暗色疊層之後，夜晚也清楚可讀
     const tower = this.towerSprite()
     const face = tower?.meta?.clock
@@ -589,6 +682,7 @@ export class PixelEngine {
     ctx.globalAlpha = 1
     // v3.8.1 小名字標籤（拍照不畫）
     if (!view) this.drawLabel(ctx)
+    if (!view) this.drawEditMarks(ctx, L)
   }
 
   /**
@@ -641,7 +735,8 @@ export class PixelEngine {
     const s = assets.get('pond')
     if (!s) return
     drawSprite(ctx, s, x, y)
-    const w = waterEllipse(this.layout)
+    // 水面跟著這次畫的水池位置（擺設模式拖曳水池時是預覽位置）
+    const w = { cx: x - POND_AX + WATER.cx, cy: y - POND_H + WATER.cy, rx: WATER.rx, ry: WATER.ry }
     const line = w.cy + 6 // 水面線
     for (const a of this.actors.values()) {
       if (a.bath?.phase !== 'soak') continue
@@ -1111,7 +1206,7 @@ export class PixelEngine {
     return {
       layout: this.layout, rand: this.rand, emit: this.emit, settlePlay: (id, n, toy) => this.hooks.settlePlay(id, n, toy),
       others: [...this.actors.values()], nowMs: this.lastFrame.nowMs, hour: this.lastFrame.hour,
-      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind,
+      finds: this.finds, findCap: findCap(this.layout), addFind: this.addFind, notify: (m) => this.hooks.notify(m),
     }
   }
 
@@ -1176,7 +1271,8 @@ export class PixelEngine {
     }
     if (this.picnicState?.key === active.startedAt) return
     if (this.picnicState) this.clearPicnic()
-    this.picnicState = { active, key: active.startedAt, dropT: 0, landed: false }
+    // v3.9.0：墊子的位置在野餐開始時決定，之後固定（擺設模式移動東西時墊子不會跟著跳）
+    this.picnicState = { active, key: active.startedAt, dropT: 0, landed: false, mat: picnicMatRect(this.layout) }
   }
 
   private clearPicnic(): void {
@@ -1218,6 +1314,9 @@ export class PixelEngine {
 
   /** 野餐墊這個視窗放得下嗎（放不下就不能開始） */
   picnicMatFits(): boolean {
+    // 進行中：固定的墊子還放得下嗎（擺放改變後才可能放不下）；還沒開始：找得到位置嗎
+    const st = this.picnicState
+    if (st) return !!st.mat && picnicMatFitsAt(this.layout, st.mat)
     return picnicMatRect(this.layout) !== null
   }
 
@@ -1267,7 +1366,7 @@ export class PixelEngine {
 
   /** 墊子（落地後）的外框（邏輯座標）；沒在野餐或還在飛 = null */
   picnicMat(): LayoutRect | null {
-    return this.picnicState?.landed ? picnicMatRect(this.layout) : null
+    return this.picnicState?.landed ? this.picnicState.mat : null
   }
 
   /** 相機提示的位置（CSS 座標）；不能拍（沒在野餐、墊子還在飛、墊上沒有寵物）= null */
@@ -1297,6 +1396,100 @@ export class PixelEngine {
       this.selectedId = sel
     }
     return c
+  }
+
+  // ---------------------------------------------------------------------
+  // v3.9.0 擺設模式
+  // ---------------------------------------------------------------------
+
+  /** 畫圖用的版面：拖曳中 = 套上預覽擺放（物件畫在拖曳位置，鐘面、光暈、水面跟著走）；其他時候 = 目前的版面 */
+  private renderLayout(): Layout {
+    const g = this.editGhost
+    if (!g) {
+      this.preview = null
+      return this.layout
+    }
+    const key = `${this.layout.placement.rev}|${g.id}|${g.x}|${g.y}|${this.layout.backW}|${this.layout.backH}`
+    if (this.preview?.key !== key) this.preview = { key, L: layoutWith(this.layout, withMove(this.layout.placement, g.id, g.x, g.y)) }
+    return this.preview.L
+  }
+
+  /** 畫布上的 CSS 座標 → 最上層的物件 id（用不透明像素判斷；寵物、寶物不算）；沒有 = null */
+  objectAt(cssX: number, cssY: number): string | null {
+    const p = fromCss(this.layout, cssX, cssY)
+    return pickObject(this.layout.placement, p.x, p.y)
+  }
+
+  /** 拖起建築時：坐在（或走去）那個建築的寵物先回到地面（拖曳中的預覽不會把牠們一起帶走） */
+  releaseUsersOf(id: string): void {
+    for (const a of this.actors.values()) {
+      if (a.bld?.id !== id) continue
+      releaseUse(a)
+      if (!isWalkable(this.layout, a.x, a.y)) {
+        const p = nearestWalkable(this.layout, a.x, a.y)
+        a.x = p.x
+        a.y = p.y
+      }
+      a.tx = a.x
+      a.ty = a.y
+    }
+  }
+
+  /** 物件種類的素材（住家、鐘樓依目前狀態挑圖） */
+  private kindSprite(kind: LayoutKind): Sprite | null {
+    if (kind === 'house') return this.houseSprite(this.isHouseLit(this.lastFrame.hour))
+    if (kind === 'tower') return this.towerSprite()
+    const key = KIND_GEOM[kind].sprite
+    return key ? assets.get(key) : null
+  }
+
+  /** 素材的紅色版本（不合法的位置）：不透明像素疊半透明紅色，快取 */
+  private tinted(s: Sprite): HTMLCanvasElement | null {
+    if (typeof document === 'undefined') return null
+    const k = `${s.img.src ?? ''}|${s.x},${s.y},${s.w},${s.h}`
+    let c = this.tintCache.get(k)
+    if (!c) {
+      c = document.createElement('canvas')
+      c.width = s.w
+      c.height = s.h
+      const g = c.getContext('2d')
+      if (!g) return null
+      g.imageSmoothingEnabled = false
+      g.drawImage(s.img, s.x, s.y, s.w, s.h, 0, 0, s.w, s.h)
+      g.globalCompositeOperation = 'source-atop'
+      g.fillStyle = 'rgba(230,40,30,0.55)'
+      g.fillRect(0, 0, s.w, s.h)
+      this.tintCache.set(k, c)
+    }
+    return c
+  }
+
+  /** 擺設模式的標記：拖曳中的物件腳下佔地（綠＝可以放、紅＝不行，不行時整個物件疊紅色）、選取中的物件外框（白色虛線） */
+  private drawEditMarks(ctx: CanvasRenderingContext2D, L: Layout): void {
+    if (!this.editing) return
+    const dashed = (r: { x0: number; y0: number; x1: number; y1: number }, color: string): void => {
+      ctx.fillStyle = color
+      const x0 = Math.round(r.x0), x1 = Math.round(r.x1), y0 = Math.round(r.y0), y1 = Math.round(r.y1)
+      for (let x = x0; x < x1; x += 4) {
+        ctx.fillRect(x, y0, Math.min(2, x1 - x), 1)
+        ctx.fillRect(x, y1 - 1, Math.min(2, x1 - x), 1)
+      }
+      for (let y = y0; y < y1; y += 4) {
+        ctx.fillRect(x0, y, 1, Math.min(2, y1 - y))
+        ctx.fillRect(x1 - 1, y, 1, Math.min(2, y1 - y))
+      }
+    }
+    const g = this.editGhost
+    if (g) {
+      if (!g.ok) {
+        const s = this.kindSprite(g.kind)
+        const t = s ? this.tinted(s) : null
+        if (s && t) ctx.drawImage(t, Math.round(g.x - s.ax), Math.round(g.y - s.ay))
+      }
+      dashed(footprintAt(g.kind, g.x, g.y), g.ok ? '#7dff7a' : '#ff3b30')
+    }
+    const sel = this.editSelected ? L.placement.placed.get(this.editSelected) : undefined
+    if (sel && (!g || g.id !== sel.id)) dashed(spriteBoxAt(sel.kind, sel.x, sel.y), '#ffffff')
   }
 
   houseSize(): { w: number; h: number } {

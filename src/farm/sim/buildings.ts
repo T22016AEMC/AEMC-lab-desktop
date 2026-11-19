@@ -26,12 +26,31 @@ export function bowlCapacity(save: SaveData): number {
   return save.pets.length * BALANCE.buildings.bowls.portionsPerPet
 }
 
-/** 食盆今天還剩幾份（本地日期 00:00 補滿；沒買食盆就是 0）。存檔只記今天用掉幾份（bowl.used），格式不變 */
+/**
+ * v3.9.0：建築收進庫存了嗎（存檔 farmLayout 的紀錄是 stored）。收進庫存的建築仍是「已購買」（ownedBuildings 不變、不能重複買），
+ * 但行為上視同沒買：沒有座位、食盆不自動吃。
+ */
+export function isStored(save: SaveData, id: string): boolean {
+  return !!save.farmLayout?.items.some((it) => it.id === id && it.state === 'stored')
+}
+
+/** 建築現在有沒有擺出來（買了而且沒收進庫存） */
+export function isPlacedBuilding(save: SaveData, id: string): boolean {
+  return save.ownedBuildings.includes(id) && !isStored(save, id)
+}
+
+/**
+ * 食盆今天還剩幾份（本地日期 00:00 補滿；沒買或收進庫存都是 0）。存檔只記今天用掉幾份（bowl.used），格式不變；
+ * 收起來、再擺出來都不碰 bowl.used，所以份量和收起前一樣（不能靠反覆收起刷份量）。
+ */
 export function bowlLeft(save: SaveData, nowMs: number): number {
-  if (!save.ownedBuildings.includes('bowls')) return 0
+  if (!isPlacedBuilding(save, 'bowls')) return 0
   const used = save.bowl.date === todayKey(nowMs) ? save.bowl.used : 0
   return Math.max(0, bowlCapacity(save) - used)
 }
+
+/** 食盆收進庫存時，去食盆吃被拒絕的原因 */
+export const BOWLS_STORED_MESSAGE = '食盆收起來了'
 
 export interface EatResult {
   save: SaveData
@@ -47,6 +66,7 @@ export function eatAtBowl(save: SaveData, ctx: Ctx, petId: string): EatResult {
   const fail = (error: string): EatResult => ({ save, effects: [], error })
   const pet = save.pets.find((p) => p.id === petId)
   if (!pet) return fail('找不到這隻寵物')
+  if (!isPlacedBuilding(save, 'bowls')) return fail(BOWLS_STORED_MESSAGE)
   if (bowlLeft(save, ctx.nowMs) <= 0) return fail('食盆今天空了')
   if (isSleeping(pet, ctx.hour, ctx.nowMs)) return fail('正在睡覺')
   const today = todayKey(ctx.nowMs)

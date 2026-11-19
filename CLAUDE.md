@@ -208,3 +208,17 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **測試用覆寫**：`overrides.hover`（6 項各一個 `off` 開關＋`swatChance`），預設全關／null；只有 `src/dev/DevPanel.tsx`（開發環境）與自動化測試寫入。正式 build 要檢查不含「測試模式」「生物圖鑑」`__farm`、`shiftTime`。
 - **貓圖改 hd**（`process-assets.mjs`：`CAT_HD`、`CAT_HD_REVERT`、`despillMagenta`）：貓 core／extra 用 `cat_<花色>_core_hd.png`／`_extra_hd.png`（原圖保留）；`CAT_HD_REVERT` 列出比對後退回舊圖的幀（目前只有橘貓 swat，hd 的揮爪特效弧線被濾掉）；橘貓 core 第 6、7、8 格仍是 `cat_orange_core_fix.png`（求解用的「舊」尺寸一律從舊圖 core 取，所以三張與 v3.6.3 逐像素相同）。`CAT_HD=0` 回到舊圖（只供新舊比對）。hd 圖在毛色邊緣有零星鮮豔洋紅單點，`despillMagenta` 以鄰居平均色取代（報告逐張列出）。**換貓圖後要重跑管線、確認其他素材（狗、場景、野餐…）逐像素不變、每張洋紅殘留 0、橘貓 sleep／eat／groom 沒被蓋掉。**
 - 已知行為：貓 `tangled` 幀沒有任何行為使用（和 v3.8.0 一樣）；`swat` 用貓 extra 的 swat 幀（橘貓是舊圖，所以揮爪特效只剩幾個殘點，其他花色的特效與 v3.8.0 相同）。
+
+## v3.9.0：農場自由擺放與倉庫
+
+- **場景固定 640×320**（`pixel/layout.ts`：`SCENE_W/H`、`sceneScale`；整數倍優先，整數倍讓畫面小於視窗 75% 才用非整數倍，非整數倍走 1 倍暫存畫布再縮放）。延伸區用天空與草地填滿，沙土路從左緣鋪到右緣（格子對齊 x 46）。
+- **物件表**：`config/layoutItems.ts`（18 個物件；花槽 id 是 `planter`、珊瑚是 `coral`——舊測試檢查 dist 不得出現已取消的 `flowerbed`）。住家、鐘樓、池塘、公佈欄 `storable: false`；灌木、高草叢、花槽、珊瑚 `hasDefault: false`（預設在倉庫）。
+- **擺放**：`pixel/placement.ts`（`DEFAULT_POS` ＝ v3.8.1 的位置、`KIND_GEOM` 腳下佔地、`resolvePlacement`、`withMove`、`placementToLayout`）、`pixel/envelopes.ts`（`scripts/gen-envelopes.mjs` 產生，逐列不透明區段；素材改了要重跑）、`pixel/placeRules.ts`（`canPlace`：間距 `MIN_GAP`、不擋門／鐘面／水面、連通檢查；鐘樓往後的下限 `TOWER_TOP_MIN`）、`pixel/nav.ts`（連通區塊；≤18 格的死角不算不連通）。洗澡站位在 `pixel/reach.ts`（`pondStand`）。
+- **存檔**：`farmLayout`（只記和預設不同的物件，`cleanFarmLayout` 防呆：x、y 壞一個兩個都回預設；花槽／珊瑚座標壞或缺 → 倉庫）；`schemaVersion` 仍 5，`DATA_REV` 3 → 4，匯出格式 5 → 6。
+- **倉庫的後果**：`sim/buildings.ts` 的 `isStored`／`isPlacedBuilding`；食盆收起＝沒買（不自動吃、手動餵 1 金幣、`bowl.used` 不動，不能靠收起刷份量）；狗窩、貓跳台收起後寵物睡地上、不躲雨。
+- **介面**：`ui/EditLayer.tsx`（編輯分頁）、`ui/BuildLayer.tsx`（購買分頁）、`ui/farmHotkey.ts`（E）、`pixel/editDrag.ts`（拖曳、點擊與拖曳的判斷）；`uiStore.buildMode`／`farmTab`／`farmBuyNotice` 只在記憶體，不存檔。
+- **素材**：花槽 62×45、珊瑚 59×50（`PLANTER_SCALE`／`CORAL_SCALE` 預設 0.7）；`process-assets.mjs` 用 `isBgNear`＋`trimMagentaFringe` 只處理這兩格，其他素材逐像素不變。
+- **擺設寫入一律用「目前存檔」算**：`EditLayer` 放下／收進倉庫時用 `layoutAfterMove(save.ownedBuildings, save.farmLayout, id, x, y)`（`placement.ts`），不能用 `engine.layout.placement`（引擎要到下一個影格才跟上存檔；同一影格內連續兩次寫入，第二次會蓋掉第一次）。買建築時 `farmStore.buyBuilding` 用 `withoutRecord` 忽略存檔裡這棟建築以前殘留的擺放紀錄；匯入摘要的 `layoutCount` 只算 `placementToLayout(resolvePlacement(...))` 的項目。
+- **已知限制（不修）**：(1) 還開著的 v3.8.x 舊分頁匯出的備份不含擺放（舊版已出貨，新版分不出來）；(2) 兩個 v3.9.0 分頁同時開，後存的覆蓋先存的（寵物、金幣一直如此，4.0.0 再考慮跨分頁偵測）；(3) `backupActions.exportBackup` 先 `flushSave()` 再立刻 `load()`，因為 `LocalStorageAdapter.save` 會先 `await snapshot()` 才寫入，匯出檔可能少掉最後一個節流區間的變動（以前就有；擺放不受影響，`setFarmLayout` 放下就立刻寫入）。
+- **測試**：`tests-archive/v390/`（不接 npm scripts；環境、執行方式、已知例外見該資料夾的 README.md）。
+- **鐘樓與塔門保護**（`placeRules.ts`）：`TOWER_TOP_MIN` = -24（鐘樓腳底最小 y = 136 = 草地上緣，尖頂超出畫面 24 像素；`minFootY` 取 `max(草地上緣, 160 + TOWER_TOP_MIN)`，再改小也不會超過草地上緣）。塔門、招牌、鐘面三個互動區各自允許被前面物件的素材蓋住 `TOWER_ZONE_COVER_MAX`（0.25）以下（`coverStats` 數整數像素格：邊界往內取整、剛好等於上限可以；`coverExceeds`、`towerCoverBlock`）；窗戶與其他物件的互動區仍用 `runsHit`（完全不能蓋）；`catTreeHitsTower` 沒動；鐘樓腳下佔地間距維持 `MIN_GAP` 12、沒有塔門特例。能蓋到鐘面的物件一定先把塔門蓋過 25%，所以鐘面這一區在現有素材下不會單獨擋人。

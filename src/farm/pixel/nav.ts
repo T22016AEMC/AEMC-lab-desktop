@@ -1,4 +1,5 @@
 import { blockers, walkZones, type Layout } from './layout'
+import type { Placement } from './placement'
 
 /**
  * 寵物繞行障礙的尋路（純邏輯，可在 Node 測試）。
@@ -7,7 +8,7 @@ import { blockers, walkZones, type Layout } from './layout'
  * 購買後的建築（腳下佔地 66×22 等）會在走道上形成一道牆，直線走過去會卡住，所以要規劃繞行路線。
  * 做法：把活動範圍切成 CELL 像素的格子，格子「可走」= 在活動範圍內、離任何障礙至少 MARGIN 像素；
  * 用 A* 找格子路徑，再用視線檢查把多餘的轉折拉直，回傳路徑點（不含起點）。
- * 同一個 Layout、同一份 owned 的格子表會快取。
+ * 同一個 Layout、同一個擺放結果（placement）的格子表會快取。
  */
 
 export interface Pt {
@@ -27,7 +28,7 @@ interface Grid {
   ok: Uint8Array
 }
 
-const gridCache = new WeakMap<Layout, { owned: ReadonlySet<string>; grid: Grid }>()
+const gridCache = new WeakMap<Layout, { P: Placement; grid: Grid }>()
 
 /** 睡著或坐在建築座位上的寵物（不會動）：路徑要離牠們一小段距離，不要從牠們身上穿過去 */
 export interface FixedPet extends Pt {
@@ -46,13 +47,13 @@ export function isClear(L: Layout, x: number, y: number): boolean {
 
 function gridOf(L: Layout): Grid {
   const hit = gridCache.get(L)
-  if (hit && hit.owned === L.owned) return hit.grid
+  if (hit && hit.P === L.placement) return hit.grid
   const cols = Math.ceil(L.W / CELL) + 1
   const rows = Math.ceil(L.H / CELL) + 1
   const ok = new Uint8Array(cols * rows)
   for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) ok[cy * cols + cx] = isClear(L, cx * CELL, cy * CELL) ? 1 : 0
   const grid = { cols, rows, ok }
-  gridCache.set(L, { owned: L.owned, grid })
+  gridCache.set(L, { P: L.placement, grid })
   return grid
 }
 
@@ -201,4 +202,82 @@ export function findPath(L: Layout, x0: number, y0: number, x1: number, y1: numb
     anchor = far
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// v3.9.0：連通區塊（擺放規則的「連通」與寵物目的地「走得到」）
+// ---------------------------------------------------------------------------
+
+/** 4 像素格子上的連通區塊：label[i] = 區塊編號（不可走 = -1）、sizes[k] = 區塊 k 的格數、main = 最大的區塊 */
+export interface Components {
+  cols: number
+  rows: number
+  label: Int32Array
+  sizes: number[]
+  main: number
+}
+
+/** 比一隻寵物身體（約 24×12 像素 = 18 格）小的死角不算「不連通」，寵物也不會把那裡當目的地（使用者 2026-11-18 決定的寬鬆版本） */
+export const POCKET_MAX_CELLS = Math.floor((24 / CELL) * (12 / CELL)) // 18
+
+const compCache = new WeakMap<Layout, { P: Placement; c: Components }>()
+
+/** 可走格子（離障礙至少 MARGIN）的連通區塊（8 方向，斜走不可切過牆角，和尋路相同）；同一個擺放結果會快取 */
+export function components(L: Layout): Components {
+  const hit = compCache.get(L)
+  if (hit && hit.P === L.placement) return hit.c
+  const g = gridOf(L)
+  const { cols, rows } = g
+  const label = new Int32Array(cols * rows).fill(-1)
+  const sizes: number[] = []
+  const stack: number[] = []
+  for (let i = 0; i < cols * rows; i++) {
+    if (!g.ok[i] || label[i] >= 0) continue
+    const k = sizes.length
+    let n = 0
+    label[i] = k
+    stack.push(i)
+    while (stack.length) {
+      const cur = stack.pop()!
+      n++
+      const cx = cur % cols
+      const cy = (cur / cols) | 0
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const nx = cx + dx
+          const ny = cy + dy
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue
+          const ni = ny * cols + nx
+          if (!g.ok[ni] || label[ni] >= 0) continue
+          if (dx && dy && (!g.ok[cy * cols + nx] || !g.ok[ny * cols + cx])) continue
+          label[ni] = k
+          stack.push(ni)
+        }
+    }
+    sizes.push(n)
+  }
+  let main = -1
+  for (let k = 0; k < sizes.length; k++) if (main < 0 || sizes[k] > sizes[main]) main = k
+  const c = { cols, rows, label, sizes, main }
+  compCache.set(L, { P: L.placement, c })
+  return c
+}
+
+/** 這個腳底位置在主要區塊上嗎（離最近的可走格子 2 格以內，而且那一格屬於最大的區塊） */
+export function isReachable(L: Layout, x: number, y: number): boolean {
+  const c = components(L)
+  if (c.main < 0) return false
+  const g = gridOf(L)
+  const i = nearestCell(g, x, y)
+  if (i < 0) return false
+  const dx = (i % c.cols) * CELL - x
+  const dy = ((i / c.cols) | 0) * CELL - y
+  return Math.hypot(dx, dy) <= CELL * 2 && c.label[i] === c.main
+}
+
+/** 除了最大的區塊之外，有沒有「比一隻寵物身體大」的區塊（有 = 不連通） */
+export function hasIsolatedRegion(L: Layout): boolean {
+  const c = components(L)
+  return c.sizes.some((n, k) => k !== c.main && n > POCKET_MAX_CELLS)
 }
