@@ -93,6 +93,103 @@ function trimMagentaFringe(spr, passes = 2) {
   return { spr: cleanSprite(spr, isBgNear), n }
 }
 
+/**
+ * 4.0-R：邊緣洋紅偏色（統計與測試用）：緊鄰透明處（上下左右任一邊透明或在素材外）的不透明像素，
+ * R、B 都明顯高於 G（洋紅混色的特徵；藍色輪廓混洋紅會偏藍紫、黑色輪廓混洋紅會是暗紫，所以 R、B 可以差到 90）。
+ * 這個計數也會算到真正的粉紅、紫色邊緣（花、珊瑚），所以只拿來和換圖前比「有沒有變多」，不要求 0。
+ */
+const magentaCast = (r, g, b) => Math.min(r, b) >= 40 && Math.min(r, b) - g >= 35 && Math.abs(r - b) <= 90
+const isEdge = (rgba, w, h, x, y) => {
+  const open = (xx, yy) => xx < 0 || yy < 0 || xx >= w || yy >= h || !rgba[(yy * w + xx) * 4 + 3]
+  return open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1)
+}
+function edgeMagentaCount(spr) {
+  const { w, h, rgba } = spr
+  let n = 0
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      if (rgba[i + 3] && magentaCast(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) n++
+    }
+  return n
+}
+
+/**
+ * 4.0-R：去邊（管線的通用步驟，每張素材加進圖集前都做；只改顏色、不改透明度，所以尺寸、輪廓、錨點不變）。
+ * 原圖的洋紅底和物件邊緣混色，去背只拿掉接近純洋紅的像素，留下「一半洋紅、一半物件色」的淡紫邊點。
+ * 對緊鄰透明處、色相偏洋紅的像素 P：在周圍 5×5 的不透明像素 N（本身不是候選）裡找「P 落在 N 到洋紅 M 的連線上」的那一個
+ * （P ≈ N + t·(M − N)，t ≥ DEFRINGE_T、離連線 ≤ DEFRINGE_RES），P 改成 N 的顏色（鄰居是暗輪廓時就是輪廓色）。
+ * 真正的紫色、粉紅不在「某個鄰色＋洋紅」的連線上（離連線遠），不會被改；內部（不緊鄰透明處）的像素一律不動。最多 3 輪（邊點可能 2 格寬，外層的要等內層改好）。
+ */
+const DEFRINGE_M = [250, 0, 250]
+const DEFRINGE_T = 0.1
+const DEFRINGE_RES = 26
+/** 第二段（只給洋紅很重的像素：G ≤ 0.35 × min(R, B)）：允許離連線較遠（藍色輪廓混洋紅的藍紫點，鄰近沒有剛好的輪廓色）。正常的粉紅、紫花、珊瑚 G 比這高，不會進第二段 */
+const DEFRINGE_STRONG_G = 0.35
+const DEFRINGE_STRONG_T = 0.15
+const DEFRINGE_STRONG_RES = 48
+/** 第三段：洋紅很重而且很暗（max(R, B) ≤ 90）的像素 = 黑色輪廓混到洋紅，改成 5×5 內最近的暗色（亮度 ≤ 90）非候選輪廓色 */
+const DEFRINGE_DARK = 90
+function defringeEdges(spr, passes = 3) {
+  const { w, h, rgba } = spr
+  // 候選：R、B 都高於 G（洋紅混色）；或偏藍紫（B > R、R 也明顯高於 G：藍色輪廓混洋紅）
+  const loose = (r, g, b) => Math.min(r, b) >= 40 && Math.min(r, b) - g >= 25 && (Math.abs(r - b) <= 90 || (b > r && r - g >= 30))
+  let total = 0
+  for (let k = 0; k < passes; k++) {
+    const cand = new Uint8Array(w * h)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        if (rgba[i + 3] && loose(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) cand[y * w + x] = 1
+      }
+    const fix = []
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        if (!cand[y * w + x]) continue
+        const i = (y * w + x) * 4
+        const P = [rgba[i], rgba[i + 1], rgba[i + 2]]
+        let best = null
+        const strong = P[1] <= DEFRINGE_STRONG_G * Math.min(P[0], P[2])
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) {
+            if (!dx && !dy) continue
+            const xx = x + dx, yy = y + dy
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h || cand[yy * w + xx]) continue
+            const j = (yy * w + xx) * 4
+            if (!rgba[j + 3]) continue
+            const N = [rgba[j], rgba[j + 1], rgba[j + 2]]
+            const d = [DEFRINGE_M[0] - N[0], DEFRINGE_M[1] - N[1], DEFRINGE_M[2] - N[2]]
+            const dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+            if (!dd) continue
+            const t = ((P[0] - N[0]) * d[0] + (P[1] - N[1]) * d[1] + (P[2] - N[2]) * d[2]) / dd
+            if (t < (strong ? Math.min(DEFRINGE_T, DEFRINGE_STRONG_T) : DEFRINGE_T) || t > 1) continue
+            const res = Math.hypot(P[0] - N[0] - t * d[0], P[1] - N[1] - t * d[1], P[2] - N[2] - t * d[2])
+            // 同樣貼近連線時，取近的鄰居（距離加權）
+            const score = res + (Math.abs(dx) + Math.abs(dy) - 1) * 2
+            const lim = strong && t >= DEFRINGE_STRONG_T ? DEFRINGE_STRONG_RES : DEFRINGE_RES
+            if (res <= lim && (!best || score < best.score)) best = { score, N }
+          }
+        if (!best && strong && Math.max(P[0], P[2]) <= DEFRINGE_DARK) {
+          let bd = Infinity
+          for (let dy = -2; dy <= 2; dy++)
+            for (let dx = -2; dx <= 2; dx++) {
+              const xx = x + dx, yy = y + dy
+              if ((!dx && !dy) || xx < 0 || yy < 0 || xx >= w || yy >= h || cand[yy * w + xx]) continue
+              const j = (yy * w + xx) * 4
+              if (!rgba[j + 3] || Math.max(rgba[j], rgba[j + 1], rgba[j + 2]) > DEFRINGE_DARK) continue
+              const d = Math.abs(dx) + Math.abs(dy)
+              if (d < bd) { bd = d; best = { N: [rgba[j], rgba[j + 1], rgba[j + 2]] } }
+            }
+        }
+        if (best) fix.push([i, best.N])
+      }
+    for (const [i, N] of fix) { rgba[i] = N[0]; rgba[i + 1] = N[1]; rgba[i + 2] = N[2] }
+    total += fix.length
+    if (!fix.length) break
+  }
+  return total
+}
+
 async function load(file) {
   const path = join(SRC, file)
   if (!existsSync(path)) throw new Error('找不到原圖：' + path)
@@ -450,8 +547,20 @@ function detectWater(s) {
 const atlases = {} // name → { frames: [{key,w,h,rgba,ax,ay}] }
 const manifest = { version: 1, pixelSize: 1, atlases: {}, frames: {}, animations: {}, notes: {} }
 
+/** 4.0-R：去邊的逐張紀錄 { 素材鍵: [去邊前的邊緣洋紅偏色數, 去邊後, 改色的像素數] }；DEFRINGE=0（環境變數）= 不去邊（只供前後比對） */
+const DEFRINGE = process.env.DEFRINGE !== '0'
+const defringeLog = {}
 function addFrame(group, key, spr, extra = {}) {
   atlases[group] ??= []
+  // 4.0-R：通用去邊（只改顏色，不改透明度與尺寸）。spr 可能被別的素材共用（例如鐘樓），所以複製一份再改
+  if (DEFRINGE) {
+    const before = edgeMagentaCount(spr)
+    if (before) {
+      spr = { ...spr, rgba: Buffer.from(spr.rgba) }
+      const fixed = defringeEdges(spr)
+      defringeLog[key] = [before, edgeMagentaCount(spr), fixed]
+    }
+  }
   const frame = { key, w: spr.w, h: spr.h, rgba: spr.rgba, ax: extra.ax ?? Math.round(spr.w / 2), ay: extra.ay ?? spr.h, ...extra }
   atlases[group].push(frame)
   return frame
@@ -1581,6 +1690,15 @@ async function writeOutputs() {
       }
       if (f.w < 6 || f.h < 6) warn(`${f.key} 太小（${f.w}×${f.h}）`)
     }
+  // 4.0-R：去邊報告
+  {
+    const rows = Object.entries(defringeLog)
+    const sum = (i) => rows.reduce((t, [, v]) => t + v[i], 0)
+    info('')
+    info(`===== 去邊（邊緣洋紅偏色）${DEFRINGE ? '' : '：已用 DEFRINGE=0 關閉'} =====`)
+    info(`有偏色的素材 ${rows.length} 張；邊緣洋紅偏色 去邊前 ${sum(0)} → 去邊後 ${sum(1)}，改色 ${sum(2)} 像素`)
+    for (const [k, v] of rows) info(`  ${k}：${v[0]} → ${v[1]}（改色 ${v[2]}）`)
+  }
   // 前後尺寸對照表
   info('')
   info('===== 尺寸對照表（寬×高，邏輯像素；前 = 第一版統一 p=6.1，後 = 本版） =====')
@@ -1649,5 +1767,5 @@ async function overview(tag, bg) {
 }
 
 // 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
-export { sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+export { sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
 if (IS_MAIN) await main()

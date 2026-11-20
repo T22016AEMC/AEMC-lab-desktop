@@ -152,6 +152,37 @@ for (const [d, fr] of Object.entries(MOUTH))
   ok(threw, '沒有明確參數的原圖（估出 p 碰到範圍下限）會讓管線報錯')
 }
 
+// ---- 8. 邊緣洋紅偏色（去邊）：不得比換圖前（edge-before.json，fa6e940 的圖集）多 ----
+{
+  const base = JSON.parse(readFileSync(join(ROOT, 'tests-archive', 'v400r', 'edge-before.json'), 'utf8')).frames
+  // 使用者指出有淡紫邊點的物件：逐張不得多於換圖前
+  const KEY = ['cloud_a', 'cloud_b', 'cloud_c', 'tree', 'doghouse', 'lamp', 'cat_tree', 'planter', 'coral']
+  let total = 0, baseTotal = 0
+  for (const k of Object.keys(man.frames)) {
+    const f = F(k)
+    const rgba = Buffer.alloc(f.w * f.h * 4)
+    for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) rgba.set(f.rgba(x, y), (y * f.w + x) * 4)
+    const c = pa.edgeMagentaCount({ w: f.w, h: f.h, rgba })
+    const b = base[k] ?? 0
+    total += c
+    baseTotal += b
+    // 計數也會算到真正的紅、粉紅、紫色輪廓（嘴、蘑菇、星星…），單張允許比換圖前多 2；指定物件不允許
+    if (KEY.includes(k)) ok(c <= b, `${k} 邊緣洋紅偏色 ${c} ≤ 換圖前 ${b}`)
+    else ok(c <= b + 2, `${k} 邊緣洋紅偏色 ${c} ≤ 換圖前 ${b} + 2`)
+  }
+  ok(total <= baseTotal, `全部素材邊緣洋紅偏色合計 ${total} ≤ 換圖前 ${baseTotal}`)
+  // 去邊只改顏色：同一個像素不會變透明（尺寸與輪廓已在第 1、2 項檢查）
+  const t = { w: 3, h: 1, rgba: Buffer.from([0, 0, 0, 255, 120, 30, 120, 255, 0, 0, 0, 0]) }
+  pa.defringeEdges(t)
+  eq([t.rgba[3], t.rgba[7], t.rgba[11]], [255, 255, 0], '去邊不改透明度')
+  // 真正的紫色、粉紅不被改：內部不動、邊緣的薰衣草紫與粉紅（和鄰色不在洋紅連線上）不動
+  const keep = (P, N) => { const s = { w: 2, h: 1, rgba: Buffer.from([...N, 255, ...P, 255]) }; pa.defringeEdges(s); return [...s.rgba.subarray(4, 7)] }
+  eq(keep([110, 70, 190], [80, 50, 160]), [110, 70, 190], '邊緣的薰衣草紫不被改')
+  eq(keep([230, 90, 170], [200, 60, 140]), [230, 90, 170], '邊緣的粉紅不被改')
+  eq(keep([169, 40, 232], [56, 111, 223]), [56, 111, 223], '藍色輪廓混洋紅的藍紫點改成輪廓色')
+  eq(keep([45, 0, 48], [20, 12, 10]), [20, 12, 10], '黑色輪廓混洋紅的暗紫點改成暗輪廓色')
+}
+
 if (fails.length) {
   console.log(fails.slice(0, 60).join('\n'))
   console.log(`v4.0-R 素材一致性測試：${n} 項中失敗 ${fails.length} 項`)

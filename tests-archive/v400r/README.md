@@ -16,6 +16,8 @@
 | `cat-tree-envelope.mjs` | 由圖集算 `layout.ts` 的 `CAT_TREE_ENVELOPE`（用換圖前的圖集可逐項重現舊值） |
 | `node/v400r-assets-entry.js`、`runall.sh` | 素材一致性測試（見下） |
 | `adapt-r.py` | 對既有測試的預期值異動（可重複執行） |
+| `edge-magenta.mjs`、`edge-before.json`、`edge-r-nodefringe.json`、`edge-magenta-table.csv` | 邊緣洋紅偏色計數（判斷式 = 管線的 `edgeMagentaCount`）：換圖前（fa6e940）、換圖後未去邊、去邊後，逐張表格。測試以 `edge-before.json` 為基準 |
+| `defringe-shots.mjs` | 去邊放大圖（換圖前｜未去邊｜去邊後）：雲、樹、狗窩、路燈、貓跳台、花槽、珊瑚 → `shots/defringe/` |
 | `overlay-old-assets.mjs` | 把目前素材蓋到「舊版逐像素比對」的對照組（`v390/.work/v381src`、`calendar-tweaks/.work/v391src`），讓 t1c-path、tp-pixel-v391 比的是程式；改素材後要再跑一次 |
 
 `shots/`、`.work/` 不進 git。
@@ -37,6 +39,7 @@ node tests-archive/v400r/overlay-old-assets.mjs    # 舊版對照組換成目前
 5. 每張素材洋紅殘留 0、沒有半透明像素
 6. `MOUTH` 在狗的素材外框內
 7. 沒有明確參數的原圖會讓管線報錯（估算碰到範圍下限）
+8. 邊緣洋紅偏色：合計 ≤ 換圖前；雲、樹、狗窩、路燈、貓跳台、花槽、珊瑚逐張 ≤ 換圖前；其餘逐張 ≤ 換圖前 + 2（計數也會算到真正的紅、粉紅、紫色輪廓）；去邊不改透明度、不改薰衣草紫與粉紅
 
 ## 對既有測試的預期異動（`adapt-r.py`）
 
