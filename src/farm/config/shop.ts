@@ -2,6 +2,7 @@ import { BALANCE, PET_CAPACITY } from './balance'
 import { buildingDef, type BuildingId } from './buildings'
 import { layoutItemDef, type LayoutKind } from './layoutItems'
 import { SPECIES } from './species'
+import { SKINS, SKIN_PART_GROUP, type SkinDef, type SkinPart } from './skins'
 
 /**
  * 商店（v4.0 階段 A）的商品設定表。商店程式只看這張表：之後的階段（建築外殼、主題裝飾、配件、環境主題）只要加資料，不必改商店程式。
@@ -67,6 +68,8 @@ export const SHOP_LIMITS = {
   decorTotal: 60,
   /** 環境主題（地板＋小路＋遠景）的預設價格 */
   envThemePrice: 30,
+  /** 4.0-B1：房子、鐘樓、池塘、公佈欄外裝的價格（小建築外殼＝該建築的本體價） */
+  skinPrice: 30,
 } as const
 
 /**
@@ -126,6 +129,27 @@ const building = (id: BuildingId): ShopItem => {
   }
 }
 
+/** 小建築外殼：要先有本體，價格＝本體價 */
+const SKIN_BUILDING: Partial<Record<SkinPart, 'kennel' | 'bowls' | 'catTree'>> = { kennel: 'kennel', catTree: 'catTree', bowls: 'bowls' }
+/** 外觀商品的 id（skin.<外觀 id>） */
+export const skinItemId = (skinId: string): string => 'skin.' + skinId
+function skinItem(d: SkinDef): ShopItem {
+  const b = SKIN_BUILDING[d.part]
+  return {
+    id: skinItemId(d.id),
+    name: d.name,
+    category: 'building',
+    group: SKIN_PART_GROUP[d.part],
+    price: b ? BALANCE.buildings.price[b] : SHOP_LIMITS.skinPrice,
+    repeatable: false,
+    maxOwned: 1,
+    ...(b ? { requires: [{ building: b }] } : {}),
+    sprite: d.frames.closed,
+    blurb: '買了立刻換上；之後可以換回原樣',
+    grant: { type: 'skin', skin: d.id, slot: d.part },
+  }
+}
+
 export const SHOP_ITEMS: readonly ShopItem[] = [
   {
     id: 'pet.adopt',
@@ -146,6 +170,8 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   building('bowls'),
   building('kennel'),
   building('catTree'),
+  // 4.0-B1：外觀（建築分類，依部位分組）。傳說獎勵（亞特蘭提斯房屋、鐘樓）不在商店賣
+  ...SKINS.filter((d) => !d.legend).map((d) => skinItem(d)),
 ]
 
 export function shopItem(id: string, catalog: readonly ShopItem[] = SHOP_ITEMS): ShopItem | undefined {

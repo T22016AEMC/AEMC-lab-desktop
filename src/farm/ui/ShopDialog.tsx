@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useUIStore } from '../../store/uiStore'
 import { ToolDialog } from '../../components/tools/ToolDialog'
 import { PET_CAPACITY } from '../config/balance'
 import type { BuildingId } from '../config/buildings'
-import { SHOP_CATEGORIES, SHOP_CATEGORY_LABEL, SHOP_COMING_SOON, SIZE_LABEL, itemsOf, type ShopCategory, type ShopItem } from '../config/shop'
+import { ENV_GROUP, ENV_SLOT, SHOP_CATEGORIES, SHOP_CATEGORY_LABEL, SHOP_COMING_SOON, SIZE_LABEL, itemsOf, type ShopCategory, type ShopItem } from '../config/shop'
+import { PART_DEFAULT_FRAME, SKINS, SKIN_ATLAS, SKIN_PARTS, SKIN_PART_GROUP, skinDef } from '../config/skins'
+import { assets } from '../pixel/assets'
+import { SkinRow, skinCardsFor } from './SkinCards'
 import type { PixelEngine } from '../pixel/engine'
 import { DEFAULT_POS, resolvePlacement, withoutRecord } from '../pixel/placement'
 import { canPlace, layoutWith } from '../pixel/placeRules'
@@ -45,6 +48,16 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
   const [error, setError] = useState<string | null>(null)
   const form = useAdoptForm()
   const ui = useUIStore.getState
+  // 4.0-B1：建築分頁的外觀卡片縮圖在延後載入的外殼圖集裡：打開建築分頁才載入，載完重畫一次
+  const [skinsReady, setSkinsReady] = useState(false)
+  useEffect(() => {
+    if (tab !== 'building' || skinsReady) return
+    let alive = true
+    void Promise.all([...new Set(Object.values(SKIN_ATLAS))].map((g) => assets.loadGroup(g))).then(() => alive && setSkinsReady(true), () => {})
+    return () => {
+      alive = false
+    }
+  }, [tab, skinsReady])
 
   if (!save) return null
   const points = save.points
@@ -166,20 +179,52 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
     )
   }
 
+  const buy = (item: ShopItem): void => {
+    setNotice(null)
+    setError(null)
+    setConfirm({ kind: 'item', item })
+  }
+  /** 4.0-B1：外觀列（建築分頁的各部位、裝飾品分頁的環境主題）：原樣／使用中／換上／購買 */
+  const renderSkinRows = (cat: ShopCategory) => {
+    const skinItems = itemsOf(cat).filter((it) => it.grant.type === 'skin')
+    if (cat === 'building')
+      return SKIN_PARTS.map((part) => (
+        <SkinRow
+          key={part}
+          slot={part}
+          title={SKIN_PART_GROUP[part]}
+          save={save}
+          busy={busy}
+          onBuy={buy}
+          cards={skinCardsFor(PART_DEFAULT_FRAME[part], skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === part), SKINS.filter((d) => d.legend && d.part === part), save.skins.owned, skinDef)}
+        />
+      ))
+    const env = skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === ENV_SLOT)
+    if (!env.length) return null
+    return <SkinRow slot={ENV_SLOT} title={ENV_GROUP} save={save} busy={busy} onBuy={buy} cards={skinCardsFor('grass_tile', env, [], save.skins.owned, skinDef, '草地')} />
+  }
+
   const renderGrid = (cat: ShopCategory) => {
-    const items = itemsOf(cat)
+    void skinsReady
+    const items = itemsOf(cat).filter((it) => it.grant.type !== 'skin')
     const groups: { name: string | undefined; list: ShopItem[] }[] = []
     for (const it of items) {
       const g = groups.find((x) => x.name === it.group)
       if (g) g.list.push(it)
       else groups.push({ name: it.group, list: [it] })
     }
-    return groups.map((g) => (
-      <section key={g.name ?? '-'} className="mt-2">
-        {g.name && groups.length > 1 && <h3 className="mb-1 text-sm font-bold">{g.name}</h3>}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2">{g.list.map(renderCard)}</div>
-      </section>
-    ))
+    return (
+      <>
+        {cat === 'decor' && renderSkinRows(cat)}
+        {groups.map((g) => (
+          <section key={g.name ?? '-'} className="mt-2">
+            {g.name && (groups.length > 1 || cat === 'building') && <h3 className="mb-1 text-sm font-bold">{g.name}</h3>}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2">{g.list.map(renderCard)}</div>
+          </section>
+        ))}
+        {cat === 'building' && renderSkinRows(cat)}
+      </>
+    )
   }
 
   const renderPets = () => {
