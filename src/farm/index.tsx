@@ -6,6 +6,7 @@ import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
 import { gameNow, overrides, worldHour, worldWeather } from './overrides'
 import { skinAtlasesFor } from './config/skins'
+import { DECOR_ATLAS, isThemeDecorKind } from './config/themeDecor'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
@@ -219,6 +220,8 @@ export function Farm() {
         lastLayout = st.save?.farmLayout
         lastShop = st.save?.shop
         engine.setLayoutData(st.save?.ownedBuildings ?? [], st.save?.farmLayout, st.save?.shop?.decor)
+        // 4.0-B2：有買主題裝飾才載入延後載入的圖集 decor_themes（載入完成前引擎略過沒有圖的擺設，載入完立刻出現）
+        if (st.save?.shop?.decor.some((d) => isThemeDecorKind(d.kind))) assets.loadGroup(DECOR_ATLAS).catch(() => {})
       }
       engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
       if (st.save?.finds !== lastFinds) {

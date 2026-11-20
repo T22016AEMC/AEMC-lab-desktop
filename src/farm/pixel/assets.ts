@@ -52,10 +52,10 @@ export interface LoadProgress {
 const RETRIES = 2
 
 /**
- * 不在啟動時載入的圖集（解鎖才用到）：外殼（4.0-B1 依部位拆開：住家、鐘樓、池塘、公佈欄、小建築）。用 assets.loadGroup(名稱) 載入，
+ * 不在啟動時載入的圖集（解鎖才用到）：外殼（4.0-B1 依部位拆開：住家、鐘樓、池塘、公佈欄、小建築）；4.0-B2：環境主題（env_<主題>，穿上才載入）、商店縮圖 env_thumbs、主題裝飾 decor_themes（有買、或開商店裝飾品分頁才載入）。用 assets.loadGroup(名稱) 載入，
  * 載入前 assets.get 回傳 null，畫面用預設圖。v3.8.0：拍立得相框在野餐開始時才載入
  */
-export const LAZY_ATLASES: readonly string[] = ['skins_house', 'skins_tower', 'skins_pond', 'skins_board', 'skins_small', 'polaroid']
+export const LAZY_ATLASES: readonly string[] = ['skins_house', 'skins_tower', 'skins_pond', 'skins_board', 'skins_small', 'polaroid', 'env_atlantis', 'env_cleanroom', 'env_forest', 'env_magic', 'env_punk', 'env_plaid', 'env_thumbs', 'decor_themes']
 
 async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   let last: unknown

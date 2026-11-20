@@ -36,12 +36,12 @@ export interface SkinCardModel {
  * 第一張是「原樣」（免費、永遠擁有；沒穿任何外觀時是使用中），接著是已擁有的傳說獎勵外觀（只有拿到了才出現），再來是商店外觀。
  * 換上、換回原樣立刻生效、立刻存檔（farmStore.equipSkin）；沒擁有的走商店的購買確認（onBuy），買了立刻換上。
  */
-export function SkinRow({ slot, title, cards, save, busy, onBuy }: { slot: string; title: string; cards: SkinCardModel[]; save: SaveData; busy: boolean; onBuy: (item: ShopItem) => void }) {
+export function SkinRow({ slot, title, cards, save, busy, onBuy, wide = false }: { slot: string; title: string; cards: SkinCardModel[]; save: SaveData; busy: boolean; onBuy: (item: ShopItem) => void; wide?: boolean }) {
   const worn = save.skins.equipped[slot] ?? null
   return (
     <section className="mt-3" data-testid={`skin-row-${slot}`}>
       <h3 className="mb-1 text-sm font-bold">{title}</h3>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2">
+      <div className={`grid ${wide ? 'grid-cols-[repeat(auto-fill,minmax(124px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(112px,1fr))]'} gap-2`}>
         {cards.map((c) => {
           const owned = c.skinId === null || save.skins.owned.includes(c.skinId)
           const using = c.skinId === worn
@@ -54,8 +54,8 @@ export function SkinRow({ slot, title, cards, save, busy, onBuy }: { slot: strin
               data-state={state}
               className={`flex flex-col items-center border-2 px-1.5 pb-1.5 pt-1 ${using ? 'border-[#3f8f3a] bg-[#eef8e6]' : 'border-[#3b2a1c]/60 bg-[#fffdf4]'}`}
             >
-              <div className="flex h-[52px] items-end justify-center">
-                <PixelSprite frame={c.frame} scale={1} fit={48} title={c.name} />
+              <div className={`flex ${wide ? 'h-[64px]' : 'h-[52px]'} items-end justify-center`}>
+                <PixelSprite frame={c.frame} scale={1} fit={wide ? 100 : 48} title={c.name} />
               </div>
               <div className="mt-0.5 text-center text-xs font-bold leading-tight">{c.name}</div>
               {c.tag && <div className="text-[10px] text-[#8a5a2b]">{c.tag}</div>}

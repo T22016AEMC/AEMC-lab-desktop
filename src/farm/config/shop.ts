@@ -2,7 +2,9 @@ import { BALANCE, PET_CAPACITY } from './balance'
 import { buildingDef, type BuildingId } from './buildings'
 import { layoutItemDef, type LayoutKind } from './layoutItems'
 import { SPECIES } from './species'
-import { SKINS, SKIN_PART_GROUP, type SkinDef, type SkinPart } from './skins'
+import { SKINS, SKIN_PART_GROUP, THEME_NAME, type SkinDef, type SkinPart } from './skins'
+import { ENV_THEME_IDS, envSkinId, envThumb } from './envThemes'
+import { DECOR_GROUP_OTHER, THEME_DECOR, type DecorSize, type ThemeDecorDef } from './themeDecor'
 
 /**
  * 商店（v4.0 階段 A）的商品設定表。商店程式只看這張表：之後的階段（建築外殼、主題裝飾、配件、環境主題）只要加資料，不必改商店程式。
@@ -20,7 +22,7 @@ import { SKINS, SKIN_PART_GROUP, type SkinDef, type SkinPart } from './skins'
  * 不做賣回或退款。
  */
 export type ShopCategory = 'pet' | 'decor' | 'building' | 'farm'
-export type SizeClass = 'S' | 'M' | 'L'
+export type SizeClass = DecorSize
 
 export type ShopGrant =
   | { type: 'pet' }
@@ -49,6 +51,7 @@ export interface ShopItem {
   sprite?: string
   blurb?: string
   grant: ShopGrant
+  /** 階段 A 的暫時商品（B2 已移除；欄位保留給舊測試與已經買的實例） */
   temp?: true
 }
 
@@ -99,7 +102,23 @@ export const envTheme = (id: string, name: string, sprite?: string, price: numbe
   grant: { type: 'skin', skin: id, slot: ENV_SLOT },
 })
 
-const decor = (kind: LayoutKind, size: SizeClass): ShopItem => ({
+/** 4.0-B2：主題裝飾商品（小標題 = 主題名稱＋「裝飾」、其他擺設；價格依尺寸級別） */
+const decor = (d: ThemeDecorDef): ShopItem => ({
+  id: 'decor.' + d.kind,
+  name: d.name,
+  category: 'decor',
+  group: d.theme === 'extra' ? DECOR_GROUP_OTHER : THEME_NAME[d.theme] + '裝飾',
+  price: SIZE_PRICE[d.size],
+  repeatable: true,
+  maxOwned: SHOP_LIMITS.decorPerKind,
+  size: d.size,
+  sprite: d.kind,
+  blurb: '買了會先放進倉庫，到編輯農場擺放',
+  grant: { type: 'decor', kind: d.kind },
+})
+
+/** 階段 A 的暫時裝飾商品的工廠（B2 起商店不賣了；測試用：商店流程不依賴商品表內容） */
+const legacyDecor = (kind: LayoutKind, size: SizeClass): ShopItem => ({
   id: 'decor.' + kind,
   name: layoutItemDef(kind)?.name ?? kind,
   category: 'decor',
@@ -160,19 +179,19 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     maxOwned: PET_CAPACITY,
     grant: { type: 'pet' },
   },
-  // 裝飾品（TEMP：階段 A 的暫時商品，B2 換成六主題裝飾）。尺寸依素材外框面積：小 < 1500、中 1500～2500、大 > 2500
-  decor('mushroom', 'S'),
-  decor('flowers', 'S'),
-  decor('rocks', 'M'),
-  decor('bush', 'M'),
-  decor('planter', 'L'),
-  decor('coral', 'L'),
+  // 4.0-B2 環境主題（裝飾品分頁最上面的「環境主題」，地板＋小路＋遠景＋路燈＋樹一起買）：預設草地不在商品表裡（免費、永遠擁有）
+  ...ENV_THEME_IDS.map((t) => envTheme(envSkinId(t), THEME_NAME[t] + '環境', envThumb(t))),
+  // 4.0-B2 主題裝飾 48 種（六個主題各 6 種、其他擺設 12 種）。價格依尺寸級別：小 3／中 6／大 10（外框面積 小 < 1500、中 1500～2500、大 > 2500）
+  ...THEME_DECOR.map(decor),
   building('bowls'),
   building('kennel'),
   building('catTree'),
   // 4.0-B1：外觀（建築分類，依部位分組）。傳說獎勵（亞特蘭提斯房屋、鐘樓）不在商店賣
   ...SKINS.filter((d) => !d.legend).map((d) => skinItem(d)),
 ]
+
+/** 階段 A 的暫時商品（B2 起不賣；只供測試驗證「已經買的實例種類永遠認得」） */
+export const LEGACY_TEMP_ITEMS: readonly ShopItem[] = [legacyDecor('mushroom', 'S'), legacyDecor('flowers', 'S'), legacyDecor('rocks', 'M'), legacyDecor('bush', 'M'), legacyDecor('planter', 'L'), legacyDecor('coral', 'L')]
 
 export function shopItem(id: string, catalog: readonly ShopItem[] = SHOP_ITEMS): ShopItem | undefined {
   return catalog.find((it) => it.id === id)

@@ -89,12 +89,13 @@ export function equippedSkinDef(equipped: Readonly<Record<string, string>>, part
   return d && d.part === part ? d : undefined
 }
 
-/** 目前穿著的外觀要載入哪些圖集（equipped 的值是外觀 id；不認得的略過） */
+/** 目前穿著的外觀要載入哪些圖集（equipped 的值是外觀 id；不認得的略過）。4.0-B2：環境主題 `env.<主題>` 載入 `env_<主題>`（地板、小路、遠景、路燈、樹） */
 export function skinAtlasesFor(equipped: Readonly<Record<string, string>>): string[] {
   const out = new Set<string>()
   for (const id of Object.values(equipped)) {
     const d = skinDef(id)
     if (d) out.add(SKIN_ATLAS[d.part])
+    else if (id.startsWith('env.') && (THEMES as readonly string[]).includes(id.slice(4))) out.add('env_' + id.slice(4))
   }
   return [...out]
 }

@@ -5,6 +5,8 @@ import { PET_CAPACITY } from '../config/balance'
 import type { BuildingId } from '../config/buildings'
 import { ENV_GROUP, ENV_SLOT, SHOP_CATEGORIES, SHOP_CATEGORY_LABEL, SHOP_COMING_SOON, SIZE_LABEL, itemsOf, type ShopCategory, type ShopItem } from '../config/shop'
 import { PART_DEFAULT_FRAME, SKINS, SKIN_ATLAS, SKIN_PARTS, SKIN_PART_GROUP, skinDef } from '../config/skins'
+import { ENV_THUMB_ATLAS, envThumb } from '../config/envThemes'
+import { DECOR_ATLAS } from '../config/themeDecor'
 import { assets } from '../pixel/assets'
 import { SkinRow, skinCardsFor } from './SkinCards'
 import type { PixelEngine } from '../pixel/engine'
@@ -58,6 +60,17 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
       alive = false
     }
   }, [tab, skinsReady])
+
+  // 4.0-B2：裝飾品分頁的商品圖（主題裝飾，圖集 decor_themes）與環境主題縮圖（env_thumbs）都是延後載入：打開裝飾品分頁才載入，載完重畫一次
+  const [decorReady, setDecorReady] = useState(false)
+  useEffect(() => {
+    if (tab !== 'decor' || decorReady) return
+    let alive = true
+    void Promise.all([assets.loadGroup(DECOR_ATLAS), assets.loadGroup(ENV_THUMB_ATLAS)]).then(() => alive && setDecorReady(true), () => {})
+    return () => {
+      alive = false
+    }
+  }, [tab, decorReady])
 
   if (!save) return null
   const points = save.points
@@ -201,11 +214,12 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
       ))
     const env = skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === ENV_SLOT)
     if (!env.length) return null
-    return <SkinRow slot={ENV_SLOT} title={ENV_GROUP} save={save} busy={busy} onBuy={buy} cards={skinCardsFor('grass_tile', env, [], save.skins.owned, skinDef, '草地')} />
+    return <SkinRow slot={ENV_SLOT} title={ENV_GROUP} wide save={save} busy={busy} onBuy={buy} cards={skinCardsFor(envThumb('grass'), env, [], save.skins.owned, skinDef, '草地')} />
   }
 
   const renderGrid = (cat: ShopCategory) => {
     void skinsReady
+    void decorReady
     const items = itemsOf(cat).filter((it) => it.grant.type !== 'skin')
     const groups: { name: string | undefined; list: ShopItem[] }[] = []
     for (const it of items) {

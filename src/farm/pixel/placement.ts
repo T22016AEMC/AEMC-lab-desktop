@@ -1,5 +1,6 @@
 import { LAYOUT_ITEMS, isInstanceId, layoutItemDef, parseInstanceId, type LayoutKind } from '../config/layoutItems'
 import type { DecorInstance, FarmLayout, SaveData } from '../save/types'
+import { THEME_DECOR_KINDS, type ThemeDecorKind } from '../config/themeDecor'
 import { ENVELOPES, type Envelope } from './envelopes'
 
 /**
@@ -82,7 +83,7 @@ export interface KindGeom {
   foot: { x0: number; x1: number; d: number }
 }
 const decorFoot = (w: number): KindGeom['foot'] => ({ x0: -w * 0.4, x1: w * 0.4, d: 10 })
-export const KIND_GEOM: Readonly<Record<LayoutKind, KindGeom>> = {
+const BASE_GEOM: Readonly<Record<Exclude<LayoutKind, ThemeDecorKind>, KindGeom>> = {
   house: { env: 'house', sprite: null, foot: { x0: -70, x1: 69, d: 30 } },
   tower: { env: 'clocktower', sprite: null, foot: { x0: -61.5, x1: 61.5, d: 16 } },
   pond: { env: 'pond', sprite: 'pond', foot: { x0: -55, x1: 55, d: 66 } },
@@ -103,6 +104,9 @@ export const KIND_GEOM: Readonly<Record<LayoutKind, KindGeom>> = {
   planter: { env: 'planter', sprite: 'planter', foot: { x0: -27, x1: 27, d: 10 } },
   coral: { env: 'coral', sprite: 'coral', foot: { x0: -27, x1: 27, d: 10 } },
 }
+/** 4.0-B2 主題裝飾：素材鍵名＝種類 id（延後載入圖集 decor_themes），腳下佔地和其他裝飾一樣取 0.8 倍素材寬 × 深 10 */
+const THEME_GEOM = Object.fromEntries(THEME_DECOR_KINDS.map((k) => [k, { env: k, sprite: k, foot: decorFoot(ENVELOPES[k]?.w ?? 40) }])) as Record<ThemeDecorKind, KindGeom>
+export const KIND_GEOM: Readonly<Record<LayoutKind, KindGeom>> = { ...BASE_GEOM, ...THEME_GEOM }
 
 export const envelopeOf = (kind: LayoutKind): Envelope => ENVELOPES[KIND_GEOM[kind].env]
 

@@ -4,7 +4,9 @@ import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
 import { isPicnicNapping } from './picnic'
 import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, MAT_SNACKS, SNACK_KEYS, cameraRect, picnicMatRect, picnicSnacks, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
-import { SKIN_PARTS, equippedSkinDef, type SkinPart } from '../config/skins'
+import { SKIN_PARTS, equippedSkinDef, type SkinPart, type ThemeId } from '../config/skins'
+import { ENV_WINDOW_THEMES, GLOW, LAMP_GLOW_DEFAULT, envKeys, envThemeOf, type GlowDef } from '../config/envThemes'
+import { ENV_SLOT } from '../config/shop'
 import type { RevealResult } from '../sim/dig'
 import { BALANCE } from '../config/balance'
 import { buildingDef } from '../config/buildings'
@@ -485,13 +487,19 @@ export class PixelEngine {
     const ext = view ? view.ext : L.view
 
     const night = this.isHouseLit(f.hour)
+    // 4.0-B2 環境主題：穿著且圖集載入完成 = 用主題的遠景／地板／小路／路燈／樹，否則（沒穿、還沒載入）用預設草地，和以前逐像素相同
+    const env = this.envNow()
+    const ek = env ? envKeys(env) : null
+    // 無塵室的遠景是「看窗外」：雨雪畫在雲之後、遠景之前（只出現在窗玻璃裡，牆與地面不會有雨）；其他主題的順序不變（雨雪在最上層）
+    const windowView = env !== null && ENV_WINDOW_THEMES.has(env)
     drawSky(ctx, L, f.hour, f.weather, ext)
     drawStars(ctx, L, f.hour, this.time, ext)
     drawCelestial(ctx, L, f.hour, f.weather)
     drawClouds(ctx, L, f.weather, this.time, 0, ext)
-    drawFar(ctx, L, ext)
-    drawGrass(ctx, L, ext)
-    drawPath(ctx, L, ext)
+    if (windowView && (f.weather === 'rain' || f.weather === 'snow')) drawDrops(ctx, this.drops, f.weather)
+    drawFar(ctx, L, ext, ek?.far)
+    drawGrass(ctx, L, ext, ek?.floor)
+    drawPath(ctx, L, ext, ek?.path)
     // v3.8.0 野餐墊（落地後）：平鋪在地上，畫在所有物件與寵物之前（墊子頂端在後排景物腳底之下，所以不會蓋到樹與裝飾）
     const pst = this.picnicState
     const mat = pst?.mat ?? null
@@ -629,7 +637,7 @@ export class PixelEngine {
     ctx.globalAlpha = 1
 
     // 天氣
-    if (f.weather === 'rain' || f.weather === 'snow') drawDrops(ctx, this.drops, f.weather)
+    if ((f.weather === 'rain' || f.weather === 'snow') && !windowView) drawDrops(ctx, this.drops, f.weather)
 
     // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
     const dark = drawDarkness(ctx, L, f.hour, f.weather, ext)
@@ -653,8 +661,17 @@ export class PixelEngine {
     }
     const glow = Math.min(1, Math.max(0, (dark - 0.18) / 0.3))
     if (glow > 0) {
-      const lamp = sceneObjects(L).find((o) => o.key === 'lamp')
-      if (lamp) drawGlow(ctx, lamp.x, lamp.y - 62, glow)
+      // 路燈的光暈錨點依環境主題各自設定（原本寫死「腳下往上 62」= 預設路燈）；水晶球座、資訊終端擺出來也各自發光（GLOW 表）
+      const objs = sceneObjects(L)
+      const lamp = objs.find((o) => o.key === 'lamp')
+      if (lamp) {
+        const g: GlowDef = (env ? GLOW[`lamp_${env}`] : undefined) ?? LAMP_GLOW_DEFAULT
+        drawGlow(ctx, lamp.x + g.dx, lamp.y - g.dy, glow, g === LAMP_GLOW_DEFAULT ? undefined : g)
+      }
+      for (const o of objs) {
+        const g = o.kind === 'crystal_ball' || o.kind === 'info_terminal' ? GLOW[o.kind] : undefined
+        if (g && assets.get(o.kind)) drawGlow(ctx, o.x + g.dx, o.y - g.dy, glow, g)
+      }
     }
 
     // 「可揭曉」的星星（疊在每個寶物上方）與揭曉動畫（在暗色疊層之上，夜晚也清楚）
@@ -1530,8 +1547,20 @@ export class PixelEngine {
       const s = this.skinFrame(kind as SkinPart)
       if (s) return s
     }
+    // 4.0-B2：環境主題的路燈、樹（圖集還沒載入 = 預設圖）
+    if (kind === 'lamp' || kind === 'tree') {
+      const env = this.envNow()
+      const s = env ? assets.get(kind === 'lamp' ? envKeys(env).lamp : envKeys(env).tree) : null
+      if (s) return s
+    }
     const key = KIND_GEOM[kind].sprite
     return key ? assets.get(key) : null
+  }
+
+  /** 4.0-B2：目前生效的環境主題（穿著、而且 env_<主題> 圖集已載入）；沒穿或還沒載入 = null = 預設草地 */
+  envNow(): ThemeId | null {
+    const t = envThemeOf(this.skins[ENV_SLOT])
+    return t && assets.has(envKeys(t).far) && assets.get(envKeys(t).far) ? t : null
   }
 
   /** 4.0-B1：某個部位穿著的外殼圖（只看 closed；沒穿或圖集還沒載入 = null，呼叫端退回預設圖） */

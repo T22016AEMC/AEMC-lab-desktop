@@ -117,17 +117,24 @@ export function drawClouds(ctx: CanvasRenderingContext2D, L: Layout, weather: We
   ctx.globalAlpha = 1
 }
 
-/** 遠景：水平重複的樹與丘陵 */
-export function drawFar(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
-  const s = assets.get('far')
+/**
+ * 遠景：水平重複的樹與丘陵。4.0-B2：key = 環境主題的遠景（高度各自不同，貼在遠景底邊 farBottom 往上）；沒給（或圖集還沒載入）= 預設遠景，逐像素和以前相同。
+ * 「看窗外」的遠景（牆填滿整張高度，無塵室）比天空區矮幾列時，牆的最上面一列往上延伸到可見範圍頂端（不露出天空色帶）。
+ */
+export function drawFar(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect, key?: string | null): void {
+  const s = (key ? assets.get(key) : null) ?? assets.get('far')
   if (!s) return
   const e = extOf(L, ext)
-  for (let x = tileStart(e.x0, s.w); x < e.x1; x += s.w) ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, L.farBottom - FAR_H, s.w, s.h)
+  const top = s.key === 'far' ? L.farBottom - FAR_H : L.farBottom - s.h
+  for (let x = tileStart(e.x0, s.w); x < e.x1; x += s.w) {
+    ctx.drawImage(s.img, s.x, s.y, s.w, s.h, x, top, s.w, s.h)
+    if (s.key !== 'far' && s.h >= 100 && top > e.y0) ctx.drawImage(s.img, s.x, s.y, s.w, 1, x, e.y0, s.w, top - e.y0)
+  }
 }
 
-/** 草地：2×2 鏡像無縫的草地方塊，從遠景底邊鋪到畫面底部 */
-export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
-  const s = assets.get('grass_tile')
+/** 草地：2×2 鏡像無縫的草地方塊，從遠景底邊鋪到畫面底部。4.0-B2：key = 環境主題的地板（一樣是 2×2 鏡像的方塊） */
+export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect, key?: string | null): void {
+  const s = (key ? assets.get(key) : null) ?? assets.get('grass_tile')
   const e = extOf(L, ext)
   if (!s) {
     ctx.fillStyle = '#5aa83a'
@@ -143,8 +150,8 @@ export function drawGrass(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect):
 }
 
 /** 橫向小路（固定位置）：v3.9.0 起從場景左緣鋪到右緣（水平重複），左右延伸區也接上 */
-export function drawPath(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect): void {
-  const s = assets.get('path')
+export function drawPath(ctx: CanvasRenderingContext2D, L: Layout, ext?: Rect, key?: string | null): void {
+  const s = (key ? assets.get(key) : null) ?? assets.get('path')
   if (!s) return
   const y = L.H - 6 - PATH_H
   // v3.9.0：沙土路鋪滿整個場景寬度（住家可以移走，原本被住家蓋住的左端會露出來），左右延伸區也接著鋪。
@@ -167,17 +174,22 @@ export function drawDarkness(ctx: CanvasRenderingContext2D, L: Layout, hour: num
   return dark
 }
 
-/** 路燈的光暈（疊在暗色疊層之上）：用橫條組成的同心橢圓，邊緣是像素階梯，不是平滑漸層 */
-export function drawGlow(ctx: CanvasRenderingContext2D, x: number, y: number, strength: number): void {
+/**
+ * 路燈的光暈（疊在暗色疊層之上）：用橫條組成的同心橢圓，邊緣是像素階梯，不是平滑漸層。
+ * 4.0-B2：opts = 光色與大小倍率（環境主題的路燈、水晶球座、資訊終端各自設定）；沒給 = 原本的暖黃色、倍率 1（逐像素和以前相同）。
+ */
+export function drawGlow(ctx: CanvasRenderingContext2D, x: number, y: number, strength: number, opts?: { rgb: readonly [number, number, number]; scale: number }): void {
   if (strength <= 0.02) return
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
   const cx = Math.round(x)
   const cy = Math.round(y)
+  const k = opts?.scale ?? 1
+  const c = opts?.rgb ?? [255, 200, 100]
   for (let ring = 4; ring >= 1; ring--) {
-    const rx = ring * 9
-    const ry = ring * 7
-    ctx.fillStyle = `rgba(255,200,100,${(0.055 * strength).toFixed(3)})`
+    const rx = Math.max(1, Math.round(ring * 9 * k))
+    const ry = Math.max(1, Math.round(ring * 7 * k))
+    ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.055 * strength).toFixed(3)})`
     for (let dy = -ry; dy <= ry; dy++) {
       const hw = Math.floor(rx * Math.sqrt(1 - (dy * dy) / (ry * ry + 0.01)))
       ctx.fillRect(cx - hw, cy + dy, hw * 2 + 1, 1)
