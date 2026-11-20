@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ITEMS, RARITIES, RARITY_LABEL, REWARD_SILHOUETTE, countOf, isCollected, shardsHave, type Collection, type ItemDef, type Rarity } from '../farm/config/items'
-import { skinDef } from '../farm/config/skins'
+import { SKIN_ATLAS, skinDef } from '../farm/config/skins'
 import { ALL_REWARD, RARITY_REWARD } from '../farm/config/events'
 import { useFarmStore } from '../farm/store/farmStore'
 import { PixelSprite } from '../farm/ui/PixelSprite'
@@ -11,7 +11,7 @@ import { useUIStore } from '../store/uiStore'
  * 收藏冊（v3.6.0）：Logo 選單「收藏冊」打開，同一頁顯示全部寶物，不分頁。
  *  - 還沒收集：用原圖的透明輪廓填暗色當剪影，名稱「？？？」，不顯示描述。
  *  - 套組（機密碎片、合約碎片）：完整紙張的剪影＋已收集片數（例如 3／6）；集齊後改顯示完整圖。
- *  - 傳說項目旁有「獎勵剪影」（狗：金色屋頂住家；貓：黃金鐘樓），解鎖後顯示名稱。
+ *  - 傳說項目旁有「獎勵剪影」（狗：亞特蘭提斯房屋；貓：亞特蘭提斯鐘樓），解鎖後顯示名稱。
  *  - 狗狗專屬、貓咪專屬的項目有標示（只養一種寵物的玩家抽不到另一種專屬的）。
  * v4.0：各等級標題旁與頁首顯示「集齊獎勵 N 金幣」，已領的寫「已領取」。扣金幣的事件一律不顯示。
  */
@@ -52,22 +52,22 @@ function Card({ def, col }: { def: ItemDef; col: Collection }) {
 }
 
 /** 外觀圖集（skins）是解鎖之後才載入的：需要彩色縮圖時才載入，載入失敗或還沒載入完就一直是剪影（不報錯） */
-function useSkinsLoaded(needed: boolean): boolean {
-  const [loaded, setLoaded] = useState(assets.groupLoaded('skins'))
+function useSkinsLoaded(needed: boolean, group: string): boolean {
+  const [loaded, setLoaded] = useState(assets.groupLoaded(group))
   useEffect(() => {
     if (!needed || loaded) return
     let alive = true
-    assets.loadGroup('skins').then(() => alive && setLoaded(true), () => {})
+    assets.loadGroup(group).then(() => alive && setLoaded(true), () => {})
     return () => {
       alive = false
     }
-  }, [needed, loaded])
+  }, [needed, loaded, group])
   return loaded
 }
 
 function RewardCard({ species, unlocked }: { species: 'dog' | 'cat'; unlocked: boolean }) {
   const skin = skinDef(species === 'dog' ? 'house.gold' : 'tower.gold')
-  const color = useSkinsLoaded(unlocked)
+  const color = useSkinsLoaded(unlocked, SKIN_ATLAS[skin?.part ?? (species === 'dog' ? 'house' : 'tower')])
   // 已解鎖而且 skins 已載入：彩色縮圖；其他情況：預先烘好的剪影（放在 items 圖集，不需要 skins）
   return (
     <div data-testid={`reward-${species}`} data-unlocked={unlocked || undefined} className="relative flex flex-col items-center rounded-sm border-2 border-dashed border-[#3b2a1c]/50 bg-[#f6efd8] px-1.5 pb-1.5 pt-1">

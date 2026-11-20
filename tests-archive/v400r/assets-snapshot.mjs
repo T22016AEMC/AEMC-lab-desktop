@@ -64,7 +64,7 @@ async function sheet(file, keys, { scale = 4, cols = 4, bg = { r: 96, g: 140, b:
 const DOGS = ['shiba', 'corgi', 'husky', 'golden', 'collie', 'poodle']
 const CATS = ['orange', 'black', 'calico', 'siamese', 'bluecat', 'ragdoll']
 await sheet('sheet-buildings.png', ['tree', 'lamp', 'doghouse', 'cat_tree', 'bowls', 'pond', 'board', 'planter', 'coral', 'bathtub', 'picnic'], { cols: 4 })
-await sheet('sheet-tower-house.png', ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold', 'house_closed', 'house_open', 'house_night', 'house_gold_closed'], { cols: 4, scale: 3 })
+await sheet('sheet-tower-house.png', ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open', 'house_closed', 'house_open', 'house_night', 'house_atlantis_closed'], { cols: 4, scale: 3 })
 await sheet('sheet-decor.png', ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], { cols: 6 })
 await sheet('sheet-terrain.png', ['grass_tile', 'far', 'path'], { cols: 1, scale: 2 })
 await sheet('sheet-sky-toys.png', ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake', 'toy_ball', 'toy_frisbee', 'toy_rope', 'toy_bone', 'toy_shoe', 'toy_chest_closed', 'toy_chest_open', 'toy_dirt_mound', 'toy_ball_s', 'toy_dirt_mound_s', 'toy_laser_dot', 'toy_wand', 'toy_yarn'], { cols: 7, bg: { r: 120, g: 170, b: 220 } })

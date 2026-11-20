@@ -62,12 +62,12 @@ export const EVENTS: readonly EventDef[] = [
   setReward('colRare', '稀有寶物收集完成！', R.rare, '5 種稀有寶物全數到手，', (c) => allOf(c, 'rare')),
   {
     id: 'dogVault', species: 'dog', kind: 'reward', title: '保險箱打開了！',
-    body: (coins) => `裡面有 ${coins} 金幣，還有一張金色屋頂的設計圖。屋頂換成金色了。`, images: ['item_L001', 'item_L002'], skin: 'house.gold',
+    body: (coins) => `裡面有 ${coins} 金幣，還有一張亞特蘭提斯房屋的設計圖。住家換成亞特蘭提斯房屋了。`, images: ['item_L001', 'item_L002'], skin: 'house.gold',
     met: (c) => have(c, 'L001') && have(c, 'L002'),
   },
   {
     id: 'catAtlantis', species: 'cat', kind: 'reward', title: '亞特蘭提斯的力量',
-    body: (coins) => `雷射與山銅合而為一，鐘樓變成黃金鐘樓了。獲得 ${coins} 金幣。`, images: ['item_L003', 'item_L004'], skin: 'tower.gold',
+    body: (coins) => `雷射與山銅合而為一，鐘樓變成亞特蘭提斯鐘樓了。獲得 ${coins} 金幣。`, images: ['item_L003', 'item_L004'], skin: 'tower.gold',
     met: (c) => have(c, 'L003') && have(c, 'L004'),
   },
   setReward('colLegend', '傳說寶物全數到齊！', R.legendary, '保險箱鑰匙、保險箱、亞特蘭提斯雷射、山銅都收進收藏冊了，', (c) => allOf(c, 'legendary')),

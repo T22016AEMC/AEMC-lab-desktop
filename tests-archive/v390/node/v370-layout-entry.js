@@ -16,7 +16,7 @@ const MENU = 28
 const SZ17 = [[1920, 900, 1], [1920, 930, 1], [1920, 950, 1], [1900, 1000, 1.25], [1920, 1000, 1], [1920, 1120, 1], [1536, 730, 1], [1536, 864, 1], [1440, 780, 1], [1366, 650, 1], [1280, 620, 1], [1280, 720, 1], [1024, 768, 1], [2560, 1300, 1], [2560, 1440, 1], [1536, 730, 1.25], [1920, 930, 1.25]]
 const DIR = (process.env.REPO_ROOT + '/public/assets/')
 const man = JSON.parse(readFileSync(DIR + readdirSync(DIR).find((f) => /^manifest\..*\.json$/.test(f)), 'utf8'))
-const CLOCKS = ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold'].map((k) => [k, man.frames[k].meta.clock])
+const CLOCKS = ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open'].map((k) => [k, man.frames[k].meta.clock]) // 4.0-B1：全黃金鐘樓換成亞特蘭提斯鐘樓
 const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
 const rows = []
 

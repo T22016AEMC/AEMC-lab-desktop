@@ -222,8 +222,8 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   for (const w of ['罰款', '違約', '訴訟']) ok(!resultTexts.includes(w), '揭曉提示不含「' + w + '」')
   eq(EVENTS.find((e) => e.id === 'dogLeak').body(10), '你把機密文件拼回去了……某公司發現後提告，罰款 10 金幣。')
   eq(EVENTS.find((e) => e.id === 'catContract').body(10), '你把合約拼好，才發現簽名的是你……違約金 10 金幣。')
-  eq(EVENTS.find((e) => e.id === 'dogVault').body(100), '裡面有 100 金幣，還有一張金色屋頂的設計圖。屋頂換成金色了。')
-  eq(EVENTS.find((e) => e.id === 'catAtlantis').body(100), '雷射與山銅合而為一，鐘樓變成黃金鐘樓了。獲得 100 金幣。')
+  eq(EVENTS.find((e) => e.id === 'dogVault').body(100), '裡面有 100 金幣，還有一張亞特蘭提斯房屋的設計圖。住家換成亞特蘭提斯房屋了。') // 4.0-B1 文案
+  eq(EVENTS.find((e) => e.id === 'catAtlantis').body(100), '雷射與山銅合而為一，鐘樓變成亞特蘭提斯鐘樓了。獲得 100 金幣。') // 4.0-B1 文案
   ok(EVENTS.find((e) => e.id === 'dogLeak').body(3).includes('3 金幣') && EVENTS.find((e) => e.id === 'dogLeak').body(3).includes('不會扣到負數'), '金幣不夠時說明')
 }
 

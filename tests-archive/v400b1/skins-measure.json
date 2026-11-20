@@ -1,0 +1,1388 @@
+{
+ "frames": {
+  "house_atlantis_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_atlantis_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_atlantis_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 1
+  },
+  "house_cleanroom_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_cleanroom_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 1
+  },
+  "house_cleanroom_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_forest_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_forest_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_forest_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 1,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_magic_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 2,
+   "magentaInterior": 663,
+   "edgeMagenta": 45
+  },
+  "house_magic_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 3,
+   "magentaInterior": 635,
+   "edgeMagenta": 40
+  },
+  "house_magic_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 1,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 6,
+   "magentaInterior": 600,
+   "edgeMagenta": 41
+  },
+  "house_punk_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 19,
+   "edgeMagenta": 0
+  },
+  "house_punk_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 26,
+   "edgeMagenta": 0
+  },
+  "house_punk_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 31,
+   "edgeMagenta": 1
+  },
+  "house_plaid_closed": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_plaid_open": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "house_plaid_night": {
+   "atlas": "skins_house",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 139,
+    "y1": 134
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "tower_atlantis": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 13,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 42,
+     "y0": 32,
+     "x1": 82,
+     "y1": 67
+    },
+    "comps": 15,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_atlantis_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 15,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 42,
+     "y0": 32,
+     "x1": 82,
+     "y1": 67
+    },
+    "comps": 12,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_cleanroom": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 2,
+   "meta": {
+    "clock": {
+     "cx": 61,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 40,
+     "y0": 0,
+     "x1": 86,
+     "y1": 70
+    },
+    "comps": 19,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_cleanroom_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 2,
+   "meta": {
+    "clock": {
+     "cx": 61,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 40,
+     "y0": 0,
+     "x1": 86,
+     "y1": 70
+    },
+    "comps": 19,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_forest": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 81,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 59,
+     "y0": 40,
+     "x1": 65,
+     "y1": 50
+    },
+    "comps": 3,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "tower_forest_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 81,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 59,
+     "y0": 40,
+     "x1": 65,
+     "y1": 50
+    },
+    "comps": 3,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "tower_magic": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 524,
+   "edgeMagenta": 32,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 42,
+     "y0": 35,
+     "x1": 78,
+     "y1": 60
+    },
+    "comps": 11,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_magic_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 535,
+   "edgeMagenta": 30,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "low",
+    "box": {
+     "x0": 42,
+     "y0": 35,
+     "x1": 80,
+     "y1": 60
+    },
+    "comps": 11,
+    "reason": "藍色範圍伸出點擊區 3 像素以上（整座塔偏藍或有別的藍色裝飾），要人工看"
+   }
+  },
+  "tower_punk": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 122,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 16,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 16
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 58,
+     "y0": 46,
+     "x1": 64,
+     "y1": 51
+    },
+    "comps": 2,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "tower_punk_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 14,
+   "edgeMagenta": 0,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 16
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 58,
+     "y0": 46,
+     "x1": 65,
+     "y1": 51
+    },
+    "comps": 2,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "tower_plaid": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 21,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 59,
+     "y0": 47,
+     "x1": 65,
+     "y1": 51
+    },
+    "comps": 2,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "tower_plaid_open": {
+   "atlas": "skins_tower",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 123,
+    "y1": 160
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 21,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   },
+   "window": {
+    "confidence": "high",
+    "box": {
+     "x0": 59,
+     "y0": 47,
+     "x1": 65,
+     "y1": 51
+    },
+    "comps": 2,
+    "reason": "窗玻璃完全在點擊區裡"
+   }
+  },
+  "pond_atlantis": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 1
+  },
+  "board_atlantis": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_atlantis": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "cat_tree_atlantis": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 4
+  },
+  "bowls_atlantis": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 1,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "pond_cleanroom": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "board_cleanroom": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_cleanroom": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "cat_tree_cleanroom": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "bowls_cleanroom": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "pond_forest": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "board_forest": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_forest": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "cat_tree_forest": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "bowls_forest": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 1,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "pond_magic": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 316,
+   "edgeMagenta": 40
+  },
+  "board_magic": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_magic": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 2
+  },
+  "cat_tree_magic": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 48
+  },
+  "bowls_magic": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": true,
+   "magentaNear": 0,
+   "magentaInterior": 61,
+   "edgeMagenta": 0
+  },
+  "pond_punk": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 1,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 5
+  },
+  "board_punk": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_punk": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "cat_tree_punk": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "bowls_punk": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "pond_plaid": {
+   "atlas": "skins_pond",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 110,
+    "y1": 79
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 2
+  },
+  "board_plaid": {
+   "atlas": "skins_board",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 64,
+    "y1": 50
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "doghouse_plaid": {
+   "atlas": "skins_small",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 99,
+    "y1": 83
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 1
+  },
+  "cat_tree_plaid": {
+   "atlas": "skins_small",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 72,
+    "y1": 90
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  },
+  "bowls_plaid": {
+   "atlas": "skins_small",
+   "w": 57,
+   "h": 31,
+   "ax": 29,
+   "ay": 31,
+   "content": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 57,
+    "y1": 31
+   },
+   "keepEnclosed": false,
+   "magentaNear": 0,
+   "magentaInterior": 0,
+   "edgeMagenta": 0
+  }
+ },
+ "atlases": {
+  "skins_house": {
+   "width": 1024,
+   "height": 404
+  },
+  "skins_tower": {
+   "width": 1024,
+   "height": 321
+  },
+  "skins_pond": {
+   "width": 1024,
+   "height": 79
+  },
+  "skins_board": {
+   "width": 1024,
+   "height": 50
+  },
+  "skins_small": {
+   "width": 1024,
+   "height": 174
+  }
+ },
+ "eaten": {
+  "house_atlantis": [
+   16,
+   32,
+   160
+  ],
+  "house_cleanroom": [
+   0,
+   0,
+   0
+  ],
+  "house_forest": [
+   0,
+   0,
+   16
+  ],
+  "house_magic": [
+   48800,
+   50160,
+   55104
+  ],
+  "house_punk": [
+   816,
+   688,
+   864
+  ],
+  "house_plaid": [
+   0,
+   16,
+   224
+  ],
+  "tower_atlantis": [
+   1312
+  ],
+  "tower_atlantis_open": [
+   1312
+  ],
+  "tower_cleanroom": [
+   0
+  ],
+  "tower_cleanroom_open": [
+   0
+  ],
+  "tower_forest": [
+   16
+  ],
+  "tower_forest_open": [
+   16
+  ],
+  "tower_magic": [
+   31344
+  ],
+  "tower_magic_open": [
+   27376
+  ],
+  "tower_punk": [
+   1280
+  ],
+  "tower_punk_open": [
+   1280
+  ],
+  "tower_plaid": [
+   0
+  ],
+  "tower_plaid_open": [
+   0
+  ],
+  "pond_themes": [
+   112,
+   464,
+   0,
+   10208,
+   352,
+   736
+  ],
+  "board_themes": [
+   87,
+   58,
+   60,
+   160,
+   51,
+   149
+  ],
+  "doghouse_themes_v2": [
+   0,
+   0,
+   0,
+   24160,
+   0,
+   0
+  ],
+  "cattree_themes_v2": [
+   384,
+   0,
+   16,
+   6592,
+   176,
+   16
+  ],
+  "bowl_themes_v2": [
+   0,
+   0,
+   16,
+   2064,
+   0,
+   0
+  ]
+ },
+ "cellOrder": {
+  "pond_themes": [
+   "plaid",
+   "atlantis",
+   "forest",
+   "magic",
+   "punk",
+   "cleanroom"
+  ],
+  "others": [
+   "atlantis",
+   "cleanroom",
+   "forest",
+   "magic",
+   "punk",
+   "plaid"
+  ]
+ }
+}

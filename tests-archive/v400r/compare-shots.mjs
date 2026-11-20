@@ -76,7 +76,7 @@ async function rows(file, keys, scale, bg = { r: 96, g: 140, b: 84 }) {
 const DOGS = ['shiba', 'corgi', 'husky', 'golden', 'collie', 'poodle']
 const CATS = ['orange', 'black', 'calico', 'siamese', 'bluecat', 'ragdoll']
 await rows('obj-1-buildings.png', ['tree', 'lamp', 'doghouse', 'cat_tree', 'bowls', 'pond', 'board', 'planter', 'coral'], 4)
-await rows('obj-2-tower-house.png', ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold', 'house_closed', 'house_open', 'house_night'], 3)
+await rows('obj-2-tower-house.png', ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open', 'house_closed', 'house_open', 'house_night'], 3)
 await rows('obj-3-decor.png', ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump', 'bathtub', 'picnic'], 4)
 await rows('obj-4-terrain.png', ['grass_tile', 'far', 'path'], 2)
 await rows('obj-5-dogs.png', DOGS.flatMap((d) => ['stand', 'sleep', 'eat'].map((x) => `dog_${d}_${x}`)), 4)

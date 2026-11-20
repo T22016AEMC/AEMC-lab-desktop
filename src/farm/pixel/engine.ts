@@ -1143,7 +1143,7 @@ export class PixelEngine {
 
   /**
    * v3.7.0 工具包的點擊區（CSS 座標）：窗戶（計算機）、鐘面（碼表與倒數）、塔門（遊戲館）、公佈欄。
-   * 鐘面位置用目前鐘樓圖（含開門版、黃金鐘樓）的 meta.clock；不足 minCss 的點擊區放大（畫面不變）。
+   * 鐘面位置用目前鐘樓圖（含開門版、外殼鐘樓）的 meta.clock；不足 minCss 的點擊區放大（畫面不變）。
    */
   toolHits(minCss: number): ToolHits {
     return toolHitRects(this.layout, this.towerSprite()?.meta?.clock, minCss)

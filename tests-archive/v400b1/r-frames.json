@@ -1,0 +1,2825 @@
+{
+ "dog_shiba_jump": {
+  "w": 57,
+  "h": 46,
+  "ax": 29,
+  "ay": 46,
+  "meta": null,
+  "sha1": "a0b8756f90de236148c4983511b12d6b36a065bb"
+ },
+ "dog_shiba_happy": {
+  "w": 34,
+  "h": 39,
+  "ax": 17,
+  "ay": 39,
+  "meta": null,
+  "sha1": "15a28f3a9cbd368d0a2353918c2ba772c7edfd7b"
+ },
+ "dog_shiba_bark": {
+  "w": 49,
+  "h": 38,
+  "ax": 25,
+  "ay": 38,
+  "meta": null,
+  "sha1": "a76a690e1765c5b9fd7cfb4db62ca28576d18b14"
+ },
+ "dog_shiba_sit_a": {
+  "w": 32,
+  "h": 38,
+  "ax": 16,
+  "ay": 38,
+  "meta": null,
+  "sha1": "af8e83de82d4b653a6970ef382efaf1e12f0d4ee"
+ },
+ "dog_shiba_sit_b": {
+  "w": 32,
+  "h": 38,
+  "ax": 16,
+  "ay": 38,
+  "meta": null,
+  "sha1": "6ed4e43db48c0504b1e19f3765dd205c48410469"
+ },
+ "dog_shiba_tug": {
+  "w": 60,
+  "h": 36,
+  "ax": 30,
+  "ay": 36,
+  "meta": null,
+  "sha1": "ff00f60d57a3f7e0fd14265a3b16add557f68b1f"
+ },
+ "dog_shiba_walk_b": {
+  "w": 40,
+  "h": 36,
+  "ax": 20,
+  "ay": 36,
+  "meta": null,
+  "sha1": "33a1f10d4ba1ed2f749e2c9c03f18e6fddff212e"
+ },
+ "dog_shiba_stand": {
+  "w": 37,
+  "h": 36,
+  "ax": 19,
+  "ay": 36,
+  "meta": null,
+  "sha1": "439b456d6b726a096e6717915c591787dc7c8918"
+ },
+ "dog_shiba_dig_b": {
+  "w": 52,
+  "h": 35,
+  "ax": 26,
+  "ay": 35,
+  "meta": null,
+  "sha1": "41ed832c2ff4814cb51e178f94a6872ff3bf99f5"
+ },
+ "dog_shiba_dig_a": {
+  "w": 48,
+  "h": 35,
+  "ax": 24,
+  "ay": 35,
+  "meta": null,
+  "sha1": "bc5c4198ebf40cae4e1ab8b741d745c27a8b9993"
+ },
+ "dog_shiba_walk_a": {
+  "w": 41,
+  "h": 35,
+  "ax": 21,
+  "ay": 35,
+  "meta": null,
+  "sha1": "f806a893347d756edf5e899247b159914a012b69"
+ },
+ "dog_shiba_belly_up": {
+  "w": 51,
+  "h": 33,
+  "ax": 26,
+  "ay": 33,
+  "meta": null,
+  "sha1": "d5edde0c73ca6732588e87066d3072064d346e2f"
+ },
+ "dog_shiba_eat": {
+  "w": 40,
+  "h": 33,
+  "ax": 20,
+  "ay": 33,
+  "meta": null,
+  "sha1": "b92994c8052dd62fdf1b1c65fd6aac19fa3addbb"
+ },
+ "dog_shiba_sleep": {
+  "w": 41,
+  "h": 23,
+  "ax": 21,
+  "ay": 23,
+  "meta": null,
+  "sha1": "58c0a79aa4f699af1f78ceebca8902e5c38f40df"
+ },
+ "dog_corgi_jump": {
+  "w": 52,
+  "h": 39,
+  "ax": 26,
+  "ay": 39,
+  "meta": null,
+  "sha1": "36545b23fc1e2d34d8eb9a45f74a7d5757ee1c57"
+ },
+ "dog_corgi_bark": {
+  "w": 48,
+  "h": 34,
+  "ax": 24,
+  "ay": 34,
+  "meta": null,
+  "sha1": "4936cabab1a5adf2a4ac8d52d51f97f60647a05b"
+ },
+ "dog_corgi_walk_b": {
+  "w": 36,
+  "h": 32,
+  "ax": 18,
+  "ay": 32,
+  "meta": null,
+  "sha1": "56bc2090372806727bccf1112567996864c69875"
+ },
+ "dog_corgi_walk_a": {
+  "w": 35,
+  "h": 32,
+  "ax": 18,
+  "ay": 32,
+  "meta": null,
+  "sha1": "3f6c1a7ca4b85d862a79aea362b4597478373a46"
+ },
+ "dog_corgi_stand": {
+  "w": 35,
+  "h": 31,
+  "ax": 18,
+  "ay": 31,
+  "meta": null,
+  "sha1": "39fb616d7d65d8ac1abbc9cf7761647b30ded594"
+ },
+ "dog_corgi_happy": {
+  "w": 33,
+  "h": 31,
+  "ax": 17,
+  "ay": 31,
+  "meta": null,
+  "sha1": "e08ebadf205491e57de420147431bf81ba3fbb29"
+ },
+ "dog_corgi_sit_a": {
+  "w": 29,
+  "h": 31,
+  "ax": 15,
+  "ay": 31,
+  "meta": null,
+  "sha1": "463d7506d36bb46fab2075f3f09ddd245885e9bc"
+ },
+ "dog_corgi_tug": {
+  "w": 55,
+  "h": 30,
+  "ax": 28,
+  "ay": 30,
+  "meta": null,
+  "sha1": "b122307574d9b9bfffa8434a543fe04f284f21a2"
+ },
+ "dog_corgi_sit_b": {
+  "w": 30,
+  "h": 30,
+  "ax": 15,
+  "ay": 30,
+  "meta": null,
+  "sha1": "f01faf9482102adba1dfb3719dca38f6d1f88091"
+ },
+ "dog_corgi_dig_b": {
+  "w": 47,
+  "h": 27,
+  "ax": 24,
+  "ay": 27,
+  "meta": null,
+  "sha1": "77f809a0199f553cf298202fce6b43ca85256ccc"
+ },
+ "dog_corgi_dig_a": {
+  "w": 46,
+  "h": 27,
+  "ax": 23,
+  "ay": 27,
+  "meta": null,
+  "sha1": "6f4c4f32678c72b6aa37644f7acbc29a0ba56d14"
+ },
+ "dog_corgi_eat": {
+  "w": 39,
+  "h": 24,
+  "ax": 20,
+  "ay": 24,
+  "meta": null,
+  "sha1": "11781eba5ae59902bd6330cb72bc9737f4672f8c"
+ },
+ "dog_corgi_belly_up": {
+  "w": 47,
+  "h": 23,
+  "ax": 24,
+  "ay": 23,
+  "meta": null,
+  "sha1": "54643af67ab1a2d5eaac0f786dd82fc58c4e6357"
+ },
+ "dog_corgi_sleep": {
+  "w": 38,
+  "h": 20,
+  "ax": 19,
+  "ay": 20,
+  "meta": null,
+  "sha1": "5bf1e1423d9204c108498b06f6f6fbc4759738ea"
+ },
+ "dog_husky_jump": {
+  "w": 70,
+  "h": 53,
+  "ax": 35,
+  "ay": 53,
+  "meta": null,
+  "sha1": "4c9c290ded28ce065c38cde95ac00beb9e99f7e7"
+ },
+ "dog_husky_bark": {
+  "w": 60,
+  "h": 48,
+  "ax": 30,
+  "ay": 48,
+  "meta": null,
+  "sha1": "9263c4668f019ebbcc9ecdf561168982e451c69e"
+ },
+ "dog_husky_dig_b": {
+  "w": 59,
+  "h": 47,
+  "ax": 30,
+  "ay": 47,
+  "meta": null,
+  "sha1": "096f7a1399e5f6645bbc343bf6dfb1c8b5ce7c32"
+ },
+ "dog_husky_happy": {
+  "w": 42,
+  "h": 46,
+  "ax": 21,
+  "ay": 46,
+  "meta": null,
+  "sha1": "bb8a5aadefbcf535bb34f4dcbb31028d7cc0e8c0"
+ },
+ "dog_husky_sit_a": {
+  "w": 40,
+  "h": 45,
+  "ax": 20,
+  "ay": 45,
+  "meta": null,
+  "sha1": "22c361545c9332c63d4de4d995bdc23c723beb23"
+ },
+ "dog_husky_sit_b": {
+  "w": 38,
+  "h": 45,
+  "ax": 19,
+  "ay": 45,
+  "meta": null,
+  "sha1": "f3824602ffac69b4bcf2d3db8cfa14ffab0e2056"
+ },
+ "dog_husky_dig_a": {
+  "w": 54,
+  "h": 44,
+  "ax": 27,
+  "ay": 44,
+  "meta": null,
+  "sha1": "495b2f4a321330b3c2d39de3bcf7984eeca4d57c"
+ },
+ "dog_husky_walk_b": {
+  "w": 48,
+  "h": 43,
+  "ax": 24,
+  "ay": 43,
+  "meta": null,
+  "sha1": "0cedcc2d6b4440abda9b3ca8ac03e18d832a2e3a"
+ },
+ "dog_husky_stand": {
+  "w": 45,
+  "h": 43,
+  "ax": 23,
+  "ay": 43,
+  "meta": null,
+  "sha1": "0ec7310039210b10751ec28935adfdba16e25ab4"
+ },
+ "dog_husky_walk_a": {
+  "w": 49,
+  "h": 42,
+  "ax": 25,
+  "ay": 42,
+  "meta": null,
+  "sha1": "3c6fda1799ba85daab09039ff6cbc62c67664b1c"
+ },
+ "dog_husky_eat": {
+  "w": 48,
+  "h": 41,
+  "ax": 24,
+  "ay": 41,
+  "meta": null,
+  "sha1": "ebffd73f03c4aea0303fb4f74d45bd195f3c5042"
+ },
+ "dog_husky_tug": {
+  "w": 67,
+  "h": 39,
+  "ax": 34,
+  "ay": 39,
+  "meta": null,
+  "sha1": "e034a6d452681f7aa1d4a888153029f5f62ebeda"
+ },
+ "dog_husky_belly_up": {
+  "w": 63,
+  "h": 30,
+  "ax": 32,
+  "ay": 30,
+  "meta": null,
+  "sha1": "0915b10428e046df3fd0c18b2f84ff1d149462cc"
+ },
+ "dog_husky_sleep": {
+  "w": 51,
+  "h": 26,
+  "ax": 26,
+  "ay": 26,
+  "meta": null,
+  "sha1": "5f9225a6a56be9ca4104069257ee15e8e18dd869"
+ },
+ "dog_golden_jump": {
+  "w": 80,
+  "h": 60,
+  "ax": 40,
+  "ay": 60,
+  "meta": null,
+  "sha1": "7f111db30bda1b52979f521b2d40c37c0c289a74"
+ },
+ "dog_golden_bark": {
+  "w": 70,
+  "h": 49,
+  "ax": 35,
+  "ay": 49,
+  "meta": null,
+  "sha1": "08ba073cf55594801e661397e26c60ab6431554e"
+ },
+ "dog_golden_dig_b": {
+  "w": 63,
+  "h": 49,
+  "ax": 32,
+  "ay": 49,
+  "meta": null,
+  "sha1": "6683991f871d38ff9fadb97b5307499e786eb733"
+ },
+ "dog_golden_happy": {
+  "w": 49,
+  "h": 48,
+  "ax": 25,
+  "ay": 48,
+  "meta": null,
+  "sha1": "f57e3d850d869d2c782dc96489d060c6d01676aa"
+ },
+ "dog_golden_dig_a": {
+  "w": 62,
+  "h": 47,
+  "ax": 31,
+  "ay": 47,
+  "meta": null,
+  "sha1": "cbc48cbf24952cb2138210c4b72bb3425d9ebe68"
+ },
+ "dog_golden_walk_b": {
+  "w": 57,
+  "h": 47,
+  "ax": 29,
+  "ay": 47,
+  "meta": null,
+  "sha1": "60a75bc576b06008c421817612b295bc4f6e1654"
+ },
+ "dog_golden_sit_b": {
+  "w": 50,
+  "h": 47,
+  "ax": 25,
+  "ay": 47,
+  "meta": null,
+  "sha1": "bcc2b62edcec5c7d8ccbe6880d8d8c5354c59cdb"
+ },
+ "dog_golden_tug": {
+  "w": 84,
+  "h": 46,
+  "ax": 42,
+  "ay": 46,
+  "meta": null,
+  "sha1": "db65c80d968e012bdd77e0606ea65c39a75af37e"
+ },
+ "dog_golden_stand": {
+  "w": 49,
+  "h": 46,
+  "ax": 25,
+  "ay": 46,
+  "meta": null,
+  "sha1": "3c6edcc13caaf71a17e58fb49e3ec3bf1d7ea307"
+ },
+ "dog_golden_sit_a": {
+  "w": 47,
+  "h": 46,
+  "ax": 24,
+  "ay": 46,
+  "meta": null,
+  "sha1": "30f68d5f6ba0f9425b17219946520cd8cf0b91ba"
+ },
+ "dog_golden_walk_a": {
+  "w": 53,
+  "h": 45,
+  "ax": 27,
+  "ay": 45,
+  "meta": null,
+  "sha1": "bc87fe5d088d36393f507ae85a63e6954cc2f78f"
+ },
+ "dog_golden_eat": {
+  "w": 54,
+  "h": 44,
+  "ax": 27,
+  "ay": 44,
+  "meta": null,
+  "sha1": "38272a33a5369ba0fc75ead96754518bc375bc38"
+ },
+ "dog_golden_belly_up": {
+  "w": 74,
+  "h": 34,
+  "ax": 37,
+  "ay": 34,
+  "meta": null,
+  "sha1": "ca8274fa1a359b61596b08afed0bd151726b0737"
+ },
+ "dog_golden_sleep": {
+  "w": 56,
+  "h": 27,
+  "ax": 28,
+  "ay": 27,
+  "meta": null,
+  "sha1": "1ab5a5665b2a784e1509bef40b0263c0e79d861e"
+ },
+ "dog_collie_jump": {
+  "w": 65,
+  "h": 49,
+  "ax": 33,
+  "ay": 49,
+  "meta": null,
+  "sha1": "3500180fa89ad325483fcbdf6ebe98f2c59a9b7f"
+ },
+ "dog_collie_dig_b": {
+  "w": 58,
+  "h": 44,
+  "ax": 29,
+  "ay": 44,
+  "meta": null,
+  "sha1": "ef3a0ef8e71dd878923e5b5492df4ba20d44a307"
+ },
+ "dog_collie_dig_a": {
+  "w": 54,
+  "h": 44,
+  "ax": 27,
+  "ay": 44,
+  "meta": null,
+  "sha1": "e59a9f0ae17c271cbd3091adeb50cc7497321c39"
+ },
+ "dog_collie_bark": {
+  "w": 63,
+  "h": 43,
+  "ax": 32,
+  "ay": 43,
+  "meta": null,
+  "sha1": "e9956fe93bc0f667b772f54a240baaf9322acfe6"
+ },
+ "dog_collie_happy": {
+  "w": 43,
+  "h": 43,
+  "ax": 22,
+  "ay": 43,
+  "meta": null,
+  "sha1": "13464b8a12423604be91a8fb6a32ad311d810322"
+ },
+ "dog_collie_walk_a": {
+  "w": 48,
+  "h": 42,
+  "ax": 24,
+  "ay": 42,
+  "meta": null,
+  "sha1": "321e4c17fd818f1ea7f99e1549160af926cdaa45"
+ },
+ "dog_collie_sit_a": {
+  "w": 43,
+  "h": 42,
+  "ax": 22,
+  "ay": 42,
+  "meta": null,
+  "sha1": "2ab79469fcacdfdee8ea5afb3af9eac631fd6926"
+ },
+ "dog_collie_sit_b": {
+  "w": 42,
+  "h": 42,
+  "ax": 21,
+  "ay": 42,
+  "meta": null,
+  "sha1": "09c2114c335cb8c832f024268e85f290d686844a"
+ },
+ "dog_collie_walk_b": {
+  "w": 48,
+  "h": 41,
+  "ax": 24,
+  "ay": 41,
+  "meta": null,
+  "sha1": "ea8a517a989ec529feb7a010e508739b24240ecd"
+ },
+ "dog_collie_stand": {
+  "w": 43,
+  "h": 41,
+  "ax": 22,
+  "ay": 41,
+  "meta": null,
+  "sha1": "9beee79764a0dd3379e69a5f9fadebc4c110cd6c"
+ },
+ "dog_collie_eat": {
+  "w": 49,
+  "h": 40,
+  "ax": 25,
+  "ay": 40,
+  "meta": null,
+  "sha1": "8119c997786bb790161893bf79d74fad8fb416f0"
+ },
+ "dog_collie_tug": {
+  "w": 71,
+  "h": 37,
+  "ax": 36,
+  "ay": 37,
+  "meta": null,
+  "sha1": "0b997552d9514e6ed2a606495e6b34e8f320054b"
+ },
+ "dog_collie_belly_up": {
+  "w": 67,
+  "h": 29,
+  "ax": 34,
+  "ay": 29,
+  "meta": null,
+  "sha1": "25f3d0548799e73c75bcb02a374c7928714bec20"
+ },
+ "dog_collie_sleep": {
+  "w": 51,
+  "h": 24,
+  "ax": 26,
+  "ay": 24,
+  "meta": null,
+  "sha1": "906cddc7fd53a480879f535b1b25055ab2ff4159"
+ },
+ "dog_poodle_jump": {
+  "w": 54,
+  "h": 42,
+  "ax": 27,
+  "ay": 42,
+  "meta": null,
+  "sha1": "15cb2d66a2c1d9e8a0ed071a55ecbe1a712d7eec"
+ },
+ "dog_poodle_bark": {
+  "w": 49,
+  "h": 37,
+  "ax": 25,
+  "ay": 37,
+  "meta": null,
+  "sha1": "1b80f23f870ddf74f5a9c2a2582f75608fed193b"
+ },
+ "dog_poodle_dig_a": {
+  "w": 48,
+  "h": 35,
+  "ax": 24,
+  "ay": 35,
+  "meta": null,
+  "sha1": "39ba5ebdd7c65551da7e0b27a182001139f7f9e5"
+ },
+ "dog_poodle_happy": {
+  "w": 35,
+  "h": 35,
+  "ax": 18,
+  "ay": 35,
+  "meta": null,
+  "sha1": "b221dee9eb6b89a52b06aee4c92f19acf9fa6a63"
+ },
+ "dog_poodle_dig_b": {
+  "w": 48,
+  "h": 34,
+  "ax": 24,
+  "ay": 34,
+  "meta": null,
+  "sha1": "a6bbcaa47495415b11ac646961d84b56eb79b2f0"
+ },
+ "dog_poodle_walk_b": {
+  "w": 38,
+  "h": 34,
+  "ax": 19,
+  "ay": 34,
+  "meta": null,
+  "sha1": "338c35195837478fea888250ae844303d3e53f8c"
+ },
+ "dog_poodle_walk_a": {
+  "w": 36,
+  "h": 34,
+  "ax": 18,
+  "ay": 34,
+  "meta": null,
+  "sha1": "6c19f7a3eea8af078eb9e330f99fea6aee2b6c49"
+ },
+ "dog_poodle_stand": {
+  "w": 32,
+  "h": 34,
+  "ax": 16,
+  "ay": 34,
+  "meta": null,
+  "sha1": "7b4e9761e91548fdd4502fc471dd2bb1c3b9e715"
+ },
+ "dog_poodle_sit_a": {
+  "w": 32,
+  "h": 34,
+  "ax": 16,
+  "ay": 34,
+  "meta": null,
+  "sha1": "a53015ee279d65859970c5a4c178230d6aeec370"
+ },
+ "dog_poodle_sit_b": {
+  "w": 31,
+  "h": 33,
+  "ax": 16,
+  "ay": 33,
+  "meta": null,
+  "sha1": "817f30d5c19b830445851682d3747cd86c46dec0"
+ },
+ "dog_poodle_tug": {
+  "w": 61,
+  "h": 31,
+  "ax": 31,
+  "ay": 31,
+  "meta": null,
+  "sha1": "04750ce30b704fe0933b6343bd0ed1e6ce38cc90"
+ },
+ "dog_poodle_eat": {
+  "w": 37,
+  "h": 31,
+  "ax": 19,
+  "ay": 31,
+  "meta": null,
+  "sha1": "21005a0eabb2cb5be2e1b2ab1e934c78696a31a8"
+ },
+ "dog_poodle_belly_up": {
+  "w": 47,
+  "h": 24,
+  "ax": 24,
+  "ay": 24,
+  "meta": null,
+  "sha1": "3bc1128724096fbe9760016cb9aaa4a9b9ecf3dd"
+ },
+ "dog_poodle_sleep": {
+  "w": 40,
+  "h": 20,
+  "ax": 20,
+  "ay": 20,
+  "meta": null,
+  "sha1": "8ad4550682b7bae8afb8574357eac621216ab1e7"
+ },
+ "cat_orange_swat": {
+  "w": 34,
+  "h": 39,
+  "ax": 17,
+  "ay": 39,
+  "meta": null,
+  "sha1": "3cfee349a3d309cafd2ffcd745941aad64e4e567"
+ },
+ "cat_orange_crouch": {
+  "w": 35,
+  "h": 37,
+  "ax": 18,
+  "ay": 37,
+  "meta": null,
+  "sha1": "44b77afa11ad2a2739194f7334f25b053b688194"
+ },
+ "cat_orange_tangled": {
+  "w": 41,
+  "h": 35,
+  "ax": 21,
+  "ay": 35,
+  "meta": null,
+  "sha1": "e90b2129a9b67d649e463204642d5e1397b54084"
+ },
+ "cat_orange_pounce": {
+  "w": 40,
+  "h": 33,
+  "ax": 20,
+  "ay": 33,
+  "meta": null,
+  "sha1": "70728fe008e2d979c18343ef8c9c5edb80039e81"
+ },
+ "cat_orange_sit_a": {
+  "w": 26,
+  "h": 31,
+  "ax": 13,
+  "ay": 31,
+  "meta": null,
+  "sha1": "de5cf1df6381cfff24696057b99d3b727540d75b"
+ },
+ "cat_orange_stand": {
+  "w": 37,
+  "h": 30,
+  "ax": 19,
+  "ay": 30,
+  "meta": null,
+  "sha1": "ebb5fb43dab95f3abd9e323150acab4c871ad04b"
+ },
+ "cat_orange_walk_a": {
+  "w": 36,
+  "h": 30,
+  "ax": 18,
+  "ay": 30,
+  "meta": null,
+  "sha1": "9022a919176bf02920b4efb48254aa9c6ae2a5ce"
+ },
+ "cat_orange_walk_b": {
+  "w": 35,
+  "h": 30,
+  "ax": 18,
+  "ay": 30,
+  "meta": null,
+  "sha1": "b7bde14d1f24705c482116b19a8101b8226beae9"
+ },
+ "cat_orange_groom": {
+  "w": 27,
+  "h": 29,
+  "ax": 14,
+  "ay": 29,
+  "meta": null,
+  "sha1": "23679cc15028a9aa1d9b0efd41b08d57e885c94d"
+ },
+ "cat_orange_unused_back": {
+  "w": 24,
+  "h": 29,
+  "ax": 12,
+  "ay": 29,
+  "meta": null,
+  "sha1": "4f4066674d6b11076fd1504eb9562ad87fd67778"
+ },
+ "cat_orange_eat": {
+  "w": 38,
+  "h": 20,
+  "ax": 19,
+  "ay": 20,
+  "meta": null,
+  "sha1": "e7b0db358c3ad8476e94652e038ee074624fe982"
+ },
+ "cat_orange_sleep": {
+  "w": 33,
+  "h": 19,
+  "ax": 17,
+  "ay": 19,
+  "meta": null,
+  "sha1": "6a77aa72f5f795e647f139566727882233cf80cd"
+ },
+ "cat_black_swat": {
+  "w": 31,
+  "h": 36,
+  "ax": 16,
+  "ay": 36,
+  "meta": null,
+  "sha1": "9d48d4af0bc7ca9bdede0b87a487c03a13af9718"
+ },
+ "cat_black_crouch": {
+  "w": 33,
+  "h": 34,
+  "ax": 17,
+  "ay": 34,
+  "meta": null,
+  "sha1": "0819096e7f187e26b2c9bb42340979deb9ee7384"
+ },
+ "cat_black_tangled": {
+  "w": 38,
+  "h": 32,
+  "ax": 19,
+  "ay": 32,
+  "meta": null,
+  "sha1": "381634c6fcd68c49fb24ce3a1e20b385361f763a"
+ },
+ "cat_black_sit_a": {
+  "w": 25,
+  "h": 29,
+  "ax": 13,
+  "ay": 29,
+  "meta": null,
+  "sha1": "a1a5bb43667f565298e98e72b3187731aa73b289"
+ },
+ "cat_black_stand": {
+  "w": 32,
+  "h": 28,
+  "ax": 16,
+  "ay": 28,
+  "meta": null,
+  "sha1": "2d30efa026cc7b76579937322edc13ff8fb5297e"
+ },
+ "cat_black_walk_a": {
+  "w": 33,
+  "h": 27,
+  "ax": 17,
+  "ay": 27,
+  "meta": null,
+  "sha1": "200efd3f9490b7ee32cf28255c05cfdaa5a9779d"
+ },
+ "cat_black_walk_b": {
+  "w": 33,
+  "h": 27,
+  "ax": 17,
+  "ay": 27,
+  "meta": null,
+  "sha1": "d4704277618663b053d39f1ea3ee77d7fc3446ba"
+ },
+ "cat_black_groom": {
+  "w": 23,
+  "h": 27,
+  "ax": 12,
+  "ay": 27,
+  "meta": null,
+  "sha1": "5846b53a9fe0b435927b8f61b4dca300a9a02fe4"
+ },
+ "cat_black_unused_back": {
+  "w": 20,
+  "h": 27,
+  "ax": 10,
+  "ay": 27,
+  "meta": null,
+  "sha1": "735238bd7f80222d90b946d96c24cdce7b884537"
+ },
+ "cat_black_pounce": {
+  "w": 37,
+  "h": 25,
+  "ax": 19,
+  "ay": 25,
+  "meta": null,
+  "sha1": "9ab4eead9e306e1cc6b6672b16da7f96c70c3b2b"
+ },
+ "cat_black_sleep": {
+  "w": 31,
+  "h": 19,
+  "ax": 16,
+  "ay": 19,
+  "meta": null,
+  "sha1": "010be5b8ce68b0cc5cd112c628e8502a8662ff34"
+ },
+ "cat_black_eat": {
+  "w": 31,
+  "h": 19,
+  "ax": 16,
+  "ay": 19,
+  "meta": null,
+  "sha1": "baab0990838f7fbbf9022fade49b5c22ed0d9167"
+ },
+ "cat_calico_crouch": {
+  "w": 34,
+  "h": 36,
+  "ax": 17,
+  "ay": 36,
+  "meta": null,
+  "sha1": "746eb1ee9e601a09e858d244a0ed285bff58ce74"
+ },
+ "cat_calico_swat": {
+  "w": 33,
+  "h": 36,
+  "ax": 17,
+  "ay": 36,
+  "meta": null,
+  "sha1": "9ec6706c74c9c14bbc56d897ecf7aacedac37869"
+ },
+ "cat_calico_tangled": {
+  "w": 40,
+  "h": 34,
+  "ax": 20,
+  "ay": 34,
+  "meta": null,
+  "sha1": "1001e78812cd3ca0f81f2beb5ecfba035106005d"
+ },
+ "cat_calico_pounce": {
+  "w": 38,
+  "h": 30,
+  "ax": 19,
+  "ay": 30,
+  "meta": null,
+  "sha1": "4b11e1020527a293dc4b332416f29ae173e37b87"
+ },
+ "cat_calico_sit_a": {
+  "w": 28,
+  "h": 30,
+  "ax": 14,
+  "ay": 30,
+  "meta": null,
+  "sha1": "e9095716208d1a217d8f36eb1f9c95c496269167"
+ },
+ "cat_calico_stand": {
+  "w": 34,
+  "h": 29,
+  "ax": 17,
+  "ay": 29,
+  "meta": null,
+  "sha1": "2bb37dbed5f983faf5d80826ba7e16dc4aefd600"
+ },
+ "cat_calico_walk_b": {
+  "w": 34,
+  "h": 29,
+  "ax": 17,
+  "ay": 29,
+  "meta": null,
+  "sha1": "e06560a2922ef1ce64ba9a588bb9ce7ef2e9bfb7"
+ },
+ "cat_calico_walk_a": {
+  "w": 33,
+  "h": 29,
+  "ax": 17,
+  "ay": 29,
+  "meta": null,
+  "sha1": "1daf38b8d8489fc6fb8c136cd3e2a9ab08cc9a0a"
+ },
+ "cat_calico_groom": {
+  "w": 24,
+  "h": 28,
+  "ax": 12,
+  "ay": 28,
+  "meta": null,
+  "sha1": "d0cc864999531c3a68739fd99fe38e2e07c7645d"
+ },
+ "cat_calico_unused_back": {
+  "w": 23,
+  "h": 27,
+  "ax": 12,
+  "ay": 27,
+  "meta": null,
+  "sha1": "4d9de42bfad37fdbfa566cae48b8d004f36a1b39"
+ },
+ "cat_calico_sleep": {
+  "w": 32,
+  "h": 20,
+  "ax": 16,
+  "ay": 20,
+  "meta": null,
+  "sha1": "b240aa1e2c8142deac43090d25148cf405b3556f"
+ },
+ "cat_calico_eat": {
+  "w": 32,
+  "h": 20,
+  "ax": 16,
+  "ay": 20,
+  "meta": null,
+  "sha1": "00bb4dbd70856e1ad8283db1fbc19b1c9e38df74"
+ },
+ "cat_siamese_swat": {
+  "w": 35,
+  "h": 38,
+  "ax": 18,
+  "ay": 38,
+  "meta": null,
+  "sha1": "08c2d794ff64fada44bdf5aa77dd2382e4c04827"
+ },
+ "cat_siamese_crouch": {
+  "w": 35,
+  "h": 36,
+  "ax": 18,
+  "ay": 36,
+  "meta": null,
+  "sha1": "b32ac764de618c6339b5d44d13540046f79d25fa"
+ },
+ "cat_siamese_tangled": {
+  "w": 40,
+  "h": 35,
+  "ax": 20,
+  "ay": 35,
+  "meta": null,
+  "sha1": "ab7a68fb0bb3726e9ebae7070a3943044f2e6f27"
+ },
+ "cat_siamese_sit_a": {
+  "w": 28,
+  "h": 32,
+  "ax": 14,
+  "ay": 32,
+  "meta": null,
+  "sha1": "9fdf5527afa8cf7bc87b1afdb58b6bf694a62d00"
+ },
+ "cat_siamese_pounce": {
+  "w": 40,
+  "h": 31,
+  "ax": 20,
+  "ay": 31,
+  "meta": null,
+  "sha1": "4c9301e9c3f68c210396d0272579867efb033710"
+ },
+ "cat_siamese_stand": {
+  "w": 35,
+  "h": 31,
+  "ax": 18,
+  "ay": 31,
+  "meta": null,
+  "sha1": "7d914698881d6b4fcdafe5bdd009ea9f2293ba48"
+ },
+ "cat_siamese_walk_a": {
+  "w": 35,
+  "h": 29,
+  "ax": 18,
+  "ay": 29,
+  "meta": null,
+  "sha1": "28b0d8dd50c7e3023cfe417250d12acfbb5aa62b"
+ },
+ "cat_siamese_walk_b": {
+  "w": 35,
+  "h": 29,
+  "ax": 18,
+  "ay": 29,
+  "meta": null,
+  "sha1": "08d83837c2f3a3b54cf4b749b6cae902b604128a"
+ },
+ "cat_siamese_unused_back": {
+  "w": 25,
+  "h": 28,
+  "ax": 13,
+  "ay": 28,
+  "meta": null,
+  "sha1": "bd0bc0a30420c1e72cfaaa1c8399dedb526bebda"
+ },
+ "cat_siamese_groom": {
+  "w": 25,
+  "h": 28,
+  "ax": 13,
+  "ay": 28,
+  "meta": null,
+  "sha1": "c3f547f857798132bd7bcfa4babd4dc90817854d"
+ },
+ "cat_siamese_eat": {
+  "w": 33,
+  "h": 21,
+  "ax": 17,
+  "ay": 21,
+  "meta": null,
+  "sha1": "165ddff435fe1edaf18c7da7adeb30b7689a32bf"
+ },
+ "cat_siamese_sleep": {
+  "w": 33,
+  "h": 20,
+  "ax": 17,
+  "ay": 20,
+  "meta": null,
+  "sha1": "88d3d1bdda1870c25ee9a8a71b07ea2174063228"
+ },
+ "cat_bluecat_swat": {
+  "w": 38,
+  "h": 41,
+  "ax": 19,
+  "ay": 41,
+  "meta": null,
+  "sha1": "cb48582a416ae71e4a9dbb75aeb523cd2417b14a"
+ },
+ "cat_bluecat_tangled": {
+  "w": 44,
+  "h": 40,
+  "ax": 22,
+  "ay": 40,
+  "meta": null,
+  "sha1": "8e68646b9ff59d628cc41e80654e283bd7b07e45"
+ },
+ "cat_bluecat_crouch": {
+  "w": 39,
+  "h": 40,
+  "ax": 20,
+  "ay": 40,
+  "meta": null,
+  "sha1": "80f4bd8a200ae0dda971a5c34dc4d24772829acf"
+ },
+ "cat_bluecat_pounce": {
+  "w": 42,
+  "h": 34,
+  "ax": 21,
+  "ay": 34,
+  "meta": null,
+  "sha1": "79d69e9e050dd4ebb824d898a57621129f63f0fa"
+ },
+ "cat_bluecat_stand": {
+  "w": 38,
+  "h": 32,
+  "ax": 19,
+  "ay": 32,
+  "meta": null,
+  "sha1": "c928db4a3b6367961c936b73f2fd87dbc186ddcf"
+ },
+ "cat_bluecat_sit_a": {
+  "w": 29,
+  "h": 32,
+  "ax": 15,
+  "ay": 32,
+  "meta": null,
+  "sha1": "1839b608544f3b6b1e7bec0222362f77cd867b72"
+ },
+ "cat_bluecat_walk_a": {
+  "w": 38,
+  "h": 31,
+  "ax": 19,
+  "ay": 31,
+  "meta": null,
+  "sha1": "db1fb267a2e18c20e7a4dc2a708a0ce2c83d1207"
+ },
+ "cat_bluecat_walk_b": {
+  "w": 37,
+  "h": 31,
+  "ax": 19,
+  "ay": 31,
+  "meta": null,
+  "sha1": "2a89cb502dc31c6b068ef136675e164d956fa260"
+ },
+ "cat_bluecat_unused_back": {
+  "w": 25,
+  "h": 31,
+  "ax": 13,
+  "ay": 31,
+  "meta": null,
+  "sha1": "d09960ee3bc700cf7f66f2bdc7cfc3bc68e2d1de"
+ },
+ "cat_bluecat_groom": {
+  "w": 26,
+  "h": 30,
+  "ax": 13,
+  "ay": 30,
+  "meta": null,
+  "sha1": "5beaa3c0bc38278a512727e58d21889e518cb3fd"
+ },
+ "cat_bluecat_eat": {
+  "w": 37,
+  "h": 22,
+  "ax": 19,
+  "ay": 22,
+  "meta": null,
+  "sha1": "ede3ddf8d31af903e6097d584a7804266c26fbd8"
+ },
+ "cat_bluecat_sleep": {
+  "w": 36,
+  "h": 21,
+  "ax": 18,
+  "ay": 21,
+  "meta": null,
+  "sha1": "507d57e3e5ab4a5ad80d5c61311ab5bf4e9a4b25"
+ },
+ "cat_ragdoll_swat": {
+  "w": 39,
+  "h": 41,
+  "ax": 20,
+  "ay": 41,
+  "meta": null,
+  "sha1": "749f24f1823bba442776569b14248d5eb0e83b82"
+ },
+ "cat_ragdoll_tangled": {
+  "w": 44,
+  "h": 40,
+  "ax": 22,
+  "ay": 40,
+  "meta": null,
+  "sha1": "bb915e076eb6e77a861476568bc7f3653bdd2ade"
+ },
+ "cat_ragdoll_crouch": {
+  "w": 39,
+  "h": 40,
+  "ax": 20,
+  "ay": 40,
+  "meta": null,
+  "sha1": "94d4bcad8a105561e35ea3711ee45aa83acf44ff"
+ },
+ "cat_ragdoll_pounce": {
+  "w": 43,
+  "h": 33,
+  "ax": 22,
+  "ay": 33,
+  "meta": null,
+  "sha1": "89754aa53c3a39ae1e43bc39125b4edff1cfc22e"
+ },
+ "cat_ragdoll_stand": {
+  "w": 40,
+  "h": 33,
+  "ax": 20,
+  "ay": 33,
+  "meta": null,
+  "sha1": "bd425c15e483c9becd2346611488ad5ebdf2162e"
+ },
+ "cat_ragdoll_sit_a": {
+  "w": 31,
+  "h": 33,
+  "ax": 16,
+  "ay": 33,
+  "meta": null,
+  "sha1": "a8d089ee7ed622b3c2651a9e402e6b5b3d2a09c7"
+ },
+ "cat_ragdoll_walk_a": {
+  "w": 38,
+  "h": 31,
+  "ax": 19,
+  "ay": 31,
+  "meta": null,
+  "sha1": "d51854c81db88735a9970d131f878a9ee3268c9e"
+ },
+ "cat_ragdoll_walk_b": {
+  "w": 38,
+  "h": 31,
+  "ax": 19,
+  "ay": 31,
+  "meta": null,
+  "sha1": "1441983796e9fe0e9d532adbd7e489c62795081b"
+ },
+ "cat_ragdoll_unused_back": {
+  "w": 28,
+  "h": 30,
+  "ax": 14,
+  "ay": 30,
+  "meta": null,
+  "sha1": "271e0290b8d574bb9e9b27c676cc54a67b890898"
+ },
+ "cat_ragdoll_groom": {
+  "w": 28,
+  "h": 29,
+  "ax": 14,
+  "ay": 29,
+  "meta": null,
+  "sha1": "4d3ceae1ff65f096eb0d2e962c3199c239f01900"
+ },
+ "cat_ragdoll_eat": {
+  "w": 38,
+  "h": 23,
+  "ax": 19,
+  "ay": 23,
+  "meta": null,
+  "sha1": "5f14bce1f13807a5f727738ff265e0595207d0c9"
+ },
+ "cat_ragdoll_sleep": {
+  "w": 35,
+  "h": 21,
+  "ax": 18,
+  "ay": 21,
+  "meta": null,
+  "sha1": "3cf32494628a03e3fa9fcd2e189468f8a856f66d"
+ },
+ "front_dog_husky": {
+  "w": 48,
+  "h": 63,
+  "ax": 24,
+  "ay": 63,
+  "meta": null,
+  "sha1": "864068f5f2a15b5c171c8a886e67aef9117082f7"
+ },
+ "front_dog_golden": {
+  "w": 51,
+  "h": 62,
+  "ax": 26,
+  "ay": 62,
+  "meta": null,
+  "sha1": "74bc14b96fbf7f500c3b90257941e400939fd997"
+ },
+ "front_dog_collie": {
+  "w": 48,
+  "h": 61,
+  "ax": 24,
+  "ay": 61,
+  "meta": null,
+  "sha1": "0540efe6ab66980e5c8f95e339586521bf259827"
+ },
+ "front_dog_shiba": {
+  "w": 44,
+  "h": 61,
+  "ax": 22,
+  "ay": 61,
+  "meta": null,
+  "sha1": "7e6586a1d67424ed260718de52e0f7f0092fe12c"
+ },
+ "front_cat_ragdoll": {
+  "w": 50,
+  "h": 60,
+  "ax": 25,
+  "ay": 60,
+  "meta": null,
+  "sha1": "690d0947cbe3d039a817978791eccb4218bfbdbb"
+ },
+ "front_cat_bluecat": {
+  "w": 48,
+  "h": 60,
+  "ax": 24,
+  "ay": 60,
+  "meta": null,
+  "sha1": "4f672e4890b4c58e55b74a62e9bd50837aba0513"
+ },
+ "front_cat_orange": {
+  "w": 47,
+  "h": 60,
+  "ax": 24,
+  "ay": 60,
+  "meta": null,
+  "sha1": "d4f1159c12495fe161567464f0641cc5863aa074"
+ },
+ "front_cat_calico": {
+  "w": 46,
+  "h": 60,
+  "ax": 23,
+  "ay": 60,
+  "meta": null,
+  "sha1": "bec930a5c17a518d06adbfb9e7da8bab40067169"
+ },
+ "front_cat_black": {
+  "w": 45,
+  "h": 60,
+  "ax": 23,
+  "ay": 60,
+  "meta": null,
+  "sha1": "564a2e8086fdb76d45f005840cfef45a7e98960b"
+ },
+ "front_cat_siamese": {
+  "w": 42,
+  "h": 60,
+  "ax": 21,
+  "ay": 60,
+  "meta": null,
+  "sha1": "0a7be2e5be9e40f68dff3b34b0c578204c033c7f"
+ },
+ "front_dog_poodle": {
+  "w": 43,
+  "h": 59,
+  "ax": 22,
+  "ay": 59,
+  "meta": null,
+  "sha1": "c8c79be9e8247f977f89f437ab4014677810ec06"
+ },
+ "front_dog_corgi": {
+  "w": 40,
+  "h": 55,
+  "ax": 20,
+  "ay": 55,
+  "meta": null,
+  "sha1": "0a7bf46abcec8a2e0dd93b6d78fcb3a43b09a3c0"
+ },
+ "pers_lively": {
+  "w": 20,
+  "h": 20,
+  "ax": 10,
+  "ay": 20,
+  "meta": null,
+  "sha1": "cac7177c812503695ae4bbd7b350d3617bc63706"
+ },
+ "pers_greedy": {
+  "w": 20,
+  "h": 20,
+  "ax": 10,
+  "ay": 20,
+  "meta": null,
+  "sha1": "314c7d75ed094e9438ea19f29bc7341698caaf31"
+ },
+ "pers_lazy": {
+  "w": 20,
+  "h": 20,
+  "ax": 10,
+  "ay": 20,
+  "meta": null,
+  "sha1": "37c32a0122e4495c0e35c91292be0bc55f1e8947"
+ },
+ "pers_clingy": {
+  "w": 20,
+  "h": 20,
+  "ax": 10,
+  "ay": 20,
+  "meta": null,
+  "sha1": "f049c4fdedc3d10e23bd053edb44d41d90cb574f"
+ },
+ "pers_timid": {
+  "w": 20,
+  "h": 20,
+  "ax": 10,
+  "ay": 20,
+  "meta": null,
+  "sha1": "1e200fb9eeb1e6a350b43c0021fb1ab42304e14a"
+ },
+ "clocktower": {
+  "w": 123,
+  "h": 160,
+  "ax": 62,
+  "ay": 160,
+  "meta": {
+   "clock": {
+    "cx": 62,
+    "cy": 82,
+    "r": 17
+   }
+  },
+  "sha1": "82fab608f2786a0ec71220e019521c3edb44efdc"
+ },
+ "clocktower_open": {
+  "w": 123,
+  "h": 160,
+  "ax": 62,
+  "ay": 160,
+  "meta": {
+   "clock": {
+    "cx": 62,
+    "cy": 82,
+    "r": 17
+   }
+  },
+  "sha1": "d477287925a2a47df1572929c56c8094bbde3ec8"
+ },
+ "house_closed": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "8c0d3e49af896bcc8de462c8dc6e097badc65467"
+ },
+ "house_open": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "877cf8d034c4a6a9074758dddb6dde050d8d13f0"
+ },
+ "house_night": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "68159ccc7220a993cadcfa7e0a8a0cc978a41535"
+ },
+ "tree": {
+  "w": 82,
+  "h": 103,
+  "ax": 41,
+  "ay": 103,
+  "meta": null,
+  "sha1": "07e963847f7467608f7d3a3c7998f8b274b457f0"
+ },
+ "cat_tree": {
+  "w": 72,
+  "h": 90,
+  "ax": 36,
+  "ay": 90,
+  "meta": null,
+  "sha1": "49e2addda7b4ed9bc2ff74a968454d99640a6bb0"
+ },
+ "lamp": {
+  "w": 51,
+  "h": 84,
+  "ax": 26,
+  "ay": 84,
+  "meta": null,
+  "sha1": "9c60d9ed2b5917a10f9394027a1421eecd0c04c2"
+ },
+ "doghouse": {
+  "w": 99,
+  "h": 83,
+  "ax": 50,
+  "ay": 83,
+  "meta": null,
+  "sha1": "3d852bdc2b7b01a64945710f955be7f9ad272a26"
+ },
+ "bathtub": {
+  "w": 102,
+  "h": 82,
+  "ax": 51,
+  "ay": 82,
+  "meta": null,
+  "sha1": "13c5ca136d3506041e84018c3192732b32266e0c"
+ },
+ "pond": {
+  "w": 110,
+  "h": 79,
+  "ax": 55,
+  "ay": 79,
+  "meta": {
+   "water": {
+    "cx": 55,
+    "cy": 41,
+    "rx": 43,
+    "ry": 26
+   }
+  },
+  "sha1": "5f8bb667c9606e5eca561d4745fe81cea9d878bd"
+ },
+ "picnic": {
+  "w": 117,
+  "h": 69,
+  "ax": 59,
+  "ay": 69,
+  "meta": null,
+  "sha1": "4cc71fb7516db86abeb9c0590673aa76b1bd6441"
+ },
+ "coral": {
+  "w": 59,
+  "h": 50,
+  "ax": 30,
+  "ay": 50,
+  "meta": null,
+  "sha1": "7774dc53e589aef1eaf81ce25f844f7ae0472c98"
+ },
+ "planter": {
+  "w": 62,
+  "h": 45,
+  "ax": 31,
+  "ay": 45,
+  "meta": null,
+  "sha1": "9ad8b0c2e5c27ec92fd99630d9f19b0a345dde50"
+ },
+ "bush": {
+  "w": 47,
+  "h": 40,
+  "ax": 24,
+  "ay": 40,
+  "meta": null,
+  "sha1": "cff169d4b2bb07c2b513b0fd6289594c6b0dde16"
+ },
+ "tall_grass": {
+  "w": 44,
+  "h": 38,
+  "ax": 22,
+  "ay": 38,
+  "meta": null,
+  "sha1": "c04af0714b08199869664e107287bf6d029371eb"
+ },
+ "stump": {
+  "w": 53,
+  "h": 36,
+  "ax": 27,
+  "ay": 36,
+  "meta": null,
+  "sha1": "8d6941c8d656d14b6ddaddab7be19a1da18c4431"
+ },
+ "mushroom": {
+  "w": 37,
+  "h": 36,
+  "ax": 19,
+  "ay": 36,
+  "meta": null,
+  "sha1": "9df45fefa5445e1a8cbebf1950b904d8380515c8"
+ },
+ "rocks": {
+  "w": 52,
+  "h": 34,
+  "ax": 26,
+  "ay": 34,
+  "meta": null,
+  "sha1": "8190107c798db798362874020d4c3b9bea6dfe23"
+ },
+ "flowers": {
+  "w": 39,
+  "h": 28,
+  "ax": 20,
+  "ay": 28,
+  "meta": null,
+  "sha1": "07a27f41922c4078a0360abd6ec7e5a4dc13aba3"
+ },
+ "bowls": {
+  "w": 57,
+  "h": 27,
+  "ax": 29,
+  "ay": 27,
+  "meta": null,
+  "sha1": "e7d26932d67734938bff58852815f1abd8ee8b74"
+ },
+ "water_splash_2": {
+  "w": 31,
+  "h": 30,
+  "ax": 16,
+  "ay": 30,
+  "meta": null,
+  "sha1": "942f5675da891bc0e3c8e361ad816639513c76ed"
+ },
+ "water_splash_1": {
+  "w": 23,
+  "h": 25,
+  "ax": 12,
+  "ay": 25,
+  "meta": null,
+  "sha1": "0587aad46d84509d2ce2951b53bf07d14ab1afa1"
+ },
+ "water_splash_3": {
+  "w": 30,
+  "h": 24,
+  "ax": 15,
+  "ay": 24,
+  "meta": null,
+  "sha1": "709f97ae377b73e338563482266d1e39e5bd6dd1"
+ },
+ "sun": {
+  "w": 20,
+  "h": 21,
+  "ax": 10,
+  "ay": 21,
+  "meta": null,
+  "sha1": "bb7e9a24bdd0d7822e1ffd96db5984e794dd756e"
+ },
+ "star": {
+  "w": 21,
+  "h": 19,
+  "ax": 11,
+  "ay": 19,
+  "meta": null,
+  "sha1": "69fcb927dd38a294b640a5cce6cd0ce8b63f6671"
+ },
+ "water_bubble_l": {
+  "w": 19,
+  "h": 19,
+  "ax": 10,
+  "ay": 10,
+  "meta": null,
+  "sha1": "edf7cfd1158725be4b2244957452539b17b15091"
+ },
+ "moon": {
+  "w": 17,
+  "h": 18,
+  "ax": 9,
+  "ay": 18,
+  "meta": null,
+  "sha1": "895598973340202dacd2d63997aeaa1f20af539e"
+ },
+ "cloud_a": {
+  "w": 28,
+  "h": 17,
+  "ax": 14,
+  "ay": 17,
+  "meta": null,
+  "sha1": "56faa60ea26e3a6437b1d342c948b2ef14aa3339"
+ },
+ "water_ripple_3": {
+  "w": 39,
+  "h": 16,
+  "ax": 20,
+  "ay": 8,
+  "meta": null,
+  "sha1": "62bec213cde9ebba64a5ee83d19a60406a3a5382"
+ },
+ "cloud_b": {
+  "w": 23,
+  "h": 16,
+  "ax": 12,
+  "ay": 16,
+  "meta": null,
+  "sha1": "6897babaa5f5864d845f965f3641cd6c004d82f6"
+ },
+ "fx_heart": {
+  "w": 17,
+  "h": 15,
+  "ax": 9,
+  "ay": 15,
+  "meta": null,
+  "sha1": "fe69a9e24a405363ad60c2d669e4eeba1298742d"
+ },
+ "fx_zzz": {
+  "w": 16,
+  "h": 15,
+  "ax": 8,
+  "ay": 15,
+  "meta": null,
+  "sha1": "e43a25436a9a61f30667737213b9dd44c5729f19"
+ },
+ "fx_note": {
+  "w": 15,
+  "h": 15,
+  "ax": 8,
+  "ay": 15,
+  "meta": null,
+  "sha1": "f83ae7b2673645572cd137f17e2430650a8e5896"
+ },
+ "fx_bubble": {
+  "w": 15,
+  "h": 15,
+  "ax": 8,
+  "ay": 15,
+  "meta": null,
+  "sha1": "346415e60f2602fedad4a4712943aeb3a6abc858"
+ },
+ "fx_sparkle": {
+  "w": 13,
+  "h": 15,
+  "ax": 7,
+  "ay": 15,
+  "meta": null,
+  "sha1": "1a52266943964b3ad65578278e99fab95f8ab753"
+ },
+ "fx_sweat": {
+  "w": 10,
+  "h": 15,
+  "ax": 5,
+  "ay": 15,
+  "meta": null,
+  "sha1": "adf6030cc03291d8325fdf6eea2f1ece0db77790"
+ },
+ "fx_question": {
+  "w": 9,
+  "h": 15,
+  "ax": 5,
+  "ay": 15,
+  "meta": null,
+  "sha1": "70b749975680d67bcfd2f7ca42ef61619a41c531"
+ },
+ "fx_exclaim": {
+  "w": 7,
+  "h": 15,
+  "ax": 4,
+  "ay": 15,
+  "meta": null,
+  "sha1": "016cd867194f167854e2afae9511a72139ee6ae6"
+ },
+ "water_drop_1": {
+  "w": 11,
+  "h": 14,
+  "ax": 6,
+  "ay": 7,
+  "meta": null,
+  "sha1": "abcd84ebebdc2362f4b2693c39530cbf61cf9c35"
+ },
+ "raindrop": {
+  "w": 9,
+  "h": 14,
+  "ax": 5,
+  "ay": 14,
+  "meta": null,
+  "sha1": "a9b6ffacc140dc9a04d9bb1c1bf0dad90016d04d"
+ },
+ "cloud_c": {
+  "w": 34,
+  "h": 13,
+  "ax": 17,
+  "ay": 13,
+  "meta": null,
+  "sha1": "17278be1dceaccfe5c8207fefdd579127558ecf7"
+ },
+ "water_ripple_2": {
+  "w": 27,
+  "h": 12,
+  "ax": 14,
+  "ay": 6,
+  "meta": null,
+  "sha1": "641ed9414ca8b508048c5b2bb89bfffaf9e2b32a"
+ },
+ "water_drop_2": {
+  "w": 8,
+  "h": 10,
+  "ax": 4,
+  "ay": 5,
+  "meta": null,
+  "sha1": "33616c89f5bf483c85c76b17206069da94751be3"
+ },
+ "snowflake": {
+  "w": 8,
+  "h": 9,
+  "ax": 4,
+  "ay": 9,
+  "meta": null,
+  "sha1": "26ada1269e6b03d4373e123cbc902e138c1c0b99"
+ },
+ "water_ripple_1": {
+  "w": 18,
+  "h": 8,
+  "ax": 9,
+  "ay": 4,
+  "meta": null,
+  "sha1": "1eede8456f3e9b84a993b07cf36ff8e725b8c19b"
+ },
+ "water_bubble_s": {
+  "w": 8,
+  "h": 8,
+  "ax": 4,
+  "ay": 4,
+  "meta": null,
+  "sha1": "cea1757f78c9b00bb9eb2348699873d9af3698a9"
+ },
+ "water_drop_3": {
+  "w": 7,
+  "h": 7,
+  "ax": 4,
+  "ay": 4,
+  "meta": null,
+  "sha1": "2b392b1df8ff858bec61a1fc78a7ce58910fea1d"
+ },
+ "toy_chest_open": {
+  "w": 42,
+  "h": 39,
+  "ax": 21,
+  "ay": 39,
+  "meta": null,
+  "sha1": "86ae017fd13e3fa8765283a0d7c09428f506746d"
+ },
+ "toy_chest_closed": {
+  "w": 38,
+  "h": 34,
+  "ax": 19,
+  "ay": 34,
+  "meta": null,
+  "sha1": "6c406e2873b17d89714a307e135f4c8d08723a3a"
+ },
+ "toy_dirt_mound": {
+  "w": 53,
+  "h": 30,
+  "ax": 27,
+  "ay": 30,
+  "meta": null,
+  "sha1": "1add8a194d8b883d3801d429ecc9eb25b819560b"
+ },
+ "toy_rope": {
+  "w": 54,
+  "h": 29,
+  "ax": 27,
+  "ay": 29,
+  "meta": null,
+  "sha1": "f0012a3d558cd5b852caddbd18ae6ecaec5c5047"
+ },
+ "toy_shoe": {
+  "w": 39,
+  "h": 29,
+  "ax": 20,
+  "ay": 29,
+  "meta": null,
+  "sha1": "d0b7f8656e6f301cb932aa36287b54071bb979bb"
+ },
+ "toy_yarn": {
+  "w": 36,
+  "h": 28,
+  "ax": 18,
+  "ay": 28,
+  "meta": null,
+  "sha1": "af4f0797499c499f3776250f69c502d194ef5448"
+ },
+ "toy_bone": {
+  "w": 39,
+  "h": 27,
+  "ax": 20,
+  "ay": 27,
+  "meta": null,
+  "sha1": "07f7c35a7d2c66caff8b5618d4104c1058313794"
+ },
+ "toy_ball": {
+  "w": 27,
+  "h": 27,
+  "ax": 14,
+  "ay": 27,
+  "meta": null,
+  "sha1": "2e7f7dd187253c4990d7a4c848908a554acdfc3d"
+ },
+ "toy_frisbee": {
+  "w": 44,
+  "h": 25,
+  "ax": 22,
+  "ay": 25,
+  "meta": null,
+  "sha1": "e9157d4e2321c1b75afc63561ea23ddc78caafac"
+ },
+ "toy_wand": {
+  "w": 43,
+  "h": 25,
+  "ax": 22,
+  "ay": 25,
+  "meta": null,
+  "sha1": "dd2d93ea9a9bdf6a3f501cca089d7a92550a21b7"
+ },
+ "toy_dirt_mound_s": {
+  "w": 25,
+  "h": 15,
+  "ax": 13,
+  "ay": 15,
+  "meta": null,
+  "sha1": "f0204fccdc99a99fc36c522a706496935d29fe37"
+ },
+ "toy_laser_dot": {
+  "w": 22,
+  "h": 12,
+  "ax": 11,
+  "ay": 12,
+  "meta": null,
+  "sha1": "b3db8bcde90bae33b554a8781d3d0b95eb85bbea"
+ },
+ "toy_ball_s": {
+  "w": 11,
+  "h": 11,
+  "ax": 6,
+  "ay": 11,
+  "meta": null,
+  "sha1": "07a8fef8729ca23ea8ee4b78d7109637d13669f6"
+ },
+ "grass_tile": {
+  "w": 106,
+  "h": 102,
+  "ax": 0,
+  "ay": 0,
+  "meta": null,
+  "sha1": "d2ab0c2aabaa6fcb3a01ac196cc887ff0476f7f6"
+ },
+ "path": {
+  "w": 704,
+  "h": 67,
+  "ax": 0,
+  "ay": 67,
+  "meta": null,
+  "sha1": "049fd3229d2cb80c09f05cbafc996ef107e9057a"
+ },
+ "far": {
+  "w": 792,
+  "h": 37,
+  "ax": 0,
+  "ay": 37,
+  "meta": null,
+  "sha1": "983d513d6948a2a8e401082bfd1196841ac494c8"
+ },
+ "paper_dog": {
+  "w": 93,
+  "h": 95,
+  "ax": 47,
+  "ay": 95,
+  "meta": null,
+  "sha1": "3e9be1cbef0e54f28fb10ce91d5c92f285a44343"
+ },
+ "paper_cat": {
+  "w": 93,
+  "h": 94,
+  "ax": 47,
+  "ay": 94,
+  "meta": null,
+  "sha1": "0e2d258e0016ff544ee50b8290e480fbc704cda4"
+ },
+ "item_C001": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "49a8a541c3a3de86a808d36e081222b520cf4d50"
+ },
+ "item_C002": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "41ab5065272537d2a02fcdc2bed010f13d75bc3f"
+ },
+ "item_C003": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "23bb0c261da31d07c71511e7fe8811beb0d2d47b"
+ },
+ "item_C004": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "6c4746e73ff6edd15bd8a88716f04c1ea7f9e4b5"
+ },
+ "item_C005": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "a822434be54e5fffe5f4923b26a0277506dde387"
+ },
+ "item_C006": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "d695a681f5b5c8df9252187c761fd3b94500dd4e"
+ },
+ "item_C007": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "a8e8c2bbb2a12cd904e79ac4b75c2d2c857f6333"
+ },
+ "item_C008": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "3ad0ac9c324dfa185b55c3fe130f51a0180e68dc"
+ },
+ "item_C009": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "9c197e6c4b32b4accd37dec3e2459c396221ed8f"
+ },
+ "item_C010": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "b2d988979c625f5c28e544918dfdddc9544015eb"
+ },
+ "item_U001": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "d9ff5a15da3000cb9a326dd1304ef8d7cd623ebf"
+ },
+ "item_U002_1": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "7484a6ba4c0ca6c45a100618d41acaa262092bd6"
+ },
+ "item_U002_2": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "a1ac53b98e18c6e227d519b9afc239a94a7f1f67"
+ },
+ "item_U002_3": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "b2fb0e0e1e1978bfd93169062ec384f8af0c1228"
+ },
+ "item_U002_4": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "9c1571a26d83ee56cc3878b22090406e5b0346e9"
+ },
+ "item_U002_5": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "fa838d9684073cd74d03ccc3a72e761e4ff5d1bc"
+ },
+ "item_U003": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "d83525205e6ecc5831d3da73adb06c9ca5793e34"
+ },
+ "item_U004": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "dadba08a8d3a7faff63799d5ec7a4d934a6e7d09"
+ },
+ "item_U005": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "02e2fdf5e27028112ddca515fe937e29505f3f31"
+ },
+ "item_U006": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "daf8306670816e6500a82d8781ee6e9baa531ce3"
+ },
+ "item_U007": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "5d825506b053d39e64844d67aee8b6101c15d509"
+ },
+ "item_U008": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "df63176c2d0196420f290b46af724985fed12d4f"
+ },
+ "item_R001": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "604336e46ae7fc79b8846955e28784a8e5dc98da"
+ },
+ "item_R002": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "e25eff5c02850cf58d41300a0cafdc18bd2a919b"
+ },
+ "item_R003": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "07c80d3277c5ed780d731938890beab322c930f0"
+ },
+ "item_R004": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "13f1cb42debb530bd35237bac49f0911bab68a00"
+ },
+ "item_R005": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "bbd249cf396153c67f0d37d9199c00cbacd728d2"
+ },
+ "item_L001": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "0b3b410d655ce14362ecfceedd0226074f95c27c"
+ },
+ "item_L002": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "75a15ed522d2dfd424bacd42f340cd2dcb76808c"
+ },
+ "item_U002_6": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "c47ecde6f63fb7552ce5348c81ad2a043ea9ef89"
+ },
+ "item_U009_1": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "2e0aa0db66f0c48f5e16d6abc1284b88b1ada14c"
+ },
+ "item_U009_2": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "ced19c6fa75370b2b10d911748eada9039348764"
+ },
+ "item_U009_3": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "0e082df36f009c100993ccb780d6db799a5494fa"
+ },
+ "item_U009_4": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "156a36e83a54449c61fa3db59cffcb51fd8126f1"
+ },
+ "item_U009_5": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "c1eae34411291971104bef951f18c2ab2f45e0e8"
+ },
+ "item_U009_6": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "b2eecc558f052c51f3b3524b34853e7f994ac3ad"
+ },
+ "item_L003": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "fbc893bda0b8c8399e90347d76704c1dbfb27fa4"
+ },
+ "item_L004": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "6e966cd460317703b832ac2f8cf2258c8e6ca729"
+ },
+ "sil_house_gold": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "ed4553eb8dcbd2e7680f75f5f952556117666d87"
+ },
+ "sil_tower_gold": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "a6e856eef4b618b388bcb2455eedebf31b0659a0"
+ },
+ "fx_reveal": {
+  "w": 22,
+  "h": 22,
+  "ax": 11,
+  "ay": 22,
+  "meta": null,
+  "sha1": "19d1b10ce02363be4b69f4ad094c119f796ab46c"
+ },
+ "coin_silver": {
+  "w": 17,
+  "h": 17,
+  "ax": 9,
+  "ay": 17,
+  "meta": null,
+  "sha1": "af5769e615ff237ae11d942adba5e53fab48509b"
+ },
+ "coin_gold": {
+  "w": 17,
+  "h": 17,
+  "ax": 9,
+  "ay": 17,
+  "meta": null,
+  "sha1": "9fe6be4c445833da5476461aa450bd4482ca1c42"
+ },
+ "coin_bronze": {
+  "w": 17,
+  "h": 16,
+  "ax": 9,
+  "ay": 16,
+  "meta": null,
+  "sha1": "b50e55fb7bfc7212f3c2589185c4bd222296d6e5"
+ },
+ "clocktower_gold": {
+  "w": 123,
+  "h": 160,
+  "ax": 62,
+  "ay": 160,
+  "meta": {
+   "clock": {
+    "cx": 62,
+    "cy": 82,
+    "r": 17
+   }
+  },
+  "sha1": "0de69b87b225124c62f725de291e2b00c98b1048"
+ },
+ "clocktower_open_gold": {
+  "w": 123,
+  "h": 160,
+  "ax": 62,
+  "ay": 160,
+  "meta": {
+   "clock": {
+    "cx": 62,
+    "cy": 82,
+    "r": 17
+   }
+  },
+  "sha1": "83f7eba590bfc1f61ae393f3d6fd6d90f0baf689"
+ },
+ "house_gold_closed": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "089cd8242e1ba942c5184ef957744983b731fcd8"
+ },
+ "house_gold_open": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "de97f89707210cc14cc54f2f6ceafc7c5d73d23d"
+ },
+ "house_gold_night": {
+  "w": 139,
+  "h": 134,
+  "ax": 70,
+  "ay": 134,
+  "meta": null,
+  "sha1": "c0997edff3b1ee79d2a7315a9cec72ad762428e5"
+ },
+ "board": {
+  "w": 64,
+  "h": 50,
+  "ax": 32,
+  "ay": 50,
+  "meta": {
+   "board": {
+    "x0": 8,
+    "y0": 8,
+    "x1": 56,
+    "y1": 39
+   }
+  },
+  "sha1": "0782d14c24aea3a367d3f26cc3670ae8626d6017"
+ },
+ "tool_calc": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "e4dfd0ccb652e581ae77a1d635496c2cf4bf1a97"
+ },
+ "tool_timer": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "966c3fb8a4ec0726a88ac3217c9481153dd4e6a4"
+ },
+ "tool_board": {
+  "w": 48,
+  "h": 48,
+  "ax": 24,
+  "ay": 48,
+  "meta": null,
+  "sha1": "899e95b6924932c60f45e893065d4229a176d22c"
+ },
+ "note_yellow": {
+  "w": 32,
+  "h": 32,
+  "ax": 16,
+  "ay": 32,
+  "meta": null,
+  "sha1": "a1dd3c206d42eaa9fbb5a2c46362dd21f83094a0"
+ },
+ "note_pink": {
+  "w": 32,
+  "h": 32,
+  "ax": 16,
+  "ay": 32,
+  "meta": null,
+  "sha1": "1f83a267231b5b91ed3801a699b5145103b11ea2"
+ },
+ "note_blue": {
+  "w": 32,
+  "h": 32,
+  "ax": 16,
+  "ay": 32,
+  "meta": null,
+  "sha1": "1cd8f6a196d0ac912cc13e243e0376c014dc79fd"
+ },
+ "note_green": {
+  "w": 32,
+  "h": 32,
+  "ax": 16,
+  "ay": 32,
+  "meta": null,
+  "sha1": "8f0c959e6cd2c3d3a88853f14639fcb8fd29e9c8"
+ },
+ "picnic_mat_red": {
+  "w": 104,
+  "h": 63,
+  "ax": 52,
+  "ay": 63,
+  "meta": {
+   "mat": {
+    "top": 0,
+    "bottom": 63,
+    "rows": [
+     [
+      0,
+      41,
+      49
+     ],
+     [
+      4,
+      37,
+      65
+     ],
+     [
+      8,
+      33,
+      93
+     ],
+     [
+      12,
+      29,
+      104
+     ],
+     [
+      16,
+      26,
+      103
+     ],
+     [
+      20,
+      21,
+      100
+     ],
+     [
+      24,
+      18,
+      98
+     ],
+     [
+      28,
+      16,
+      95
+     ],
+     [
+      32,
+      11,
+      93
+     ],
+     [
+      36,
+      8,
+      91
+     ],
+     [
+      40,
+      3,
+      89
+     ],
+     [
+      44,
+      0,
+      85
+     ],
+     [
+      48,
+      1,
+      83
+     ],
+     [
+      52,
+      20,
+      81
+     ],
+     [
+      56,
+      41,
+      78
+     ],
+     [
+      60,
+      53,
+      76
+     ],
+     [
+      62,
+      68,
+      74
+     ]
+    ]
+   }
+  },
+  "sha1": "f754706c7acf0a0af93389777a69c818a7157efd"
+ },
+ "picnic_mat_blue": {
+  "w": 104,
+  "h": 63,
+  "ax": 52,
+  "ay": 63,
+  "meta": {
+   "mat": {
+    "top": 0,
+    "bottom": 63,
+    "rows": [
+     [
+      0,
+      41,
+      49
+     ],
+     [
+      4,
+      37,
+      65
+     ],
+     [
+      8,
+      33,
+      93
+     ],
+     [
+      12,
+      29,
+      104
+     ],
+     [
+      16,
+      26,
+      103
+     ],
+     [
+      20,
+      21,
+      100
+     ],
+     [
+      24,
+      18,
+      98
+     ],
+     [
+      28,
+      16,
+      95
+     ],
+     [
+      32,
+      11,
+      93
+     ],
+     [
+      36,
+      9,
+      91
+     ],
+     [
+      40,
+      3,
+      89
+     ],
+     [
+      44,
+      0,
+      85
+     ],
+     [
+      48,
+      1,
+      83
+     ],
+     [
+      52,
+      20,
+      81
+     ],
+     [
+      56,
+      41,
+      78
+     ],
+     [
+      60,
+      53,
+      76
+     ],
+     [
+      62,
+      67,
+      74
+     ]
+    ]
+   }
+  },
+  "sha1": "e55230d55368e0faa0fdbb216a11656ea16cc548"
+ },
+ "picnic_mat_pink": {
+  "w": 104,
+  "h": 63,
+  "ax": 52,
+  "ay": 63,
+  "meta": {
+   "mat": {
+    "top": 0,
+    "bottom": 63,
+    "rows": [
+     [
+      0,
+      41,
+      49
+     ],
+     [
+      4,
+      37,
+      65
+     ],
+     [
+      8,
+      33,
+      94
+     ],
+     [
+      12,
+      29,
+      104
+     ],
+     [
+      16,
+      26,
+      103
+     ],
+     [
+      20,
+      21,
+      99
+     ],
+     [
+      24,
+      18,
+      98
+     ],
+     [
+      28,
+      15,
+      95
+     ],
+     [
+      32,
+      11,
+      93
+     ],
+     [
+      36,
+      8,
+      90
+     ],
+     [
+      40,
+      3,
+      89
+     ],
+     [
+      44,
+      0,
+      85
+     ],
+     [
+      48,
+      1,
+      83
+     ],
+     [
+      52,
+      20,
+      81
+     ],
+     [
+      56,
+      41,
+      78
+     ],
+     [
+      60,
+      57,
+      76
+     ],
+     [
+      62,
+      68,
+      75
+     ]
+    ]
+   }
+  },
+  "sha1": "9816327b5f3d7c3a91b80dfa57291e37408ea98e"
+ },
+ "picnic_basket_closed": {
+  "w": 21,
+  "h": 22,
+  "ax": 11,
+  "ay": 22,
+  "meta": null,
+  "sha1": "dabfb2e65be254aa372a65691f2138331dfc35ef"
+ },
+ "picnic_basket_open": {
+  "w": 21,
+  "h": 22,
+  "ax": 11,
+  "ay": 22,
+  "meta": null,
+  "sha1": "d3cc09d9d551b3d9be1814072fbdbcf8eb0a500c"
+ },
+ "picnic_camera": {
+  "w": 20,
+  "h": 16,
+  "ax": 10,
+  "ay": 16,
+  "meta": null,
+  "sha1": "e9166b2dc4821a83468badc805ff88d38422c53f"
+ },
+ "picnic_food_juice": {
+  "w": 9,
+  "h": 13,
+  "ax": 5,
+  "ay": 13,
+  "meta": null,
+  "sha1": "9655ece38552368b409025dada609d919c507499"
+ },
+ "picnic_food_sandwich": {
+  "w": 13,
+  "h": 12,
+  "ax": 7,
+  "ay": 12,
+  "meta": null,
+  "sha1": "e95aeb815a0744c22e059c1bd3f3fb423bcf42a6"
+ },
+ "picnic_food_cake": {
+  "w": 11,
+  "h": 12,
+  "ax": 6,
+  "ay": 12,
+  "meta": null,
+  "sha1": "ed731b03e8832e4b52eb37a656001e4435989c37"
+ },
+ "picnic_food_fruit": {
+  "w": 16,
+  "h": 11,
+  "ax": 8,
+  "ay": 11,
+  "meta": null,
+  "sha1": "96fb450b5d11b9821152f1f63410347e1899abcc"
+ },
+ "picnic_snack_dog": {
+  "w": 15,
+  "h": 8,
+  "ax": 8,
+  "ay": 8,
+  "meta": null,
+  "sha1": "defa50dd6ca5628d77fb6242e17518cb0ac42056"
+ },
+ "picnic_snack_cat": {
+  "w": 15,
+  "h": 4,
+  "ax": 8,
+  "ay": 4,
+  "meta": null,
+  "sha1": "bb91761e7b2b78dc19672e24a55c669d68250a96"
+ },
+ "polaroid_stars": {
+  "w": 70,
+  "h": 80,
+  "ax": 35,
+  "ay": 80,
+  "meta": {
+   "window": {
+    "x0": 10,
+    "y0": 12,
+    "x1": 60,
+    "y1": 60
+   }
+  },
+  "sha1": "6944f2ff564694c10ab44ae63bc3d6eb0022511d"
+ },
+ "polaroid_flowers": {
+  "w": 69,
+  "h": 79,
+  "ax": 35,
+  "ay": 79,
+  "meta": {
+   "window": {
+    "x0": 9,
+    "y0": 11,
+    "x1": 60,
+    "y1": 59
+   }
+  },
+  "sha1": "701071e11ffbe7d54ba76f7e2f3bd14abd1ab6a0"
+ },
+ "polaroid_hearts": {
+  "w": 69,
+  "h": 78,
+  "ax": 35,
+  "ay": 78,
+  "meta": {
+   "window": {
+    "x0": 10,
+    "y0": 10,
+    "x1": 60,
+    "y1": 58
+   }
+  },
+  "sha1": "85d858edfaeae796e609c997c01ce9d6e1c28b67"
+ }
+}

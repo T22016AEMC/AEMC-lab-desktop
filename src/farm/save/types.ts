@@ -77,7 +77,7 @@ export interface Find {
 }
 
 /**
- * 外觀（v3.6.0 最小版）：owned = 已擁有的外觀 id（例如 house.gold）、equipped = 各部位目前穿的外觀 id。
+ * 外觀（v3.6.0 最小版）：owned = 已擁有的外觀 id（例如 house.gold＝亞特蘭提斯房屋）、equipped = 各部位目前穿的外觀 id。
  * 之後的外觀商店（金幣購買）只要把 id 加進 owned；換裝介面再改 equipped。
  */
 export interface SkinState {

@@ -5,6 +5,7 @@ import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
 import { gameNow, overrides, worldHour, worldWeather } from './overrides'
+import { skinAtlasesFor } from './config/skins'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
@@ -224,11 +225,11 @@ export function Farm() {
         lastFinds = st.save?.finds
         engine.setFinds(st.save?.finds ?? [])
       }
-      // 外觀（金色屋頂、黃金鐘樓）：解鎖才載入圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
+      // 外觀（外殼）：穿上的部位才載入它的圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
       if (st.save?.skins !== lastSkins) {
         lastSkins = st.save?.skins
         engine.skins = st.save?.skins.equipped ?? {}
-        if (Object.keys(engine.skins).length > 0) assets.loadGroup('skins').catch(() => {})
+        for (const g of skinAtlasesFor(engine.skins)) assets.loadGroup(g).catch(() => {})
       }
       if (st.save?.pets !== lastPets) {
         lastPets = st.save?.pets
