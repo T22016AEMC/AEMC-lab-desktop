@@ -24,7 +24,9 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const SRC = resolve(process.argv[2] ?? process.env.ASSET_SRC ?? join(ROOT, '..', '像素風圖片'))
+/** 直接執行（node scripts/process-assets.mjs）才是 true；被 import 時命令列參數屬於別的程式，不讀 */
+const IS_MAIN = !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+const SRC = resolve((IS_MAIN ? process.argv[2] : undefined) ?? process.env.ASSET_SRC ?? join(ROOT, '..', '像素風圖片'))
 const OUT = join(ROOT, 'public', 'assets')
 const SHOTS = join(ROOT, 'screenshots')
 mkdirSync(OUT, { recursive: true })
@@ -183,8 +185,19 @@ function spectrum(g, pMin, pMax) {
   return out
 }
 
+/** estimateP 的預設搜尋範圍 */
+const P_RANGE = [4, 12]
+/**
+ * 4.0-R：估出的格大小碰到搜尋範圍的下限或上限 = 估算不可靠（例如原圖已經是整齊的 4×4 像素格，估出來剛好 4.00），
+ * 這時用估算值取樣會讓素材靜默變大或變小，所以沒有明確參數（pFixed／targets／fitMax…）的素材一律報錯。
+ */
+function guardEstimate(file, e, range = P_RANGE, what = '') {
+  if (e.p <= range[0] + 1e-9 || e.p >= range[1] - 1e-9)
+    throw new Error(`${file}${what}：估出的像素格 p=${e.p.toFixed(2)} 碰到搜尋範圍 [${range[0]}, ${range[1]}] 的邊界，估算不可靠；請在 process-assets.mjs 給這張圖明確的 pFixed／pFrames／targets`)
+}
+
 /** 估算整張圖的像素格大小 p（x、y 方向的頻譜相加，取最強的峰；偏好較小的 p 以免選到倍數） */
-function estimateP(img, mask, range = [4, 12]) {
+function estimateP(img, mask, range = P_RANGE) {
   const box = [0, 0, img.W - 1, img.H - 1]
   const sx = spectrum(gradProfile(img, mask, 0, box), range[0], range[1])
   const sy = spectrum(gradProfile(img, mask, 1, box), range[0], range[1])
@@ -279,6 +292,45 @@ function groupCells(comps, cols, rows) {
     if (best >= 0 && bd < 120) cells[best].push(c)
   }
   return cells
+}
+
+/**
+ * 4.0-R：固定欄×列切格（grid: 'even'）。先照一般做法找連通塊；寬度超過 1.5 格（W / cols）的大連通塊是「相鄰幾隻黏在一起」，
+ * 依寬度拆成 round(寬 / 格寬) 份：每條切線在該連通塊「等分線左右 1/4 份寬」內找這個連通塊前景最少的那一欄，切線左右的像素分成不同的連通塊。
+ * 只切黏在一起的連通塊，其他連通塊整塊保留（外框互相交錯的相鄰動物不會被直線切到）。之後照一般的 groupCells 分到欄×列。
+ * 回傳 { cells, lab, splits }：splits = 被切開的連通塊與切線位置（報告用）。
+ */
+function evenCells(mask, W, H, cols, rows, minArea) {
+  const { lab, comps: all } = label(mask, W, H)
+  const comps = keepComps(all, minArea)
+  const cellW = W / cols
+  let next = all.length + 1
+  const out = []
+  const splits = []
+  for (const c of comps) {
+    const bw = c.x1 - c.x0 + 1
+    const k = Math.round(bw / cellW)
+    if (bw <= cellW * 1.5 || k < 2) { out.push(c); continue }
+    const colCount = (x) => { let n = 0; for (let y = c.y0; y <= c.y1; y++) if (lab[y * W + x] === c.id) n++; return n }
+    const cuts = []
+    for (let i = 1; i < k; i++) {
+      const t = Math.round(c.x0 + (bw * i) / k), r = Math.floor(bw / k / 4)
+      let best = t, bc = Infinity
+      for (let x = t - r; x <= t + r; x++) { const n = colCount(x); if (n < bc || (n === bc && Math.abs(x - t) < Math.abs(best - t))) { bc = n; best = x } }
+      cuts.push(best)
+    }
+    splits.push({ box: [c.x0, c.y0, c.x1, c.y1], cuts })
+    const edges = [c.x0, ...cuts, c.x1 + 1]
+    for (let j = 0; j < edges.length - 1; j++) {
+      const id = next++
+      let x0 = W, y0 = H, x1 = -1, y1 = -1, area = 0
+      for (let y = c.y0; y <= c.y1; y++)
+        for (let x = edges[j]; x < edges[j + 1]; x++)
+          if (lab[y * W + x] === c.id) { lab[y * W + x] = id; area++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+      if (area) out.push({ id, x0, y0, x1, y1, area })
+    }
+  }
+  return { cells: groupCells(out, cols, rows), lab, splits }
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +506,13 @@ const STAND_HEIGHT = {
   dog_golden: 46, dog_husky: 43, dog_collie: 41, dog_shiba: 36, dog_poodle: 34, dog_corgi: 31,
   cat_ragdoll: 33, cat_bluecat: 32, cat_siamese: 31, cat_orange: 30, cat_calico: 29, cat_black: 29,
 }
+/** 4.0-R：動物改用明確的 p 之後，站姿高度只檢查（STAND_HEIGHT 註明的容許範圍 ±2，超過就警告） */
+function standCheck(key, sheetResult) {
+  const st = sheetResult.frames.find((f) => f.name === 'stand')
+  if (!st) return warn(key + '：找不到站姿')
+  const d = st.spr.h - STAND_HEIGHT[key]
+  ;(Math.abs(d) > 2 ? warn : info)(`${key} 站姿 ${st.spr.w}×${st.spr.h}（目標高 ${STAND_HEIGHT[key]}，p=${sheetResult.p.toFixed(3)}）`)
+}
 /** 反推 p 時的起點（原圖大約的像素格） */
 const P_GUESS = 6.1
 /** 貓 extra 原圖是縮小後再放大的：像素格 = 同一隻貓 core 的 p × 這個倍率（沿用先前與 core 的相對取樣關係） */
@@ -470,7 +529,9 @@ async function catCoreFix(id, core) {
   const cfg = CAT_CORE_FIX[id]
   const oldOf = (n) => core.frames.find((f) => f.name === n).spr
   const group = { sleep: ['w', oldOf('sleep').w], eat: ['w', oldOf('eat').w], groom: ['h', oldOf('sit_a').h] }
-  const r = await sheet({ file: cfg.file, cols: 3, rows: 1, names: cfg.names, solveGroup: group })
+  // 4.0-R：三隻共用的 p 改成明確值（P_FIXED.orangeFix；原本是 solveGroup 以 group 的尺寸求解，group 現在只用在下面的報告）
+  void group
+  const r = await sheet({ file: cfg.file, cols: 3, rows: 1, names: cfg.names, pFixed: P_FIXED.orangeFix })
   for (const f of r.frames) {
     const o = oldOf(f.name)
     info('  橘貓換圖 ' + f.name + '：新 ' + f.spr.w + '×' + f.spr.h + '（舊 ' + o.w + '×' + o.h + '），錨點 ax=' + Math.round(f.spr.w / 2) + ' ay=' + f.spr.h)
@@ -511,6 +572,52 @@ const pCache = {}
 /** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
 const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
 const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7), planter: Number(process.env.PLANTER_SCALE ?? 0.7), coral: Number(process.env.CORAL_SCALE ?? 0.7) }
+/** BUILDING_SCALES 的預設值（下面 P_FIXED.small 是用這組係數量出來的；環境變數改了係數時，p 依比例換算） */
+const BUILDING_SCALES_DEFAULT = { doghouse: 1.15, cat_tree: 1.15, bowls: 0.7, planter: 0.7, coral: 0.7 }
+
+/**
+ * 4.0-R：明確指定的像素格 p。
+ * 2026-11 原圖換成「整齊的 4×4 像素格」之後，估算的格大小每張都剛好落在 4.00（= 估算範圍的下限），用估算值或「從估算值開始求解」都會讓素材變大或差 1～2 像素。
+ * 為了維持畫面上原本的大小，每張圖改用固定的 p：值由 tests-archive/v400r/tune-p.mjs、tune-terrain.mjs 掃描找出，
+ * 讓輸出尺寸與換圖前（tests-archive/v400r/before.json）相同；找不到完全相同的 p 時取最接近的（差異列在階段 R 報告）。
+ *  - 數字是「這張圖實際取樣用的 p」：small 的值已經除過 BUILDING_SCALES，pFrames 不再除縮放係數。
+ *  - 動物：每隻一個 p（同一隻的所有姿勢共用，core 與 extra 相同；貓 extra = core × CAT_EXTRA_RATIO），站姿高度 = 換圖前的站姿高度。
+ * 原圖再被換成別的格大小時：管線不會報錯（因為都是明確參數），但輸出尺寸會變；tests-archive/v400r 的尺寸測試會抓到，再用調參工具重找。
+ */
+const P_FIXED = {
+  animal: {
+    dog_shiba: 8.534, dog_corgi: 8.294, dog_husky: 7.151, dog_golden: 6.229, dog_collie: 6.898, dog_poodle: 8.432,
+    cat_orange: 9.365, cat_black: 10.231, cat_calico: 10.049, cat_siamese: 9.564, cat_bluecat: 8.86, cat_ragdoll: 8.98,
+  },
+  orangeFix: 15.543,
+  front: 5.362,
+  tree: 5.517,
+  tower: { clocktower: 3.6044, clocktower_open: 4.404, clocktower_gold: 4.4039, clocktower_open_gold: 4.4039 },
+  small: { doghouse: 4.9714, cat_tree: 4.997, bowls: 8.146, lamp: 5.702, planter: 8.098, coral: 8.098 },
+  buildingsNew: 4.003,
+  decor: { bush: 8.676, rocks: 8.547, flowers: 10.339, tall_grass: 9.323, mushroom: 9.102, stump: 8.547 },
+  sky: 7.707,
+  snowflake: 14.249,
+  fxIcons: { fx_heart: 8.013, fx_zzz: 10.37, fx_note: 8.624, fx_sweat: 9.198, fx_exclaim: 11.211, fx_sparkle: 10.354, fx_bubble: 11.244, fx_question: 10.994 },
+  fxWater: 10.155,
+  toysDog: 4.341,
+  toysCat: 4.315,
+  toyBallS: 10.527,
+  moundS: 8.94,
+  grass: 9.457,
+  path: 6.188,
+  far: 5.501,
+  digB: { coin_bronze: 19.874, coin_silver: 20.296, coin_gold: 19.172, fx_reveal: 15.873 },
+  board: 7.065,
+  papers: 6.805,
+  mats: 6.16,
+  camera: 47.336,
+  food: 35.766,
+  polaroid: 7.73,
+}
+/** 小建築逐格的 p（BUILDING_SCALES 被環境變數改過時依比例換算） */
+const smallP = (name) => P_FIXED.small[name] * ((BUILDING_SCALES_DEFAULT[name] ?? 1) / (BUILDING_SCALES[name] ?? 1))
+
 let clockClosedSpr = null
 let moundSpr = null
 /** 水池的目標寬度（邏輯像素） */
@@ -525,13 +632,24 @@ const POND_W = 110
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false }) {
+async function sheet(opts) {
+  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe } = opts
   const img = await load(file)
   const bgFn = nearBg ? isBgNear : strictBg ? isBgStrict : isBg
   const mask = fgMask(img, bgFn)
-  const { lab, comps: all } = label(mask, img.W, img.H)
-  const comps = keepComps(all, minArea)
-  const cells = groupCells(comps, cols, rows)
+  let lab, all, comps, cells
+  if (grid === 'even') {
+    // 4.0-R：固定欄×列切格（相鄰的格子像素連在一起也會切開），見 evenCells
+    const ev = evenCells(mask, img.W, img.H, cols, rows, minArea)
+    lab = ev.lab
+    cells = ev.cells
+    comps = all = cells.flat()
+    info(`${file}：固定 ${cols}×${rows} 切格；黏在一起而切開的連通塊 ${ev.splits.map((s) => `[${s.box.join(',')}] 切在 x=${s.cuts.join('、')}`).join('；') || '無'}`)
+  } else {
+    ;({ lab, comps: all } = label(mask, img.W, img.H))
+    comps = keepComps(all, minArea)
+    cells = groupCells(comps, cols, rows)
+  }
   const e = estimateP(img, mask, pRange)
   const base = (pFixed ?? e.p) * pScale
   pCache[file] = { p: base, amp: e.amp }
@@ -544,6 +662,11 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
     return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), bgFn)
   }
+  // 只給調參工具用（tests-archive/v400r/tune-p.mjs）：回傳切好的格子與取樣函式，不輸出任何東西
+  if (probe) return { render, cells, names, e }
+  // 4.0-R：有任何一格會直接用「估算值」取樣（沒有 pFixed、fitMax、solveGroup、solveFrom，這一格也沒有 targets／pFrames），而估算值碰到範圍邊界 → 報錯
+  const usesEstimate = pFixed == null && !fitMax && !solveGroup && !solveFrom && names.some((n) => n && (Array.isArray(n) || (!targets[n] && pFrames[n] == null)))
+  if (usesEstimate) guardEstimate(file, e, pRange)
   /** 反推 p，讓這一格輸出的高度等於 target（高度是整數，會在 ±1 內收斂） */
   const solve = (cell, target, p0) => {
     let pp = p0
@@ -623,7 +746,8 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
       continue
     }
     // scales[名稱] = 縮放係數（> 1 放大）：像素格 p 除以係數重新取樣（最近鄰、仍是整數像素，不是事後縮放）
-    const pp = solveFrom || !targets[name] ? animalP / (scales[name] ?? 1) : solve(cell, targets[name], base)
+    // pFrames[名稱]（4.0-R）= 這一格明確指定的像素格，優先於 targets 與整張的 p（已含縮放，不再除 scales）
+    const pp = pFrames[name] != null ? pFrames[name] : solveFrom || !targets[name] ? animalP / (scales[name] ?? 1) : solve(cell, targets[name], base)
     const spr = render(cell, pp)
     if (!spr) {
       warn(file + ' ' + name + '：處理後是空的')
@@ -820,7 +944,9 @@ async function main() {
   const animalP = {}
   for (const [id, file] of Object.entries(DOGS)) {
     const key = 'dog_' + id
-    const core = await sheet({ file, cols: 4, rows: 2, names: DOG_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    // 4.0-R：每隻狗用明確的 p（P_FIXED.animal；原本是「站姿目標高度」從 P_GUESS 求解），core 與 extra 共用
+    const core = await sheet({ file, cols: 4, rows: 2, names: DOG_CORE, pFixed: P_FIXED.animal[key] })
+    standCheck(key, core)
     animalP[key] = core.p
     for (const f of core.frames) addFrame(key, key + '_' + f.name, f.spr)
     const extra = await sheet({ file: 'dog_' + id + '_extra.png', cols: 3, rows: 2, names: DOG_EXTRA, pFixed: core.p })
@@ -831,10 +957,12 @@ async function main() {
   const despills = {}
   for (const id of CATS) {
     const key = 'cat_' + id
-    const coreSheet = (file) => sheet({ file, cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    // 4.0-R：每隻貓用明確的 p（P_FIXED.animal；原本是「站姿目標高度」求解）；extra = core × CAT_EXTRA_RATIO（不變）
+    const coreSheet = (file) => sheet({ file, cols: 4, rows: 2, names: CAT_CORE, pFixed: P_FIXED.animal[key] })
     // v3.8.1：core、extra 改用 _hd 圖（CAT_HD=0 回到舊圖，只供新舊比對用）；CAT_HD_REVERT 列出的幀退回舊圖
     const revert = CAT_HD_REVERT[id] ?? { core: [], extra: [] }
     const core = await coreSheet(key + (CAT_HD ? '_core_hd.png' : '_core.png'))
+    standCheck(key, core)
     animalP[key] = core.p
     // 舊圖的 core：橘貓換圖（fix）要對齊的「舊」尺寸、以及退回舊圖的幀，都以舊圖為準（不因新圖的細微差異而改變）
     const coreOld = CAT_HD && (CAT_CORE_FIX[id] || revert.core.length) ? await coreSheet(key + '_core.png') : core
@@ -865,7 +993,8 @@ async function main() {
   // 3) 領養預覽正面圖
   {
     const names = [...Object.keys(DOGS).map((d) => 'front_dog_' + d), ...CATS.map((c) => 'front_cat_' + c)]
-    const { frames } = await sheet({ file: '大家的正面照.png', cols: 6, rows: 2, names })
+    // 4.0-R：固定 6×2 切格（新原圖裡黃金獵犬＋邊牧、暹羅＋藍貓的像素連在一起，原本的分群只切得出 10 格）；明確的 p
+    const { frames } = await sheet({ file: '大家的正面照.png', cols: 6, rows: 2, names, grid: 'even', pFixed: P_FIXED.front })
     for (const f of frames) addFrame('ui', f.name, f.spr)
   }
 
@@ -880,12 +1009,10 @@ async function main() {
       for (let y = 0; y < f.spr.h; y++) f.spr.rgba.copy(out, ((y + oy) * W + ox) * 4, y * f.spr.w * 4, (y + 1) * f.spr.w * 4)
       addFrame('scene', f.name, { w: W, h: H, rgba: out })
     }
-    for (const [file, name] of [['scene_clocktower.png', 'clocktower'], ['scene_tree.png', 'tree']]) {
-      const r = await sheet({ file, cols: 1, rows: 1, names: [name], targets: name === 'clocktower' ? { clocktower: 160 } : {} })
-      for (const f of r.frames) {
-        if (f.name === 'clocktower') clockClosedSpr = f.spr
-        addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
-      }
+    // 4.0-R：樹用明確的像素格（原本用估算值）；鐘樓（關門）在下面跟開門版一起處理
+    {
+      const r = await sheet({ file: 'scene_tree.png', cols: 1, rows: 1, names: ['tree'], pFixed: P_FIXED.tree })
+      for (const f of r.frames) addFrame('scene', f.name, f.spr)
     }
     // 水池：原圖有兩幀（只有水面亮紋不同），但切換時輪廓差 1px 會抖，所以只取第一幀、不輸出第二幀（水面靜止）。
     // 用寬度 110 反推 p；水面橢圓由這一幀偵測
@@ -897,21 +1024,18 @@ async function main() {
       info('水池（只用第一幀）' + f.spr.w + '×' + f.spr.h + '，水面橢圓 cx=' + water.cx + ' cy=' + water.cy + ' rx=' + water.rx + ' ry=' + water.ry + '（p=' + pond.p.toFixed(2) + '）')
     }
     {
-      // 開門鐘樓：和關門版用同一個高度 160，貼到 123×160 的畫布（底部中心對齊），並比對兩張的輪廓差異
-      const closed = clockClosedSpr
-      const r = await sheet({ file: 'scene_clocktower_open.png', cols: 1, rows: 1, names: ['clocktower_open'], targets: { clocktower_open: 160 }, solveFrom: 'clocktower_open' })
-      const f = r.frames[0]
-      const W = closed.w, H = closed.h
-      const out = Buffer.alloc(W * H * 4)
-      const ox = Math.round((W - f.spr.w) / 2), oy = H - f.spr.h
-      for (let y = 0; y < f.spr.h; y++)
-        for (let x = 0; x < f.spr.w; x++) {
-          const tx = x + ox, ty = y + oy
-          if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
-          f.spr.rgba.copy(out, (ty * W + tx) * 4, (y * f.spr.w + x) * 4, (y * f.spr.w + x + 1) * 4)
-        }
-      const spr = { w: W, h: H, rgba: out }
+      // 鐘樓關門版與開門版（4.0-R）：各自用明確的像素格（P_FIXED.tower，原本是「目標高度 160」求解）；
+      // 兩張貼到同一張畫布，畫布取兩張裡最大的寬高（和住家三幀同一個做法；以前開門版貼進關門版大小的畫布，比較寬時右邊會被裁掉），底部中心對齊
+      const rc = await sheet({ file: 'scene_clocktower.png', cols: 1, rows: 1, names: ['clocktower'], pFrames: { clocktower: P_FIXED.tower.clocktower } })
+      const r = await sheet({ file: 'scene_clocktower_open.png', cols: 1, rows: 1, names: ['clocktower_open'], pFrames: { clocktower_open: P_FIXED.tower.clocktower_open } })
+      const c0 = rc.frames[0].spr, f = r.frames[0]
+      const W = Math.max(c0.w, f.spr.w), H = Math.max(c0.h, f.spr.h)
+      const closed = padBottomCenter(c0, W, H)
+      const spr = padBottomCenter(f.spr, W, H)
+      clockClosedSpr = closed
+      addFrame('scene', 'clocktower', closed, { meta: { clock: detectClockFace(closed) } })
       addFrame('scene', 'clocktower_open', spr, { meta: { clock: detectClockFace(spr) } })
+      const out = spr.rgba
       let a = 0, b = 0, both = 0
       for (let i = 0; i < W * H; i++) {
         const ca = closed.rgba[i * 4 + 3] > 0, cb = out[i * 4 + 3] > 0
@@ -919,59 +1043,62 @@ async function main() {
         if (cb) b++
         if (ca !== cb) both++
       }
-      info('開門鐘樓：處理後 ' + f.spr.w + '×' + f.spr.h + '，貼到 ' + W + '×' + H + '（偏移 ' + ox + ',' + oy + '）；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
+      info('鐘樓：關門 ' + c0.w + '×' + c0.h + '、開門 ' + f.spr.w + '×' + f.spr.h + '，都貼到 ' + W + '×' + H + '；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
     }
     // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
-    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], scales: BUILDING_SCALES })
+    // 4.0-R：逐格明確的 p（已含 BUILDING_SCALES 係數，見 smallP；原本是整張估算值 ÷ 係數）
+    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], pFrames: Object.fromEntries(['doghouse', 'cat_tree', 'bowls', 'lamp'].map((n) => [n, smallP(n)])) })
     // 花圃（flowerbed）取消（v3.4.0 不使用）：原圖左下格不在這裡輸出（v3.9.0 的花槽在下面另外處理，id 是 planter）
     for (const f of small.frames) addFrame('scene', f.name, f.spr)
     // v3.9.0：左下格 = 花槽（planter）、右下格 = 珊瑚石堆（coral）。兩者都有粉紅色（珊瑚的粉紅枝、花槽的粉紅花），
     // 一般的洋紅判斷（isBg 第二條「玫瑰紅陰影」）與嚴格判斷（isBgStrict）都會把粉紅填色吃掉一部分，所以這兩格用 isBgNear（只認接近背景色的洋紅）去背；
     // 取樣格大小 p 沿用上面同一張圖算出的值（整張共用同一個比例），其他物件的圖完全不受影響。
-    const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], scales: BUILDING_SCALES, pFixed: small.p, nearBg: true })
+    const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], pFrames: { planter: smallP('planter'), coral: smallP('coral') }, nearBg: true })
     for (const f of small2.frames) {
       const t = trimMagentaFringe(f.spr)
       info('  ' + f.name + '：移除暗紫色洋紅邊 ' + t.n + ' 像素 → ' + t.spr.w + '×' + t.spr.h)
       addFrame('scene', f.name, t.spr, { nearBg: true })
     }
     // 營火（v3.4.0）於 v3.5.1 移除：不輸出 campfire_a、campfire_b、campfire_off；蹺蹺板、蝴蝶也不使用；沙坑（v3.6.0 開發期間做過又取消）沒有任何程式使用，不輸出
-    const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
+    const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'], pFixed: P_FIXED.buildingsNew })
     for (const f of bn.frames) if (f.name !== 'seesaw' && f.name !== 'sandbox' && !f.name.startsWith('butterfly') && !f.name.startsWith('campfire')) addFrame('scene', f.name, f.spr)
     // 裝飾物各縮小到目標高度：蘑菇 36、樹樁 36、灌木 40、高草叢 38、石頭堆 34、小花叢 28
-    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], targets: { bush: 40, rocks: 34, flowers: 28, tall_grass: 38, mushroom: 36, stump: 36 } })
+    // 4.0-R：逐格明確的 p（P_FIXED.decor；原本是上面的目標高度從估算值求解）
+    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], pFrames: P_FIXED.decor })
     for (const f of dc.frames) addFrame('scene', f.name, f.spr)
   }
 
   // 5) 天空物件、特效、玩具
   {
-    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'], targets: { snowflake: 9 } })
+    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'], pFixed: P_FIXED.sky, pFrames: { snowflake: P_FIXED.snowflake } })
     for (const f of sky.frames) addFrame('fx', f.name, f.spr)
-    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, targets: Object.fromEntries(['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => ['fx_' + n, 15])) })
+    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, pFrames: P_FIXED.fxIcons })
     for (const f of fx.frames) addFrame('fx', f.name, f.spr)
     // 水花、漣漪、水滴、泡泡：所有格共用同一個 p（以最高的水花高 30 反推）
     const wn = ['water_ripple_1', 'water_ripple_2', 'water_ripple_3', 'water_splash_1', 'water_splash_2', 'water_splash_3', ['water_drop_1', 'water_drop_2', 'water_drop_3'], ['water_bubble_s', 'water_bubble_l']]
-    const fw = await sheet({ file: 'fx_water.png', cols: 4, rows: 2, names: wn, minArea: 150, targets: { water_splash_2: 30 }, solveFrom: 'water_splash_2' })
+    const fw = await sheet({ file: 'fx_water.png', cols: 4, rows: 2, names: wn, minArea: 150, pFixed: P_FIXED.fxWater })
     for (const f of fw.frames) {
       const center = !f.name.startsWith('water_splash')
       addFrame('fx', f.name, f.spr, center ? { ay: Math.round(f.spr.h / 2) } : {})
     }
-    const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120 })
+    const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog })
     for (const f of td.frames) addFrame('toys', f.name, f.spr)
     // v3.5.0：場景裡的球（飛行、落地、叼著）用同一張原圖的球依目標高度重新取樣的小尺寸版（toy_ball_s），不改其他玩具；
     // 目標高度 BALL_S_H（預設見下方）。不是縮放：像素格 p 反推，一樣是整數像素。
-    const bs = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_ball: BALL_S_H } })
+    // 4.0-R：沒有用 BALL_S_H 環境變數比較時，用明確的 p（P_FIXED.toyBallS）
+    const bs = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog, ...(process.env.BALL_S_H ? { targets: { toy_ball: BALL_S_H } } : { pFrames: { toy_ball: P_FIXED.toyBallS } }) })
     const ballS = bs.frames.find((f) => f.name === 'toy_ball')
     if (!ballS) throw new Error('找不到小球')
     addFrame('toys', 'toy_ball_s', ballS.spr)
     info('小球 toy_ball_s：' + ballS.spr.w + '×' + ballS.spr.h + '（目標高度 ' + BALL_S_H + '）')
     // v3.6.0：場景裡的土堆用同一張原圖的土堆依目標寬度重新取樣的小尺寸版（toy_dirt_mound_s，寬約 26）
-    const ms = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_dirt_mound: MOUND_S_W }, solveDim: 'w' })
+    const ms = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog, pFrames: { toy_dirt_mound: P_FIXED.moundS } })
     const moundS = ms.frames.find((f) => f.name === 'toy_dirt_mound')
     if (!moundS) throw new Error('找不到土堆')
     addFrame('toys', 'toy_dirt_mound_s', moundS.spr)
     moundSpr = moundS.spr
     info('土堆 toy_dirt_mound_s：' + moundS.spr.w + '×' + moundS.spr.h + '（目標寬度 ' + MOUND_S_W + '）')
-    const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120 })
+    const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120, pFixed: P_FIXED.toysCat })
     for (const f of tc.frames) addFrame('toys', f.name, f.spr)
   }
 
@@ -982,8 +1109,10 @@ async function main() {
     const e = estimateP(img, mask)
     info(`scene_tiles.png: p=${e.p.toFixed(2)}`)
     const box = [0, 0, 508, 490] // 草地格；底邊 20 像素左右比較粗糙，裁掉
-    const phases = [estimatePhase(img, mask, box, e.p, 0), estimatePhase(img, mask, box, e.p, 1)]
-    const t = depixelate(img, mask, null, null, box, e.p, phases)
+    // 4.0-R：草地用明確的 p（P_FIXED.grass；估算值只印在報告裡）
+    const gp = P_FIXED.grass
+    const phases = [estimatePhase(img, mask, box, gp, 0), estimatePhase(img, mask, box, gp, 1)]
+    const t = depixelate(img, mask, null, null, box, gp, phases)
     // 裁掉不完整的最外圈
     const trim = (s) => {
       const w = s.w - 2, h = s.h - 2
@@ -1005,19 +1134,19 @@ async function main() {
       pm[i] = r >= g - 6 && !(g > r + 10 && g > b + 30) ? 1 : 0
     }
     const pe = estimateP(pimg, new Uint8Array(pimg.W * pimg.H).fill(1))
-    info(`scene_path.png: p=${pe.p.toFixed(2)}`)
+    info(`scene_path.png: 估算 p=${pe.p.toFixed(2)}，採用 p=${P_FIXED.path}`)
     const { lab: plab, comps: pcomps } = label(pm, pimg.W, pimg.H)
     const biggest = pcomps.reduce((a, c) => (c.area > a.area ? c : a))
     const keep = new Set(pcomps.filter((c) => c.area > 400).map((c) => c.id))
     const pbox = [0, biggest.y0 - 4, pimg.W - 2, biggest.y1 + 4]
-    const pph = [estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, pe.p, 0), estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, pe.p, 1)]
-    const pr = depixelate(pimg, pm, plab, keep, pbox, pe.p, pph)
+    const pph = [estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, P_FIXED.path, 0), estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, P_FIXED.path, 1)]
+    const pr = depixelate(pimg, pm, plab, keep, pbox, P_FIXED.path, pph)
     const path = cleanSprite(pr)
     const pathLoop = hcat(path, flipX(path))
     addFrame('terrain', 'path', pathLoop, { ax: 0, ay: pathLoop.h })
     info(`小路 ${pathLoop.w}×${pathLoop.h}（左右鏡像，可水平重複）`)
 
-    const far = await sheet({ file: 'scene_far.png', cols: 1, rows: 1, names: ['far'], minArea: 5000 })
+    const far = await sheet({ file: 'scene_far.png', cols: 1, rows: 1, names: ['far'], minArea: 5000, pFixed: P_FIXED.far })
     for (const f of far.frames) {
       const loop = hcat(f.spr, flipX(f.spr))
       addFrame('terrain', 'far', loop, { ax: 0, ay: loop.h })
@@ -1034,10 +1163,12 @@ async function main() {
 
     const db = await sheet({
       file: 'items_dig_b.png', cols: 3, rows: 2, names: ['coin_bronze', 'coin_silver', 'coin_gold', 'fx_reveal', null, null],
-      targets: { coin_bronze: COIN_H, coin_silver: COIN_H, coin_gold: COIN_H, fx_reveal: REVEAL_H },
+      // 4.0-R：逐格明確的 p（P_FIXED.digB；原本是 COIN_H／REVEAL_H 目標高度從估算值求解）
+      pFrames: P_FIXED.digB,
     })
     for (const f of db.frames) addFrame('items', f.name, f.spr)
-    const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], fitMax: PAPER_MAX })
+    // 4.0-R：明確的 p（原本是 fitMax PAPER_MAX 求解，新原圖求出來會差 1 像素）
+    const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], pFixed: P_FIXED.papers })
     for (const f of papers.frames) { const n = defringePink(f.spr, true); info(f.name + '：移除偏粉紅殘邊 ' + n + ' 個像素'); addFrame('items', f.name, f.spr) }
 
     // 金色住家：和原住家用同一個 p 規則、貼到同樣大小的畫布
@@ -1051,10 +1182,13 @@ async function main() {
     // 黃金鐘樓：關門、開門都用高度 160，貼到 123×160（和現有開門鐘樓同一做法）
     const tcl = atlases.scene.find((f) => f.key === 'clocktower')
     const top = atlases.scene.find((f) => f.key === 'clocktower_open')
-    const tg1 = await sheet({ file: 'scene_clocktower_gold.png', cols: 1, rows: 1, names: ['clocktower_gold'], targets: { clocktower_gold: 160 }, solveFrom: 'clocktower_gold' })
-    const tg2 = await sheet({ file: 'scene_clocktower_open_gold.png', cols: 1, rows: 1, names: ['clocktower_open_gold'], targets: { clocktower_open_gold: 160 }, solveFrom: 'clocktower_open_gold' })
-    const gClosed = padBottomCenter(tg1.frames[0].spr, tcl.w, tcl.h)
-    const gOpen = padBottomCenter(tg2.frames[0].spr, tcl.w, tcl.h)
+    // 4.0-R：明確的像素格（原本是「目標高度 160」求解）；畫布 = 原版鐘樓的大小，金色版比較大時不裁切（畫布放大並警告，原版與金色版會不同大小）
+    const tg1 = await sheet({ file: 'scene_clocktower_gold.png', cols: 1, rows: 1, names: ['clocktower_gold'], pFrames: { clocktower_gold: P_FIXED.tower.clocktower_gold } })
+    const tg2 = await sheet({ file: 'scene_clocktower_open_gold.png', cols: 1, rows: 1, names: ['clocktower_open_gold'], pFrames: { clocktower_open_gold: P_FIXED.tower.clocktower_open_gold } })
+    const gW = Math.max(tcl.w, tg1.frames[0].spr.w, tg2.frames[0].spr.w), gH = Math.max(tcl.h, tg1.frames[0].spr.h, tg2.frames[0].spr.h)
+    if (gW !== tcl.w || gH !== tcl.h) warn(`黃金鐘樓比原版鐘樓大（${tg1.frames[0].spr.w}×${tg1.frames[0].spr.h}、${tg2.frames[0].spr.w}×${tg2.frames[0].spr.h}，原版 ${tcl.w}×${tcl.h}）：畫布放大到 ${gW}×${gH}`)
+    const gClosed = padBottomCenter(tg1.frames[0].spr, gW, gH)
+    const gOpen = padBottomCenter(tg2.frames[0].spr, gW, gH)
     const clockOf = (s) => detectClockFace(s)
     addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: clockOf(gClosed) } })
     addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: clockOf(gOpen) } })
@@ -1188,7 +1322,7 @@ async function main() {
     }
     // 公佈欄（items_dig_b 第 5 格：深綠黑板、木框、粉筆槽、三張空白便條）：依目標寬度 BOARD_W 反推 p（整數像素，不是事後縮放）。
     // 第 6 格（農場告示牌）這版不用。黑板的綠色範圍寫進 meta.board（場景上疊標題縮圖用）
-    const bd = await sheet({ file: 'items_dig_b.png', cols: 3, rows: 2, names: [null, null, null, null, 'board', null], targets: { board: BOARD_W }, solveDim: 'w' })
+    const bd = await sheet({ file: 'items_dig_b.png', cols: 3, rows: 2, names: [null, null, null, null, 'board', null], pFrames: { board: P_FIXED.board } })
     const board = bd.frames.find((f) => f.name === 'board')
     if (!board) throw new Error('找不到公佈欄')
     const green = boardGreen(board.spr)
@@ -1216,7 +1350,7 @@ async function main() {
       tiles.push({ spr: padCenter(f.spr, PERSONALITY_ICON), label: f.name, scale: 4 })
     }
     // 野餐墊 3 款（紅格、藍格、粉色）：整張共用 p，紅格的寬度 = PICNIC_MAT_W
-    const mats = await sheet({ file: 'picnic_mats.png', cols: 3, rows: 1, names: ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'], targets: { picnic_mat_red: PICNIC_MAT_W }, solveFrom: 'picnic_mat_red', solveDim: 'w', strictBg: true })
+    const mats = await sheet({ file: 'picnic_mats.png', cols: 3, rows: 1, names: ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'], ...(process.env.PICNIC_MAT_W ? { targets: { picnic_mat_red: PICNIC_MAT_W }, solveFrom: 'picnic_mat_red', solveDim: 'w' } : { pFixed: P_FIXED.mats }), strictBg: true })
     for (const f of mats.frames) {
       const spr = padBottomCenter(f.spr, PICNIC_MAT_W, Math.max(...mats.frames.map((g) => g.spr.h)))
       addFrame('picnic', f.name, spr, { meta: { mat: matShape(spr) }, strictBg: true })
@@ -1231,7 +1365,7 @@ async function main() {
       tiles.push({ spr: f.spr, label: f.name, scale: 4 })
     }
     // 食物 4 種（2×2：三明治、水果盤 / 草莓蛋糕、柳橙汁）：共用 p，最大那張長邊 = PICNIC_FOOD
-    const fd = await sheet({ file: 'picnic_food.png', cols: 2, rows: 2, names: ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'], fitMax: PICNIC_FOOD })
+    const fd = await sheet({ file: 'picnic_food.png', cols: 2, rows: 2, names: ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'], ...(process.env.PICNIC_FOOD ? { fitMax: PICNIC_FOOD } : { pFixed: P_FIXED.food }) })
     for (const f of fd.frames) {
       addFrame('picnic', f.name, f.spr)
       info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${fd.p.toFixed(2)}）`)
@@ -1245,7 +1379,7 @@ async function main() {
       tiles.push({ spr: f.spr, label: f.name, scale: 4 })
     }
     // 相機圖示（相機提示按鈕）
-    const cam = await sheet({ file: 'picnic_camera.png', cols: 1, rows: 1, names: ['picnic_camera'], fitMax: PICNIC_CAMERA })
+    const cam = await sheet({ file: 'picnic_camera.png', cols: 1, rows: 1, names: ['picnic_camera'], pFixed: P_FIXED.camera })
     for (const f of cam.frames) {
       addFrame('picnic', f.name, f.spr)
       info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${cam.p.toFixed(2)}）`)
@@ -1253,7 +1387,7 @@ async function main() {
     }
     // 拍立得相框 3 款（polaroid_frames_b：愛心＋腳印、花朵＋野餐籃、星星＋貓咪）：共用 p，最大那張長邊 = POLAROID_MAX。
     // 中間的洋紅窗口去背後是透明的：用程式找「被相框圍住、碰不到外框的透明區塊」，外框寫進 meta.window（照片放在這個矩形裡，相框疊在上面）
-    const pf = await sheet({ file: 'polaroid_frames_b.png', cols: 3, rows: 1, names: ['polaroid_hearts', 'polaroid_flowers', 'polaroid_stars'], fitMax: POLAROID_MAX })
+    const pf = await sheet({ file: 'polaroid_frames_b.png', cols: 3, rows: 1, names: ['polaroid_hearts', 'polaroid_flowers', 'polaroid_stars'], ...(process.env.POLAROID_MAX ? { fitMax: POLAROID_MAX } : { pFixed: P_FIXED.polaroid }) })
     for (const f of pf.frames) {
       // 不做 defringePink：愛心款的愛心本身是粉紅色、又貼著外緣，會被當成殘邊削掉（實測 149 格）
       const n = 0
@@ -1498,4 +1632,6 @@ async function overview(tag, bg) {
   info(`總覽圖：screenshots/assets-overview-${tag}.png（${W}×${H}）`)
 }
 
-await main()
+// 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
+export { sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+if (IS_MAIN) await main()
