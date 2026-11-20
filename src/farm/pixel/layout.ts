@@ -136,7 +136,7 @@ export const TOWER_SIGN = { x: 0.655, y: 0.84 }
 export const TOWER_WINDOW = { x0: 56, y0: 38, x1: 69, y1: 54 }
 export const TOWER_CLOCK_FRAME = 3
 /** 管線偵測不到鐘面時的備用值（目前 clocktower 的 meta.clock） */
-export const TOWER_CLOCK_FALLBACK = { cx: 62, cy: 81.5, r: 16.5 }
+export const TOWER_CLOCK_FALLBACK = { cx: 62, cy: 82, r: 17 }
 /** 鐘樓離右邊緣的邊距 */
 export const TOWER_MARGIN = 10
 /** 鐘樓周圍不放裝飾物的範圍：約 1.5 倍鐘樓寬（左右各 0.75 倍） */

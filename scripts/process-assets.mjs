@@ -619,6 +619,19 @@ const P_FIXED = {
 const smallP = (name) => P_FIXED.small[name] * ((BUILDING_SCALES_DEFAULT[name] ?? 1) / (BUILDING_SCALES[name] ?? 1))
 
 let clockClosedSpr = null
+/**
+ * 4.0-R：四張鐘樓（關門、開門、黃金關門、黃金開門）共用同一個鐘面（中心、半徑）：關門鐘樓偵測到的值取整數。
+ * 各張各自偵測會差半格到 1 格，滑鼠移上去換開門版時程式畫的鐘面會跳；偵測值和共用值差超過 1 像素就警告（素材可能真的不同）。
+ */
+let towerClock = null
+function sharedClock(name, spr) {
+  const own = detectClockFace(spr)
+  if (!own) warn(name + '：偵測不到鐘面，用共用值')
+  else if (Math.abs(own.cx - towerClock.cx) > 1 || Math.abs(own.cy - towerClock.cy) > 1 || Math.abs(own.r - towerClock.r) > 1)
+    warn(`${name}：鐘面偵測 (${own.cx},${own.cy}) r=${own.r} 和共用值 (${towerClock.cx},${towerClock.cy}) r=${towerClock.r} 差超過 1 像素`)
+  info(`${name}：鐘面偵測 ${own ? `(${own.cx},${own.cy}) r=${own.r}` : '無'} → 共用 (${towerClock.cx},${towerClock.cy}) r=${towerClock.r}`)
+  return { ...towerClock }
+}
 let moundSpr = null
 /** 水池的目標寬度（邏輯像素） */
 const POND_W = 110
@@ -1033,8 +1046,11 @@ async function main() {
       const closed = padBottomCenter(c0, W, H)
       const spr = padBottomCenter(f.spr, W, H)
       clockClosedSpr = closed
-      addFrame('scene', 'clocktower', closed, { meta: { clock: detectClockFace(closed) } })
-      addFrame('scene', 'clocktower_open', spr, { meta: { clock: detectClockFace(spr) } })
+      const face = detectClockFace(closed)
+      if (!face) throw new Error('關門鐘樓偵測不到鐘面')
+      towerClock = { cx: Math.round(face.cx), cy: Math.round(face.cy), r: Math.round(face.r) }
+      addFrame('scene', 'clocktower', closed, { meta: { clock: sharedClock('clocktower', closed) } })
+      addFrame('scene', 'clocktower_open', spr, { meta: { clock: sharedClock('clocktower_open', spr) } })
       const out = spr.rgba
       let a = 0, b = 0, both = 0
       for (let i = 0; i < W * H; i++) {
@@ -1190,8 +1206,8 @@ async function main() {
     const gClosed = padBottomCenter(tg1.frames[0].spr, gW, gH)
     const gOpen = padBottomCenter(tg2.frames[0].spr, gW, gH)
     const clockOf = (s) => detectClockFace(s)
-    addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: clockOf(gClosed) } })
-    addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: clockOf(gOpen) } })
+    addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: sharedClock('clocktower_gold', gClosed) } })
+    addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: sharedClock('clocktower_open_gold', gOpen) } })
     // 收藏冊的「獎勵剪影」預先烘好放進 items（skins 沒載入時收藏冊也能顯示）
     addFrame('items', 'sil_house_gold', padCenter(shrinkSilhouette(goldHouse.house_gold_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
     addFrame('items', 'sil_tower_gold', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })

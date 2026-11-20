@@ -65,6 +65,9 @@ eq(F('pond').meta.water, LAY.WATER, '水面 WATER = manifest')
 // 鐘面：四張都有偵測值；備用值 = 關門鐘樓
 for (const k of ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold']) ok(F(k).meta?.clock && F(k).meta.clock.r > 10, `${k} 偵測得到鐘面`)
 eq(LAY.TOWER_CLOCK_FALLBACK, F('clocktower').meta.clock, '鐘面備用值 = 關門鐘樓的 meta.clock')
+// 4.0-R：四張鐘樓共用同一個鐘面（換開門版時鐘面不跳），而且是整數像素
+for (const k of ['clocktower_open', 'clocktower_gold', 'clocktower_open_gold']) eq(F(k).meta.clock, F('clocktower').meta.clock, `${k} 的鐘面 = 關門鐘樓的鐘面`)
+{ const c = F('clocktower').meta.clock; ok(Number.isInteger(c.cx) && Number.isInteger(c.cy) && Number.isInteger(c.r), `鐘面是整數像素 ${JSON.stringify(c)}`) }
 // 窗戶點擊區包住四張鐘樓的藍色窗玻璃（時鐘上方）
 for (const k of ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold']) {
   const f = F(k)
