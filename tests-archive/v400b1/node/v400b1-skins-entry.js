@@ -82,7 +82,7 @@ eq(ms.SHARED.DOOR, LAY.DOOR, 'measure-skins 的 DOOR = layout.ts')
 }
 
 // ---- 6. 亞特蘭提斯 ----
-eq(SKINS.map((s) => s.id), ['house.gold', 'tower.gold'], '外觀 id 不變')
+eq(SKINS.filter((s) => s.legend).map((s) => s.id), ['house.gold', 'tower.gold'], '傳說外觀 id 不變（house.gold、tower.gold）')
 eq(skinDef('house.gold').name, '亞特蘭提斯房屋', '房屋名稱')
 eq(skinDef('tower.gold').name, '亞特蘭提斯鐘樓', '鐘樓名稱')
 eq(skinDef('house.gold').frames, { closed: 'house_atlantis_closed', open: 'house_atlantis_open', night: 'house_atlantis_night' }, '房屋鍵名')
@@ -99,6 +99,81 @@ eq(eventDef('catAtlantis').body(100), '雷射與山銅合而為一，鐘樓變�
   const walk = (d) => { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(f.name) && /金色屋頂|黃金鐘樓|house_gold|clocktower_gold/.test(readFileSync(p, 'utf8'))) bad.push(p) } }
   walk(join(ROOT, 'src'))
   eq(bad, [], 'src 裡沒有「金色屋頂」「黃金鐘樓」與 gold 鍵名')
+}
+
+// ---- 7. 停點 2：外觀資料、商品、購買與切換、逐主題幾何 ----
+{
+  const { SKIN_PARTS, SKIN_PART_GROUP, equippedSkinDef } = await import('../../../src/farm/config/skins.ts')
+  const SHOP = await import('../../../src/farm/config/shop.ts')
+  const SIM = await import('../../../src/farm/sim/shop.ts')
+  const BU = await import('../../../src/farm/pixel/buildingUse.ts')
+  const { ENVELOPES } = await import('../../../src/farm/pixel/envelopes.ts')
+  const { BALANCE } = await import('../../../src/farm/config/balance.ts')
+  const shopSkins = SKINS.filter((d) => !d.legend)
+  eq(shopSkins.length, 40, '商店外觀 40 款（房子 5、鐘樓 5、池塘 6、公佈欄 6、狗窩 6、貓跳台 6、食盆 6）')
+  eq(SKINS.filter((d) => d.legend).map((d) => d.id), ['house.gold', 'tower.gold'], '傳說外觀只有亞特蘭提斯房屋、鐘樓')
+  for (const d of SKINS) for (const f of Object.values(d.frames)) eq(man.frames[f]?.atlas, SKIN_ATLAS[d.part], `${d.id} 的 ${f} 在 ${SKIN_ATLAS[d.part]}`)
+  const items = SHOP.SHOP_ITEMS.filter((it) => it.grant.type === 'skin')
+  eq(items.length, 40, '商品表有 40 個外觀商品')
+  ok(!items.some((it) => it.grant.skin === 'house.gold' || it.grant.skin === 'tower.gold'), '亞特蘭提斯房屋、鐘樓不在商店賣')
+  const PRICE = { house: 30, tower: 30, pond: 30, board: 30, kennel: BALANCE.buildings.price.kennel, catTree: BALANCE.buildings.price.catTree, bowls: BALANCE.buildings.price.bowls }
+  for (const it of items) {
+    const d = skinDef(it.grant.skin)
+    eq([it.category, it.group, it.price, it.grant.slot, it.maxOwned, it.repeatable], ['building', SKIN_PART_GROUP[d.part], PRICE[d.part], d.part, 1, false], `${it.id} 分類、小標題、價格、部位`)
+    eq(it.requires ?? [], ['kennel', 'catTree', 'bowls'].includes(d.part) ? [{ building: d.part }] : [], `${it.id} 前置條件`)
+  }
+  eq([PRICE.kennel, PRICE.catTree, PRICE.bowls], [20, 20, 10], '小建築外殼 = 本體價（狗窩 20、貓跳台 20、食盆 10）')
+  // 購買與切換（純函式）
+  const T = Date.now()
+  const base = { schemaVersion: 5, dataRev: 6, points: 100, lastSeen: T, pets: [], ownedBuildings: [], skins: { owned: [], equipped: {} }, shop: { decor: [], nextDecorId: 1 } }
+  const r1 = SIM.purchase(base, 'skin.kennel.forest')
+  ok(!r1.ok && r1.error.includes('狗窩'), '沒有狗窩不能買狗窩外殼：' + r1.error)
+  const r2 = SIM.purchase(base, 'skin.house.forest')
+  ok(r2.ok && r2.save.points === 70 && r2.save.skins.equipped.house === 'house.forest', '買房子外裝：扣 30、立刻換上')
+  const r3 = SIM.purchase(r2.save, 'skin.house.forest')
+  ok(!r3.ok, '同一款不能買兩次')
+  const off = SIM.equipSkin(r2.save, 'house', null)
+  ok(!('house' in off.skins.equipped) && off.skins.owned.includes('house.forest'), '換回原樣：仍擁有')
+  eq(SIM.equipSkin(off, 'house', 'house.magic'), off, '沒擁有的不能穿')
+  const b2 = SIM.purchase({ ...base, ownedBuildings: ['bowls'] }, 'skin.bowls.magic')
+  ok(b2.ok && b2.save.points === 90, '有食盆可以買食盆外殼（10）')
+  eq(equippedSkinDef({ house: 'tower.gold' }, 'house'), undefined, '穿在錯的部位的外觀不算')
+  // 逐主題幾何：門洞裁切在狗窩的不透明像素上、窩內位置在門洞裡；座位在平台上；水面在池塘裡
+  const opaqueAll = (k, rects) => { const f = man.frames[k]; let bad = 0; for (const r of rects) for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) if (x < 0 || y < 0 || x >= f.w || y >= f.h) bad++; return bad }
+  const atlasPx = {}
+  const sharpR = (await import('node:module')).createRequire(ROOT + '/package.json')('sharp')
+  const pix = async (k) => { const f = man.frames[k]; if (!atlasPx[f.atlas]) { const { data, info } = await sharpR(join(ROOT, 'public', 'assets', man.atlases[f.atlas].file)).ensureAlpha().raw().toBuffer({ resolveWithObject: true }); atlasPx[f.atlas] = { data, w: info.width } } const a = atlasPx[f.atlas]; return (x, y) => a.data[((f.y + y) * a.w + f.x + x) * 4 + 3] > 0 }
+  eq(BU.kennelGeomFrom(null), { clip: BU.KENNEL_DOOR_CLIP, insideRight: BU.KENNEL_INSIDE_RIGHT, insideBottom: BU.KENNEL_INSIDE_BOTTOM, doorCx: BU.KENNEL_DOOR_CX }, '沒穿外殼 = 預設門洞')
+  for (const t of ms.THEMES) {
+    const k = `doghouse_${t}`
+    const g = BU.kennelGeomFrom(man.frames[k].meta.door)
+    const on = await pix(k)
+    let solid = 0, tot = 0
+    for (const r of g.clip) for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) { tot++; if (on(x, y)) solid++ }
+    eq(opaqueAll(k, g.clip), 0, `${k} 門洞裁切在素材範圍內`)
+    ok(solid === tot, `${k} 門洞裁切範圍全部是不透明像素（門洞裡面，${solid}/${tot}）`)
+    ok(Math.abs(man.frames[k].meta.door.dx) <= 3 && Math.abs(man.frames[k].meta.door.dyTop) <= 3 && Math.abs(man.frames[k].meta.door.dyFront) <= 4, `${k} 門洞和預設差不大 ${JSON.stringify(man.frames[k].meta.door)}`)
+    const c = `cat_tree_${t}`
+    const cg = BU.catTreeGeomFrom(man.frames[c].meta.seats)
+    const onc = await pix(c)
+    for (const [n, s] of [['頂層', cg.top], ['中層', cg.mid]]) ok(onc(s.x, s.y - 1) || onc(s.x, s.y), `${c} ${n}座位 (${s.x},${s.y}) 腳底在平台上`)
+    const p = `pond_${t}`
+    const w = man.frames[p].meta.water
+    const onp = await pix(p)
+    ok(w.cx - w.rx >= 0 && w.cx + w.rx <= 110 && w.cy - w.ry >= 0 && w.cy + w.ry <= 79 && onp(w.cx, w.cy), `${p} 水面 ${JSON.stringify(w)} 在池塘裡`)
+  }
+  // seatsOf 跟著外殼幾何；設回 null 就是預設
+  const slot = { id: 'kennel', x: 200, y: 280, w: 99, h: 83 }
+  const d0 = BU.seatsOf('kennel', slot, 'sleep')[0]
+  BU.setSkinGeometry(man.frames.doghouse_punk.meta.door, man.frames.cat_tree_magic.meta.seats)
+  const d1 = BU.seatsOf('kennel', slot, 'sleep')[0]
+  const c1 = BU.seatsOf('catTree', { ...slot, id: 'catTree', w: 72, h: 90 }, 'sleep')[0]
+  BU.setSkinGeometry(null, null)
+  ok(d1.y === d0.y + man.frames.doghouse_punk.meta.door.dyFront && d1.x === d0.x + man.frames.doghouse_punk.meta.door.dx, '狗窩外殼的窩內座位跟著門洞')
+  eq(c1.y - (280 - 90), BU.CAT_TREE_TOP_SEAT.y + man.frames.cat_tree_magic.meta.seats.dyTop, '貓跳台外殼的頂層座位跟著平台')
+  eq(BU.seatsOf('kennel', slot, 'sleep')[0], d0, '設回預設後座位和原本相同')
+  eq([ENVELOPES.bowls.w, ENVELOPES.bowls.h, ENVELOPES.bowls.ay], [57, 31, 31], '食盆輪廓聯集高 31（外殼比預設高）')
+  for (const part of SKIN_PARTS) ok(SKIN_PART_GROUP[part].length > 0, `${part} 有商店小標題`)
 }
 
 if (fails.length) {

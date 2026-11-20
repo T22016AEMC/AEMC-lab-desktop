@@ -6,8 +6,9 @@ const URL0 = process.env.NEW_URL ?? 'http://localhost:5181/'
 const KEY = 'aemc-desktop:farm-save'
 const SHOTS = fileURLToPath(new URL('./shots/', import.meta.url))
 fs.mkdirSync(SHOTS, { recursive: true })
-const T0 = new Date(2026, 10, 19, 10, 0, 0).getTime()
-const today = '2026-11-19'
+// 4.0-B1：原本寫死 2026-11-19 10:00 而且沒有假時鐘，隔天跑會離線衰減到心情 29（< 野餐 minMood 30）→ 沒有候選寵物。改成今天（仍要在白天 6:00～19:30 跑）
+const T0 = Date.now()
+const today = ((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date(T0))
 const pet = (id, species, variant) => ({ id, species, variant, name: id, adoptedAt: T0 - 5e8, heightFactor: 1, weight: 50, satiety: 90, mood: 90, cleanliness: 90, personality: 'calm', lastInteract: T0 })
 const save = (extra = {}) => ({
   schemaVersion: 5, dataRev: 4, points: 80, lastSeen: T0, lastDailyClaim: today, gifts: { date: today, count: 9 }, nextPetId: 4, createdAt: T0 - 9e8,

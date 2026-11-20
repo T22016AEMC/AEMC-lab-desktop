@@ -269,3 +269,10 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - `sheet` 新選項：`pFrames`（逐格明確 p，已含縮放）、`grid: 'even'`（固定欄×列，黏在一起的連通塊從前景最少的欄切開；大家的正面照用）、`probe`（調參用）。小建築的 p 已含 `BUILDING_SCALES`（`smallP`，環境變數改係數時依比例換算）。鐘樓關門／開門貼到兩張裡最大的畫布。
 - 尺寸改變：食盆水盆 57×27（`BOWLS_H` 27）、小路寬 704（高仍 67）、寵物部分姿勢 ±1～2（站姿高不變）；常數 `BOARD_GREEN`、`TOWER_CLOCK_FALLBACK`、`CAT_TREE_ENVELOPE`（`tests-archive/v400r/cat-tree-envelope.mjs` 產生）、`MOUTH` 已重量。
 - 測試：`tests-archive/v400r/`（素材與常數一致性；`adapt-r.py`；改素材後跑 `overlay-old-assets.mjs` 再跑舊版逐像素比對）。原圖備份 `像素風圖片_備份_20261120.zip`。
+
+### 階段 B1：主題外殼（建築外觀）
+
+- **外殼資料** `config/skins.ts`：部位 `house／tower／pond／board／kennel／catTree／bowls`，主題 atlantis／cleanroom／forest／magic／punk／plaid；`skins.equipped` 的鍵就是部位（自由字串，存檔格式不變）。亞特蘭提斯（`house.gold`、`tower.gold`，id 沿用舊的全黃金）是傳說，**商店永遠不顯示**，擁有才出現在切換列。圖集依部位延後載入（`SKIN_ATLAS`：小建築三個共用 `skins_small`）。
+- **商品**（`config/shop.ts`）：建築分類每部位一列（房子外裝／鐘樓外裝／池塘外裝／公佈欄外裝／狗窩外殼／貓跳台外殼／食盆外殼），卡片 原樣／使用中／換上／購買（`ui/SkinCards.tsx`，環境主題共用）；大建築外裝 `SHOP_LIMITS.skinPrice` 30，小建築外殼 = 該建築價格且要先買建築。
+- **幾何**：鐘面、窗戶走 `meta.clock`／共用座標；池塘水面 `meta.water`（`process-assets.mjs` 的 `WATER_TABLE` 寫死、plaid 偵測）；狗窩門洞與貓跳台平台是相對預設的差（`meta.door`、`meta.seats`），引擎每影格 `syncSkinGeometry` → `buildingUse.setSkinGeometry`；擺放規則（塔門保護、座位、洗澡站位、水面保護區）仍用預設幾何。輪廓（`envelopes.ts`、`CAT_TREE_ENVELOPE`）是各主題腳底對齊的聯集，改外殼素材要重跑 `gen-envelopes.mjs` 與 `tests-archive/v400r/cat-tree-envelope.mjs`。
+- **測試**：`tests-archive/v400b1/`（見 README；`adapt-b1.py`）。

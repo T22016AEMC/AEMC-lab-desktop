@@ -195,8 +195,9 @@ const SPRITE_KINDS = Object.keys(IDS)
 const rep = {
   // 報告 E 欄（舊規則：四個區任何一格被蓋住都擋）、B 25% 欄（只護門洞、25%）
   // 4.0-R：原圖重新套用，素材輪廓重畫，面積跟著改（原本 E: lamp 8865, tree1 10455, kennel 10195, catTree 12303, planter 7013, rocks 6183；B25: lamp 6577, tree1 8801, kennel 8964, catTree 12303, planter 6035）
-  E: { lamp: 8850, tree1: 10438, kennel: 10189, catTree: 12266, planter: 7024, rocks: 6189, bowls: 6248 },
-  B25: { lamp: 6580, tree1: 8781, kennel: 8967, catTree: 12266, planter: 6049, rocks: 5922, bowls: 6248 },
+  // 4.0-B1：狗窩、貓跳台、食盆的輪廓含外殼聯集，不能放的面積變大一點（原本 E kennel 10189、catTree 12266、bowls 6248；B25 kennel 8967、catTree 12266）
+  E: { lamp: 8850, tree1: 10438, kennel: 10444, catTree: 12415, planter: 7024, rocks: 6189, bowls: 6303 },
+  B25: { lamp: 6580, tree1: 8781, kennel: 9239, catTree: 12415, planter: 6049, rocks: 5922, bowls: 6248 },
 }
 const CAT = { lamp: 'lamp', tree1: 'tree', kennel: 'kennel', catTree: 'catTree', planter: 'planter', rocks: 'rocks', bowls: 'bowls' }
 const towerFoot = PL.footprintAt('tower', tw.x, tw.y)
@@ -247,7 +248,8 @@ for (const [id, kind] of Object.entries(CAT)) {
 function EXPECT_NEW() {
   // 實際值（和報告 B 25% 欄不同的原因：報告的 B 25% 欄只保護門洞、不保護招牌與鐘面；這次的規則還保護招牌與鐘面各 25%、窗戶完全不能蓋）
   // 4.0-R：素材輪廓重畫（原本 lamp 7253, tree1 8919, kennel 8972, catTree 12303, planter 6035）
-  return { lamp: 7260, tree1: 8902, kennel: 8974, catTree: 12266, planter: 6049, rocks: 5922, bowls: 6248 }
+  // 4.0-B1：輪廓含外殼聯集（原本 kennel 8974、catTree 12266）
+  return { lamp: 7260, tree1: 8902, kennel: 9240, catTree: 12415, planter: 6049, rocks: 5922, bowls: 6248 }
 }
 
 // ================= D. 放寬後新增的位置：連通、座位、原因文字 =================

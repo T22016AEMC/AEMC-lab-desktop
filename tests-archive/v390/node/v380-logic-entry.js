@@ -411,10 +411,10 @@ log(rows.join('\n'))
     ok(sz.w * PHOTO_SCALE >= (w.x1 - w.x0) * FRAME_SCALE && sz.w * PHOTO_SCALE < (w.x1 - w.x0) * FRAME_SCALE + PHOTO_SCALE, k + ' 照片剛好填滿窗口（多出 < 1 個照片像素）')
     log(`${k}：相框 ${f.w}×${f.h}、窗口 ${w.x1 - w.x0}×${w.y1 - w.y0}（${JSON.stringify(w)}）→ 裁切 ${sz.w}×${sz.h} 邏輯像素、輸出 ${f.w * FRAME_SCALE}×${f.h * FRAME_SCALE}（下載 ×2）`)
   }
-  ok(LAZY_ATLASES.includes('polaroid') && LAZY_ATLASES.includes('skins'), '相框圖集延後載入')
+  ok(LAZY_ATLASES.includes('polaroid') && ['skins_house', 'skins_tower', 'skins_pond', 'skins_board', 'skins_small'].every((g) => LAZY_ATLASES.includes(g)), '相框圖集延後載入（4.0-B1：外殼圖集依部位拆開）')
   const keys = Object.keys(man.frames).join(' ')
   ok(!/sticker|decor_|polaroid_a|polaroid_c|parasol|vase/.test(keys), '沒有打包貼紙、陽傘、花瓶、相框 a/c')
-  eq(Object.keys(man.atlases).sort(), ['cat_black', 'cat_bluecat', 'cat_calico', 'cat_orange', 'cat_ragdoll', 'cat_siamese', 'dog_collie', 'dog_corgi', 'dog_golden', 'dog_husky', 'dog_poodle', 'dog_shiba', 'fx', 'items', 'picnic', 'polaroid', 'scene', 'skins', 'terrain', 'tools', 'toys', 'ui'], '圖集清單')
+  eq(Object.keys(man.atlases).sort(), ['cat_black', 'cat_bluecat', 'cat_calico', 'cat_orange', 'cat_ragdoll', 'cat_siamese', 'dog_collie', 'dog_corgi', 'dog_golden', 'dog_husky', 'dog_poodle', 'dog_shiba', 'fx', 'items', 'picnic', 'polaroid', 'scene', 'skins_board', 'skins_house', 'skins_pond', 'skins_small', 'skins_tower', 'terrain', 'tools', 'toys', 'ui'], '圖集清單（4.0-B1：skins 拆成五個）')
   eq(photoFileName(new Date(2026, 10, 17, 9, 5, 7)), 'picnic-20261117-090507.png', '下載檔名')
 }
 
