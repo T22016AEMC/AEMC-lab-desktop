@@ -42,6 +42,18 @@ EDITS = [
         '新規則不能放面積的鎖定值（素材輪廓重畫）',
     ),
     (
+        'v400a/browser/ta-shop-browser.mjs',
+        "ok(body.includes('（更新補發）') && body.includes('+15')",
+        "ok(body.includes('更新補發：收藏冊的集齊獎勵') && !body.includes('（更新補發）') && body.includes('+15')",
+        '補發合併彈窗開頭改成「更新補發：收藏冊的集齊獎勵」',
+    ),
+    (
+        'v400a/browser/ta-shop-browser.mjs',
+        ".innerText()).startsWith('（更新補發）'), '6 只補發 1 個：原彈窗加「（更新補發）」')",
+        ".innerText()).startsWith('更新補發：'), '6 只補發 1 個：原彈窗加「更新補發：」')",
+        '只補發 1 個時的開頭「（更新補發）」→「更新補發：」',
+    ),
+    (
         'calendar-tweaks/browser/td1-label-browser.mjs',
         'const s = { w: 16, h: 15, ax: 8, ay: 15 }',
         'const s = { w: 17, h: 15, ax: 9, ay: 15 } /* 4.0-R：fx_heart 16×15 → 17×15 */',

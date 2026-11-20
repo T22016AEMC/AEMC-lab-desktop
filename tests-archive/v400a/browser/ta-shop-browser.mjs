@@ -217,7 +217,7 @@ for (const id of ['C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007', 'C008'
   await page.getByTestId('event-dialog').waitFor({ state: 'visible' })
   ok((await page.getByTestId('event-dialog').getAttribute('data-event')) === 'retroBatch', '6 補發 2 個：合併彈窗')
   const body = await page.getByTestId('event-dialog').innerText()
-  ok(body.includes('（更新補發）') && body.includes('+15') && body.includes('+50') && body.includes('合計 +65'), '6 合併彈窗：開頭、各項、合計')
+  ok(body.includes('更新補發：收藏冊的集齊獎勵') && !body.includes('（更新補發）') && body.includes('+15') && body.includes('+50') && body.includes('合計 +65'), '6 合併彈窗：開頭、各項、合計')
   await page.screenshot({ path: SHOTS + 'ta-retro-batch.png' })
   await page.getByTestId('event-ok').click()
   ok((await page.getByTestId('event-dialog').count()) === 0 && (await stored(page)).points === 75, '6 一個彈窗就結束、金幣寫入')
@@ -233,7 +233,7 @@ for (const id of ['C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007', 'C008'
   await ctx.close()
   const one = await open(b, S({ points: 10, collection: Object.fromEntries(Object.entries(ALL).filter(([k]) => k.startsWith('C'))) }))
   await one.page.getByTestId('event-dialog').waitFor({ state: 'visible' })
-  ok((await one.page.getByTestId('event-dialog').getAttribute('data-event')) === 'colCommon' && (await one.page.getByTestId('event-body').innerText()).startsWith('（更新補發）'), '6 只補發 1 個：原彈窗加「（更新補發）」')
+  ok((await one.page.getByTestId('event-dialog').getAttribute('data-event')) === 'colCommon' && (await one.page.getByTestId('event-body').innerText()).startsWith('更新補發：'), '6 只補發 1 個：原彈窗加「更新補發：」')
   await one.page.screenshot({ path: SHOTS + 'ta-retro-one.png' })
   await one.ctx.close()
 }

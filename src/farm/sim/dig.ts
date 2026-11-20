@@ -25,7 +25,7 @@ export interface EventNotice {
   /** 'retroBatch' = 載入時一次補發 2 個以上的收藏獎勵，合併成一個彈窗（各項在 parts） */
   id: EventId | 'retroBatch'
   coins: number
-  /** v4.0：載入時補發的（彈窗開頭寫「（更新補發）」）；揭曉當下觸發的沒有這個欄位 */
+  /** v4.0：載入時補發的（彈窗開頭寫「更新補發：」）；揭曉當下觸發的沒有這個欄位 */
   retro?: true
   /** retroBatch 的各項（依事件順序） */
   parts?: { id: EventId; coins: number }[]
