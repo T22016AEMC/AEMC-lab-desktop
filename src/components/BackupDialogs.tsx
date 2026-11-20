@@ -109,6 +109,13 @@ export function ImportDialog() {
                       <dd data-testid="import-layout">調整過 {state.summary.layoutCount} 個物件</dd>
                     </>
                   )}
+                  {/* v4.0：商店買來的擺設（格式版本 8 的備份才有；有才顯示） */}
+                  {state.summary.decorCount > 0 && (
+                    <>
+                      <dt className="text-white/55">商店擺設</dt>
+                      <dd data-testid="import-decor">{state.summary.decorCount} 個</dd>
+                    </>
+                  )}
                 </dl>
                 {state.summary.refund > 0 && (
                   <p data-testid="import-refund" className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs font-semibold leading-relaxed text-amber-100">

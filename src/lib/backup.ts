@@ -1,5 +1,5 @@
 import { buildingDef } from '../farm/config/buildings'
-import { placementToLayout, resolvePlacement } from '../farm/pixel/placement'
+import { placementOf, placementToLayout } from '../farm/pixel/placement'
 import { isNewerData, isResetSchema, legacyRefundOf, parseSave } from '../farm/save/migrate'
 import { CURRENT_SCHEMA_VERSION, type SaveData, type SaveStorage } from '../farm/save/types'
 import { APP_LIST_SCHEMA_VERSION, parseAppList, type AppListData } from '../store/appListStore'
@@ -15,7 +15,8 @@ export const BACKUP_FORMAT = 'aemc-desktop-backup'
  * 匯入時 MIN_BACKUP_FORMAT_VERSION（2）到這個版本都接受：2、3 的檔案沒有 notes（就算檔案裡有也不讀，一律視為空），
  * 其他缺少的欄位補預設值；比它新的拒絕（舊版程式讀到 4 會顯示「較新版本」）。
  */
-export const BACKUP_FORMAT_VERSION = 7
+export const BACKUP_FORMAT_VERSION = 8
+// v4.0：8 = 養殖場存檔多了商店（shop：買來的擺設實例）。讀取 2～7：就算檔案裡有 shop 也不讀（視為沒買過）。v3.10.x 的舊程式讀到 8 會顯示「較新版本」並拒絕。
 // v3.10.0：7 = 養殖場存檔多了簽到紀錄（checkins）。讀取 2～6：就算檔案裡有 checkins 也不讀（月曆是空的，「今天領過沒」照備份的 lastDailyClaim）。v3.9.x 的舊程式讀到 7 會顯示「較新版本」並拒絕。
 // v3.9.0：6 = 養殖場存檔多了農場擺放（farmLayout）。讀取 2～5：就算檔案裡有 farmLayout 也不讀（全部預設）。v3.8.x 的舊程式讀到 6 會顯示「較新版本」並拒絕。
 // v3.8.0：5 = 寵物多了個性（personality）、上次互動（lastInteract），存檔多了野餐紀錄（picnic）。
@@ -27,6 +28,8 @@ export const NOTES_FORMAT_VERSION = 4
 export const LAYOUT_FORMAT_VERSION = 6
 /** 從這個格式版本起，備份裡的 checkins（簽到紀錄）才會被讀取 */
 export const CHECKINS_FORMAT_VERSION = 7
+/** 從這個格式版本起，備份裡的 shop（商店買來的擺設實例）才會被讀取 */
+export const SHOP_FORMAT_VERSION = 8
 export const MIN_BACKUP_FORMAT_VERSION = 2
 export const PRE_RESET_MESSAGE = '這個備份來自重置前的版本，無法匯入'
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024
@@ -66,6 +69,8 @@ export interface BackupSummary {
   hasNotes: boolean
   /** 農場擺放：調整過的物件數（驗證後；格式版本 5 以前一律 0） */
   layoutCount: number
+  /** 商店買來的擺設實例個數（格式版本 7 以前一律 0） */
+  decorCount: number
 }
 
 export type ParseResult = { ok: true; backup: BackupFile; summary: BackupSummary } | { ok: false; error: string }
@@ -84,7 +89,8 @@ export function summarize(b: BackupFile): BackupSummary {
     noteCount: b.data.farm.notes?.length ?? 0,
     hasNotes: b.formatVersion >= NOTES_FORMAT_VERSION,
     // 只算清理後有效、而且和預設不同的物件（沒買的建築、和預設位置相同的紀錄不算）
-    layoutCount: placementToLayout(resolvePlacement(b.data.farm.ownedBuildings, b.data.farm.farmLayout)).items.length,
+    layoutCount: placementToLayout(placementOf(b.data.farm)).items.length,
+    decorCount: b.data.farm.shop?.decor.length ?? 0,
   }
 }
 
@@ -118,6 +124,7 @@ export function parseBackup(text: string, sizeBytes: number): ParseResult {
   if (r.formatVersion < NOTES_FORMAT_VERSION) farmIn.notes = undefined
   if (r.formatVersion < LAYOUT_FORMAT_VERSION) farmIn.farmLayout = undefined
   if (r.formatVersion < CHECKINS_FORMAT_VERSION) farmIn.checkins = undefined
+  if (r.formatVersion < SHOP_FORMAT_VERSION) farmIn.shop = undefined
   const farm = parseSave(farmIn)
   if (!farm) return fail('備份檔裡的養殖場存檔無法辨識或已損毀')
   const appList = parseAppList(listRaw)

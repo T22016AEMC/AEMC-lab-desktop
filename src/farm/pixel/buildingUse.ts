@@ -77,6 +77,50 @@ const KENNEL_FRONT_DX = 21
 export const CAT_TREE_TOP_SEAT = { x: 46, y: 9 }
 export const CAT_TREE_MID_SEAT = { x: 19, y: 34 }
 
+/**
+ * 4.0-B1：穿了外殼時的門洞與座位。外殼素材的 meta 存「和預設圖的差」（管線 doorProbe／surfaceTop 量的）：
+ * 狗窩 door { dx：門洞右緣、dyTop：拱頂、dyFront：墊子前緣 }、貓跳台 seats { dyTop：頂層、dyMid：中層 }。
+ * 引擎在外殼圖載入後呼叫 setSkinGeometry；沒穿外殼（或圖還沒載入）= 預設常數。擺放規則的互動區（placeRules）一律用預設值（外殼同一個模板）。
+ */
+export interface KennelGeom {
+  clip: readonly { x0: number; x1: number; y0: number; y1: number }[]
+  insideRight: number
+  insideBottom: number
+  doorCx: number
+}
+export interface CatTreeGeom {
+  top: { x: number; y: number }
+  mid: { x: number; y: number }
+}
+export interface DoorDelta { dx: number; dyTop: number; dyFront: number }
+export interface SeatDelta { dyTop: number; dyMid: number }
+const DEFAULT_KENNEL: KennelGeom = { clip: KENNEL_DOOR_CLIP, insideRight: KENNEL_INSIDE_RIGHT, insideBottom: KENNEL_INSIDE_BOTTOM, doorCx: KENNEL_DOOR_CX }
+const DEFAULT_CAT_TREE: CatTreeGeom = { top: CAT_TREE_TOP_SEAT, mid: CAT_TREE_MID_SEAT }
+let kennelGeom: KennelGeom = DEFAULT_KENNEL
+let catTreeGeom: CatTreeGeom = DEFAULT_CAT_TREE
+/** 門洞差 → 幾何：整個門洞跟著右緣平移 dx；拱形的幾段跟著拱頂 dyTop；最下面那段的底邊與窩內的狗的底邊跟著墊子前緣 dyFront */
+export function kennelGeomFrom(d: DoorDelta | null | undefined): KennelGeom {
+  if (!d) return DEFAULT_KENNEL
+  const n = KENNEL_DOOR_CLIP.length
+  return {
+    clip: KENNEL_DOOR_CLIP.map((r, i) => ({ x0: r.x0 + d.dx, x1: r.x1 + d.dx, y0: r.y0 + d.dyTop, y1: i === n - 1 ? r.y1 + d.dyFront : r.y1 + d.dyTop })),
+    insideRight: KENNEL_INSIDE_RIGHT + d.dx,
+    insideBottom: KENNEL_INSIDE_BOTTOM + d.dyFront,
+    doorCx: KENNEL_DOOR_CX + d.dx,
+  }
+}
+export function catTreeGeomFrom(d: SeatDelta | null | undefined): CatTreeGeom {
+  if (!d) return DEFAULT_CAT_TREE
+  return { top: { x: CAT_TREE_TOP_SEAT.x, y: CAT_TREE_TOP_SEAT.y + d.dyTop }, mid: { x: CAT_TREE_MID_SEAT.x, y: CAT_TREE_MID_SEAT.y + d.dyMid } }
+}
+/** 引擎設定目前的外殼幾何（null = 預設） */
+export function setSkinGeometry(door: DoorDelta | null | undefined, seats: SeatDelta | null | undefined): void {
+  kennelGeom = kennelGeomFrom(door)
+  catTreeGeom = catTreeGeomFrom(seats)
+}
+export const kennelGeometry = (): KennelGeom => kennelGeom
+export const catTreeGeometry = (): CatTreeGeom => catTreeGeom
+
 export function capacityOf(id: BuildingId): number {
   if (id === 'bowls') return BALANCE.buildings.bowls.capacity
   if (id === 'kennel') return BALANCE.buildings.kennel.capacity
@@ -103,17 +147,18 @@ export function seatsOf(id: BuildingId, slot: BuildingSlot, purpose: UsePurpose)
   const out: Seat[] = []
   const left = slot.x - KENNEL_AX
   if (id === 'kennel' && purpose !== 'eat') {
-    const doorX = left + KENNEL_DOOR_CX
+    const kg = kennelGeom
+    const doorX = left + kg.doorCx
     // v3.9.0：不再夾在「路燈右邊」（路燈可以移動）；座位旁一律在門洞前方
-    out.push({ x: left + KENNEL_INSIDE_RIGHT - 24, y: slot.y - KENNEL_H + KENNEL_INSIDE_BOTTOM, face: 1, kind: 'inside', near: { x: doorX - 4, y: slot.y + 20 } })
+    out.push({ x: left + kg.insideRight - 24, y: slot.y - KENNEL_H + kg.insideBottom, face: 1, kind: 'inside', near: { x: doorX - 4, y: slot.y + 20 } })
     // 躲雨時站著或坐著（比躺著高），再往右一點，不擋住窩裡的狗的頭
     const front = { x: doorX + KENNEL_FRONT_DX + (purpose === 'shelter' ? 14 : 0), y: slot.y + 8 }
     out.push({ ...front, face: -1, kind: 'ground', near: front })
   } else if (id === 'catTree' && purpose === 'sleep') {
     const top = slot.y - CAT_TREE_H
     const tl = slot.x - 36
-    out.push({ x: tl + CAT_TREE_TOP_SEAT.x, y: top + CAT_TREE_TOP_SEAT.y, face: -1, kind: 'platform', near: { x: slot.x + 8, y: slot.y + 12 } })
-    out.push({ x: tl + CAT_TREE_MID_SEAT.x, y: top + CAT_TREE_MID_SEAT.y, face: 1, kind: 'platform', near: { x: slot.x - 16, y: slot.y + 12 } })
+    out.push({ x: tl + catTreeGeom.top.x, y: top + catTreeGeom.top.y, face: -1, kind: 'platform', near: { x: slot.x + 8, y: slot.y + 12 } })
+    out.push({ x: tl + catTreeGeom.mid.x, y: top + catTreeGeom.mid.y, face: 1, kind: 'platform', near: { x: slot.x - 16, y: slot.y + 12 } })
   } else {
     const dx = SEAT_DX[id] ?? 24
     for (let i = 0; i < n; i++) {

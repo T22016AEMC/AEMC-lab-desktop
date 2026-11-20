@@ -1,4 +1,6 @@
 import { hourOf, weatherAt, type Weather } from './sim/worldTime'
+import { hasSunnyDoll } from './config/accessories'
+import type { SaveData } from './save/types'
 
 /**
  * 世界時刻、天氣與時鐘的覆寫值。正式環境永遠是 null／0（用本機實際時間）；
@@ -32,6 +34,10 @@ export function worldHour(nowMs: number): number {
   return overrides.hour ?? hourOf(new Date(nowMs))
 }
 
-export function worldWeather(nowMs: number): Weather {
-  return overrides.weather ?? weatherAt(nowMs)
+/**
+ * 現在的天氣（唯一的入口：畫面、野餐、結算都走這個函式）。4.0-C：save 有掛著晴天娃娃 → 下雨機率 −5%、晴天機率 +5%（weatherAt 的 sunnyDoll）；
+ * 一律傳存檔（沒有存檔 = null），不要自己呼叫 weatherAt。測試模式的 overrides.weather 優先。
+ */
+export function worldWeather(nowMs: number, save: Pick<SaveData, 'skins'> | null | undefined): Weather {
+  return overrides.weather ?? weatherAt(nowMs, hasSunnyDoll(save))
 }

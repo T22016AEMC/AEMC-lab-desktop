@@ -52,7 +52,7 @@ for (let k=0;k<300;k++) {
 // 3. backups
 const farm = (extra={}) => ({ schemaVersion:5, dataRev:4, points:10, lastSeen:T0, pets:[pet('d1','dog','shiba')], ownedBuildings: [], farmLayout:{items:[{id:'lamp',kind:'lamp',state:'stored'}]}, ...extra })
 const bk = (fv, f) => JSON.stringify({ format:'aemc-desktop-backup', formatVersion: fv, exportedAt: new Date(T0).toISOString(), data: { farm: f, appList: { schemaVersion: 1, apps: [] } } })
-for (const fv of [2,3,4,5,6,7,8]) for (const dr of [3,4,5,6,undefined]) { const t = bk(fv, farm({dataRev:dr})); const r = parseBackup(t, t.length); out['bk'+fv+'_'+dr] = r.ok ? 'ok layout='+JSON.stringify(r.backup.data.farm.farmLayout)+' dataRev='+r.backup.data.farm.dataRev : r.error }
+for (const fv of [2,3,4,5,6,7,8,9]) for (const dr of [3,4,5,6,7,undefined]) { /* v4.0：多一格 */ const t = bk(fv, farm({dataRev:dr})); const r = parseBackup(t, t.length); out['bk'+fv+'_'+dr] = r.ok ? 'ok layout='+JSON.stringify(r.backup.data.farm.farmLayout)+' dataRev='+r.backup.data.farm.dataRev : r.error }
 import assert from 'node:assert/strict'
 // 判定：沒有例外、沒有逾時、損壞資料清理結果正確、匯入格式矩陣符合預期
 const NEWER = '這個存檔來自較新版本，請重新整理網頁更新後再試'
@@ -67,8 +67,8 @@ assert.equal(out.odd5, '{"items":[]}', 'kind 與 id 對不上要丟掉')
 assert.equal(out.odd6, '{"items":[]}', 'constructor／toString 當 id 要丟掉')
 assert.equal(out.odd7, '{"items":[{"id":"tree1","kind":"tree","state":"placed","x":1,"y":1}]}', '100 萬筆只留第一筆（重複 id）')
 assert.equal(out.odd8, undefined, 'items 不是真的陣列 → 整個忽略')
-for (const fv of [2, 3, 4, 5]) for (const dr of [3, 4, 5, undefined]) assert.match(out['bk' + fv + '_' + dr], /^ok layout=undefined dataRev=5$/, `格式 ${fv} dataRev ${dr}：不讀 farmLayout（v3.10.0：dataRev 5）`)
-for (const fv of [6, 7]) for (const dr of [3, 4, 5, undefined]) assert.match(out['bk' + fv + '_' + dr], /^ok layout=\{"items":\[\{"id":"lamp"/, `格式 ${fv} dataRev ${dr}：讀 farmLayout（v3.10.0：格式 7 也讀）`)
-for (const fv of [2, 3, 4, 5, 6, 7, 8]) assert.equal(out['bk' + fv + '_6'], NEWER, `dataRev 6 一律拒絕（格式 ${fv}；v3.10.0：原本 5）`)
-for (const dr of [3, 4, 5, 6, undefined]) assert.equal(out['bk8_' + dr], NEWER, '格式 8 拒絕（v3.10.0：原本 7）')
+for (const fv of [2, 3, 4, 5]) for (const dr of [3, 4, 5, 6, undefined]) assert.match(out['bk' + fv + '_' + dr], /^ok layout=undefined dataRev=6$/, `格式 ${fv} dataRev ${dr}：不讀 farmLayout（v3.10.0：dataRev 5；v4.0：6）`)
+for (const fv of [6, 7, 8]) for (const dr of [3, 4, 5, 6, undefined]) assert.match(out['bk' + fv + '_' + dr], /^ok layout=\{"items":\[\{"id":"lamp"/, `格式 ${fv} dataRev ${dr}：讀 farmLayout（v3.10.0：格式 7 也讀）`)
+for (const fv of [2, 3, 4, 5, 6, 7, 8, 9]) assert.equal(out['bk' + fv + '_7'], NEWER, `dataRev 7 一律拒絕（格式 ${fv}；v3.10.0：原本 5；v4.0：原本 6）`)
+for (const dr of [3, 4, 5, 6, 7, undefined]) assert.equal(out['bk9_' + dr], NEWER, '格式 9 拒絕（v3.10.0：原本 7；v4.0：原本 8）')
 console.log('review-fuzz：300 組隨機擺放 + 損壞資料 + 匯入格式矩陣全部通過')

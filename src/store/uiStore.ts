@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ShopCategory } from '../farm/config/shop'
 import type { BackupFile, BackupSummary } from '../lib/backup'
 import type { Size } from '../types'
 import type { ToolId } from '../config/tools'
@@ -36,16 +37,10 @@ interface UIState {
   toastQueue: ToastItem[]
   launchpadOpen: boolean
   aboutOpen: boolean
-  /** 領養視窗 */
-  adoptOpen: boolean
-  /** v3.9.0 編輯農場（購買與擺設）模式：寵物暫停；分頁見 farmTab */
+  /** v4.0 商店：開著的分類分頁（null = 沒開）。「＋領養」改成商店的寵物分頁（第一次領養仍是 AdoptDialog first） */
+  shopTab: ShopCategory | null
+  /** v3.9.0 編輯農場模式：寵物暫停（v4.0 起只有擺放；建築改在商店購買） */
   buildMode: boolean
-  /** v3.9.0 編輯農場的分頁：購買（虛線框）／編輯（拖曳、倉庫）。只記在這次開著的網頁（重新整理回到編輯），不存檔；進入時沿用上次的分頁 */
-  farmTab: 'buy' | 'edit'
-  setFarmTab: (t: 'buy' | 'edit') => void
-  /** v3.9.0 購買分頁的提示卡：買下但預設位置被佔住、放進倉庫的建築名稱（null = 沒有） */
-  farmBuyNotice: string | null
-  setFarmBuyNotice: (name: string | null) => void
   /** v3.8.0 野餐：選單列按了「野餐」就遞增（養殖場畫面接手，開始條件與場景由養殖場判斷） */
   picnicReq: number
   requestPicnic: () => void
@@ -77,7 +72,8 @@ interface UIState {
   setToolOpen: (v: ToolId | null) => void
   setLaunchpadOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
-  setAdoptOpen: (v: boolean) => void
+  /** 打開商店的某個分類（null = 關閉）。打開時離開編輯農場、選野餐位置、關掉工具視窗 */
+  setShopTab: (v: ShopCategory | null) => void
   setBuildMode: (v: boolean) => void
   setLogoMenuOpen: (v: boolean) => void
   setImportState: (v: ImportState | null) => void
@@ -97,12 +93,8 @@ export const useUIStore = create<UIState>((set) => ({
   setToolOpen: (toolOpen) => set(toolOpen ? { toolOpen, buildMode: false, picnicPick: false } : { toolOpen }),
   launchpadOpen: false,
   aboutOpen: false,
-  adoptOpen: false,
+  shopTab: null,
   buildMode: false,
-  farmTab: 'edit',
-  setFarmTab: (farmTab) => set(farmTab === 'edit' ? { farmTab, farmBuyNotice: null } : { farmTab }),
-  farmBuyNotice: null,
-  setFarmBuyNotice: (farmBuyNotice) => set({ farmBuyNotice }),
   logoMenuOpen: false,
   importState: null,
   persisted: null,
@@ -127,9 +119,9 @@ export const useUIStore = create<UIState>((set) => ({
     }),
   setLaunchpadOpen: (launchpadOpen) => set({ launchpadOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
-  setAdoptOpen: (adoptOpen) => set({ adoptOpen }),
+  setShopTab: (shopTab) => set(shopTab ? { shopTab, buildMode: false, picnicPick: false, toolOpen: null } : { shopTab }),
   // v3.9.1：進入編輯農場時離開選野餐位置（兩者不同時開著）
-  setBuildMode: (buildMode) => set(buildMode ? { buildMode, picnicPick: false } : { buildMode, farmBuyNotice: null }),
+  setBuildMode: (buildMode) => set(buildMode ? { buildMode, picnicPick: false } : { buildMode }),
   picnicReq: 0,
   requestPicnic: () => set((s) => ({ picnicReq: s.picnicReq + 1 })),
   picnicPick: false,

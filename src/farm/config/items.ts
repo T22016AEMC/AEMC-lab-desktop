@@ -106,5 +106,5 @@ export function isCollectionKey(key: string): boolean {
   return m[2] === undefined
 }
 
-/** 收藏冊的獎勵剪影：傳說項目對應的外觀（狗＝金色屋頂住家，貓＝黃金鐘樓） */
-export const REWARD_SILHOUETTE: Record<'dog' | 'cat', string> = { dog: 'sil_house_gold', cat: 'sil_tower_gold' }
+/** 收藏冊的獎勵剪影：傳說項目對應的外觀（狗＝亞特蘭提斯房屋，貓＝亞特蘭提斯鐘樓；4.0-B1 前是全黃金） */
+export const REWARD_SILHOUETTE: Record<'dog' | 'cat', string> = { dog: 'sil_house_atlantis', cat: 'sil_tower_atlantis' }

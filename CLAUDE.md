@@ -245,3 +245,55 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **拍立得日期**（`ui/photo.ts`）：`composePolaroid(..., date)` 在倒數第 3 列與最後 2 列之間插入 `DATE_STRIP`（8）列白邊，左右邊框照倒數第 3 列延伸，日期用 3×5 點陣（`DATE_FONT`）＋`fillRect`，深灰 `DATE_COLOR`；日期與下載檔名用按快門當下的同一個 `gameNow()`。
 - **測試**：`tests-archive/calendar-tweaks/`（見該資料夾 README.md；`adapt-c.py` 是對 `tests-archive/v390` 舊測試寫死版本號的修改）。
 
+
+## v4.0（4.0.0 已上線：A、R、B1、B2、C 一次上線）
+
+### 階段 A：商店骨架、實例 id、集齊獎勵
+
+- **商店**（`farm/ui/ShopDialog.tsx`，外框用 `ToolDialog`）：選單列「商店」（取代「＋領養」，`uiStore.shopTab`：`pet`／`decor`／`building`／`farm`；打開時離開編輯農場、選野餐位置、關工具視窗；開著時事件彈窗排隊）。分類 寵物、裝飾品、建築、農場（`SHOP_COMING_SOON`：灰色、不可點、「即將開放」）。購買前一定有確認列（品名＋金額＋購買後剩餘），確認按下後停用到結果回來。**不做賣回或退款**（寵物找新主人退 10 維持原樣）。
+- **商品設定表** `config/shop.ts`（`SHOP_ITEMS`：id、名稱、分類、group 小標題、價格、repeatable、maxOwned、requires 前置條件、size 尺寸級別、sprite、grant、temp）。grant 四種：`pet`（走領養表單）、`building`（`ownedBuildings`）、`decor`（新的擺設實例）、`skin`（`skins.owned`＋穿到 slot）。之後的階段只加資料，不改商店程式。尺寸價格 `SIZE_PRICE` 小 3／中 6／大 10；`SHOP_LIMITS` 每種 10、全體 60（只算購買的）、環境主題 30。
+- **購買規則** `sim/shop.ts`（純函式 `purchase`：扣金幣＋得到東西＋編號遞增一次完成；不行就原樣回傳存檔與原因）；`farmStore.purchase`／`shopAdopt`：先確認寫入權 → await 之後用當下的存檔重算 → 一次 set → `flushSaveNow()` 等寫完；寫入前一刻被別的分頁接手（或遇到較新版本）→ 記憶體回到購買前、回傳失敗（畫面由 OtherTabNotice 鎖定）。
+- **實例 id**（`config/layoutItems.ts`）：`種類#編號`（例 `rocks#3`，編號全體共用、只增不減）。**可複製種類表 `INSTANCE_KINDS` 和商品表分開：種類只增不減**；存檔驗證（`cleanShop`、`cleanFarmLayout`）只看種類表。`layoutItemDef` 認得實例（沒有預設位置、可收進倉庫）。路燈（燈光）、樹（樹根特別處理）不可複製。
+- **擁有與擺放分開記**：存檔可缺少的 `shop: { decor: [{ id, kind }], nextDecorId }` 是擁有紀錄；`farmLayout` 沒有實例的紀錄 = 在倉庫（`placementToLayout` 不寫「沒有預設位置又在倉庫」的紀錄，所以不能只靠擺放紀錄）。不在 `shop.decor` 的實例紀錄一律忽略。介面與引擎一律用 `placementOf(save)`（或 `resolvePlacement(owned, layout, decor)`），不要漏掉實例；`Placement.order` = `PLACE_ORDER`＋實例（依編號插在建築之前）。買來的東西一律先放進倉庫（不自動擺放）。倉庫列把同種類的實例合併成一格（`inv-buy-<種類>`，×N）。
+- **建築只在商店買**：`BuildLayer.tsx` 已刪，編輯農場只剩擺放（沒有分頁、`farmTab`／`farmBuyNotice` 已拿掉）；預設位置被佔住仍是「買下放進倉庫」（商店顯示提示）。
+- **寵物**：之後的領養在商店寵物分頁（`AdoptPicker`／`useAdoptForm` 與第一次領養共用）；零寵物的第一次領養（`needFirst`、`AdoptDialog first`）不動。
+- **環境主題**（地板＋小路＋遠景）預留為 skin 商品：slot `env`（`ENV_SLOT`），預設草地 `env.grass` 免費、永遠擁有、**不寫進存檔**（`equipped.env` 沒有 = 草地）；`envTheme()` 商品工廠放在裝飾品分頁「環境主題」小標題；`farmStore.equipSkin` 切換。階段 A 沒有任何主題內容。
+- **集齊獎勵**（`config/events.ts`，數值 `BALANCE.dig.collectionRewards`，一次性、不算每日上限）：`colCommon` 15、`colUncommon` 30（套組 6 片集滿才算）、`colRare` 50、`colLegend` 100（傳說 4 件，和舊配對事件分開）、`colAll` 100。`EVENTS` 的順序就是同時觸發的順序：罰款 → 常見 → 少見 → 稀有 → 傳說配對 → 傳說全集齊 → 全圖鑑。**載入時補發**（`retroEvents`，只查這 5 個；旗標保證只發一次；有發就立刻寫入）；2 個以上合併成一個彈窗（`retroBatch`），開頭「（更新補發）」。收藏冊各等級與頁首顯示「集齊獎勵 N 金幣（已領取）」，罰款字樣不出現（原始碼也不能寫，有測試掃）。
+- **擺設太多的提示**：寶物與野餐放不下一律「擺設太多…請收起一些擺設」（場景固定 640×320，和視窗大小無關，不提示放大視窗）。
+- **存檔版本**：`schemaVersion` 5（**不能升**）、`DATA_REV` 6、匯出格式 8（`SHOP_FORMAT_VERSION`；匯入 2～7 的 shop 一律當空）。
+- **測試**：`tests-archive/v400a/`（見 README；`adapt-a.py` 是對既有測試的預期值異動）。
+
+### 階段 R：統一 4×4 格的原圖重新套用（素材管線）
+
+- 原圖資料夾的每張圖都是整齊的 4×4 像素格，`estimateP` 每張都估出 4.00（= 範圍下限），**估算值不可靠**。`process-assets.mjs` 的 `P_FIXED` 是每張圖明確的像素格（由 `tests-archive/v400r/tune-p.mjs`、`tune-terrain.mjs` 掃描，讓輸出尺寸＝換圖前）；`guardEstimate`：有格子要直接用估算值取樣、而估算碰到範圍邊界時管線報錯。新增素材要給明確的 `pFixed`／`pFrames`／`targets`，不要靠估算。
+- `sheet` 新選項：`pFrames`（逐格明確 p，已含縮放）、`grid: 'even'`（固定欄×列，黏在一起的連通塊從前景最少的欄切開；大家的正面照用）、`probe`（調參用）。小建築的 p 已含 `BUILDING_SCALES`（`smallP`，環境變數改係數時依比例換算）。鐘樓關門／開門貼到兩張裡最大的畫布。
+- 尺寸改變：食盆水盆 57×27（`BOWLS_H` 27）、小路寬 704（高仍 67）、寵物部分姿勢 ±1～2（站姿高不變）；常數 `BOARD_GREEN`、`TOWER_CLOCK_FALLBACK`、`CAT_TREE_ENVELOPE`（`tests-archive/v400r/cat-tree-envelope.mjs` 產生）、`MOUTH` 已重量。
+- 測試：`tests-archive/v400r/`（素材與常數一致性；`adapt-r.py`；改素材後跑 `overlay-old-assets.mjs` 再跑舊版逐像素比對）。原圖備份 `像素風圖片_備份_20261120.zip`。
+
+### 階段 B1：主題外殼（建築外觀）
+
+- **外殼資料** `config/skins.ts`：部位 `house／tower／pond／board／kennel／catTree／bowls`，主題 atlantis／cleanroom／forest／magic／punk／plaid；`skins.equipped` 的鍵就是部位（自由字串，存檔格式不變）。亞特蘭提斯（`house.gold`、`tower.gold`，id 沿用舊的全黃金）是傳說，**商店永遠不顯示**，擁有才出現在切換列。圖集依部位延後載入（`SKIN_ATLAS`：小建築三個共用 `skins_small`）。
+- **商品**（`config/shop.ts`）：建築分類每部位一列（房子外裝／鐘樓外裝／池塘外裝／公佈欄外裝／狗窩外殼／貓跳台外殼／食盆外殼），卡片 原樣／使用中／換上／購買（`ui/SkinCards.tsx`，環境主題共用）；大建築外裝 `SHOP_LIMITS.skinPrice` 30，小建築外殼 = 該建築價格且要先買建築。
+- **幾何**：鐘面、窗戶走 `meta.clock`／共用座標；池塘水面 `meta.water`（`process-assets.mjs` 的 `WATER_TABLE` 寫死、plaid 偵測）；狗窩門洞與貓跳台平台是相對預設的差（`meta.door`、`meta.seats`），引擎每影格 `syncSkinGeometry` → `buildingUse.setSkinGeometry`；擺放規則（塔門保護、座位、洗澡站位、水面保護區）仍用預設幾何。輪廓（`envelopes.ts`、`CAT_TREE_ENVELOPE`）是各主題腳底對齊的聯集，改外殼素材要重跑 `gen-envelopes.mjs` 與 `tests-archive/v400r/cat-tree-envelope.mjs`。
+- **測試**：`tests-archive/v400b1/`（見 README；`adapt-b1.py`）。
+
+### 階段 B2：環境主題（地板＋小路＋遠景＋路燈＋樹）與主題裝飾
+
+- **環境主題**（`config/envThemes.ts`）：外觀 id `env.<主題>`（部位 `env` = `ENV_SLOT`，預設草地 `env.grass` 不寫進存檔），一次 30 金幣買整套、買了立刻換上、之後可切換（含換回草地），商店在「裝飾品」分頁最上面的「環境主題」列（共用 `ui/SkinCards.tsx` 的 `SkinRow`，`wide` 版放縮圖）。主題順序一律：亞特蘭提斯、無塵室、森林、魔法、龐克、野餐鄉村。圖集 `env_<主題>`（地板 `floor_`、小路 `path_`、遠景 `far_`、路燈 `lamp_`、樹 `tree_`；延後載入，穿上才載入，`skinAtlasesFor`）、`env_thumbs`（商店縮圖，開裝飾品分頁才載入）。引擎 `engine.envNow()`（穿著且圖集載入完成才算，否則預設草地、畫面逐像素和以前相同）。
+- **素材管線**（`scripts/process-assets.mjs` 第 10 段）：新原圖底色**恰好 #FF00FF**（`exactBg`／`isBgExact`，只認這一個顏色，不放寬色鍵；通用去邊與孤立單點移除對這些素材關閉）。地板：原圖是 `<主題>_tiles.png`（不是 `floor_<主題>.png`），1024×1024 的 A～D 四塊整張取樣成 108×108 格（p≈9.48）再 2×2 鏡像成 216×216（原圖四塊的外緣並不真的無縫，鏡像保證可拼接；A～D 之間的接縫是原圖本來就有的）。小路：`PATH_BANDS` 每主題的「中間路面帶」原圖列範圍（量列平均色的跳變，都落在 4 的倍數）縮成高 `PATH_H` = 67 列，原圖橫向本來就可無縫，左右直接接（不鏡像）。遠景：原圖是真透明 alpha，像素格 = 舊遠景（5.501），裁掉上方透明列，**FAR_H 每張各自量**（`frame.h`；一般 39 列、無塵室 131 列）；`drawFar` 用 `s.h` 貼在遠景底邊 `farBottom` 往上，無塵室比天空區矮 5 列，牆的最上一列往上延伸到可見範圍頂端。路燈、樹：`sheet` 名義 3×2 格（`grid: 'nominal'`，連通塊依名義格分組，小碎塊歸最近的件），每格各自求 p 讓路燈高 84、樹高 ≤ 103（寬 ≤ 100），**錨點 x = 最下面 6 列的水平中心**（底部中心對位）。
+- **無塵室「看窗外」**：遠景牆填滿整張高度，只有窗玻璃透明。`ENV_WINDOW_THEMES`（只有 cleanroom）：天氣粒子（雨雪）畫在雲之後、遠景之前，所以只出現在窗玻璃裡，牆與地面沒有雨；其他主題的順序不變（雨雪在最上層）。天氣邏輯與素材沒改（躲雨照常）；夜晚星月在窗外看得到。
+- **夜晚補光**（`config/envThemes.ts` 的 `GLOW`，`scene.drawGlow(…, opts)`）：路燈六款各自的光暈錨點與顏色（原本寫死的「腳下往上 62」= `LAMP_GLOW_DEFAULT`，沒穿主題時畫圖指令和以前逐筆相同）；水晶球座、資訊終端螢幕擺出來也各自發光（`engine.render` 夜晚段）。數字由 `tests-archive/v400b2/measure-glow.mjs` 從成品的發光部位重心量出，測試重跑比對。其他裝飾不補光。
+- **路燈與樹**沿用舊的腳下佔地、輪廓（`ENVELOPES.lamp／tree` 不含主題圖）與座位；`engine.kindSprite('lamp'|'tree')` 穿了主題就換成主題圖。
+- **主題裝飾**（`config/themeDecor.ts`，48 種＋傳說展示台）：連通區域偵測切件（`DECOR_SHEETS`：原圖、欄×列、種類＋尺寸級別；偵測失敗會 `warn`），輸出大小依級別（外框面積小 ≈ 1300／中 ≈ 2100／大 ≈ 4000，另有寬高上限），錨點底部中心，圖集 `decor_themes`（延後載入：存檔有主題裝飾實例就載入，開商店裝飾品分頁也載入）。種類加進 `LayoutKind`／`INSTANCE_KINDS`（只增不減），`KIND_GEOM` 腳下佔地 = 0.8 倍素材寬 × 深 10，輪廓由 `gen-envelopes.mjs` 產生（含全部主題裝飾）。商店「裝飾品」分頁小標題：各主題「<主題>裝飾」＋「其他擺設」；價格小 3／中 6／大 10、每種 10／合計 60 不變。階段 A 的 6 種暫時裝飾（蘑菇、小花叢、石頭、灌木、花槽、珊瑚石堆）不賣了（`LEGACY_TEMP_ITEMS` 只供測試），已買的實例仍認得。傳說展示台（`legend_stand`）只放進圖集，C 階段用，不是擺設種類、不賣。
+- **存檔格式不變**（`schemaVersion` 5、`DATA_REV` 6、匯出格式 8）：環境主題用既有的 `skins.owned／equipped.env`，裝飾用既有的 `shop.decor`。
+- **測試**：`tests-archive/v400b2/`（見 README；`adapt-b2.py` 是對既有測試的預期值異動，含 t9 野餐選位置改假時鐘）。
+
+### 階段 C：晴天娃娃、房屋與鐘樓配件、傳說展示台（4.0 最後一個功能停點）
+
+- **存檔：沒有新增任何頂層欄位**（`schemaVersion` 5、`DATA_REV` 6、匯出格式 8 不變）。配件用既有的 `skins.owned`／`skins.equipped`（新的 id 與位置鍵），展示台用既有的 `shop.decor` 實例與 `events` 旗標。舊存檔讀進來沒有這些就是沒有配件、沒有展示台。
+- **配件**（`config/accessories.ts`，素材 `house_acc.png`、`tower_acc.png`，圖集 `acc` 延後載入）：8 件，id `acc.*`（放 `skins.owned`），掛上的放 `skins.equipped` 的四個位置：`houseDoll`（晴天娃娃 10、買一次）、`houseSign`（門牌 HOME／貓爪狗骨頭／AEMC LAB 各 3，同時只能掛一個）、`towerBellman`（敲鐘人 6、買一次）、`towerFlag`（旗幟 腳印／時鐘／AEMC 各 3，同時只能掛一個）。買了立刻掛上（`purchase` 的 skin 分支），之後可切換（`equipSkin`）、可取下（null，仍擁有）。商店在「建築」分頁外殼列之後，四列（`房屋配件：晴天娃娃`／`房屋配件：門牌`／`鐘樓配件：敲鐘人`／`鐘樓配件：旗幟`），第一張卡是「不掛」，按鈕「取下」。
+- **掛點**（`ACC_MOUNT`，相對房屋／鐘樓素材左上角；所有房屋外觀 139×134、所有鐘樓外觀 123×160，門、窗、鐘面位置共用，所以同一組座標對每個外觀都有效，含亞特蘭提斯）：晴天娃娃掛在屋簷下左邊 (12, 66)、門牌掛在門右側牆上 (77, 78)（兩者上方中心是掛點）、旗桿插在主塔頂右端 (83, 31)、敲鐘人站在塔底右側 (104, 158)（旗桿底、腳底是錨點）。測試逐外觀（房屋 21 張、鐘樓 14 張）驗證配件不透明像素不蓋房屋門、塔門、窗戶點擊區、鐘面（含金框）、招牌「遊戲」。引擎 `drawAcc` 畫在目前的房屋／鐘樓圖上。
+- **晴天娃娃的天氣加成**：掛著才有（取下就沒有）；下雨機率 −5%、晴天機率 +5%（絕對值）。`sim/worldTime.weatherAt(ms, sunnyDoll)` 把權重換算（晴天 +0.05×總權重、下雨 −0.05×總權重）再用原本的抽選；沒娃娃時和舊公式逐區段相同。`overrides.worldWeather(nowMs, save)` 是**唯一的入口**（6 處呼叫：`PicnicButton`、`index.tsx`×3、`farmStore`×2，一律傳存檔；測試掃原始碼確認沒有人直接呼叫 `weatherAt`、`worldWeather` 剛好 6 處都傳存檔）。
+- **傳說展示台**（`config/legendStand.ts`，擺設種類 `legend_stand`，不賣）：事件 `legendStand`（`config/events.ts`，在傳說配對之後；0 金幣、載入時補送 `retro`）：任一對傳說（狗＝保險箱鑰匙 L001＋保險箱 L002、貓＝亞特蘭提斯雷射 L003＋山銅 L004）集齊就送一個實例 `legend_stand#N`（`shop.decor`，沒有擺放紀錄 = 放進倉庫），旗標 `events.legendStand` 保證只送一次（載入補送舊存檔、之後展示台不見了也不重送；半對不送）。彈窗沿用事件對話框（「更新補發：」），合併彈窗的 0 金幣項目顯示「已放進倉庫」。**台面顯示**最先集齊的那一對（依 `events.dogVault`／`catAtlantis` 的時間，沒有就狗先）的兩件傳說道具（收藏冊圖示 48×48 縮成 24×24 並排站在台面中央，引擎 `drawStandItems`）；兩對都集齊時點展示台（`engine.hitTest` 的 `stand`）切換，選擇存在 `events.legendStandView`（1 = 顯示後集齊的那一對）。**不佔購買上限**：`sim/shop.decorTotal` 不算 `legend_stand`；但它是一般擺設（腳下佔地 = 0.8 倍素材寬 × 深 10、有輪廓），會佔場景擺放空間。
+- **B2 小修（C 一併做）**：森林、無塵室、龐克的地板只用 A～C（D 的位置補 A，`FLOOR_BLOCKS`）；無塵室與龐克的小路原圖右緣有漸層瑕疵，只取樣到瑕疵段之前（`PATH_X1`：2040、2008，整數個條紋週期，接縫誤差各約 1～2%）；無塵室窗角的粉紫斜線是原圖就有的（不透明的 (255,~120,255) 筆觸，原圖 13776 個像素），保留；遠景、小路、地板的近洋紅檢查擴到任何位置（不只貼透明處）。
+- **測試**：`tests-archive/v400c/`（見 README；`adapt-c.py` 是對既有測試的預期值異動）。

@@ -4,7 +4,11 @@ import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
 import { isPicnicNapping } from './picnic'
 import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, MAT_SNACKS, SNACK_KEYS, cameraRect, picnicMatRect, picnicSnacks, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
-import { skinDef } from '../config/skins'
+import { SKIN_PARTS, equippedSkinDef, type SkinPart, type ThemeId } from '../config/skins'
+import { ENV_WINDOW_THEMES, GLOW, LAMP_GLOW_DEFAULT, envKeys, envThemeOf, type GlowDef } from '../config/envThemes'
+import { ENV_SLOT } from '../config/shop'
+import { ACC_MOUNT, ACC_SLOTS, accDef, type AccPart } from '../config/accessories'
+import { PAIR_ITEMS, type LegendPair } from '../config/legendStand'
 import type { RevealResult } from '../sim/dig'
 import { BALANCE } from '../config/balance'
 import { buildingDef } from '../config/buildings'
@@ -20,7 +24,7 @@ import {
   POND_AX, POND_H, WATER, setPlacement, toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
   boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
-import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
+import { isOverflowSeat, kennelGeometry, releaseUse, seatsOf, setSkinGeometry } from './buildingUse'
 import {
   PLAY_OPS, assetPrefix, beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, frameNameOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
@@ -43,7 +47,7 @@ export interface FrameInfo {
   gifts: string[]
 }
 
-export type Hit = { kind: 'pet' | 'gift' | 'find'; id: string } | { kind: 'door' }
+export type Hit = { kind: 'pet' | 'gift' | 'find' | 'stand'; id: string } | { kind: 'door' }
 
 /** 引擎對外的連接點：扣點洗澡、叫醒、提示訊息（由畫面層接到 store 與 toast） */
 export interface EngineHooks {
@@ -126,9 +130,12 @@ import { layoutWith } from './placeRules'
 import { pickObject } from './editDrag'
 import { picnicMatFitsAt } from './picnic'
 import type { LayoutKind } from '../config/layoutItems'
-import type { FarmLayout } from '../save/types'
+import type { DecorInstance, FarmLayout } from '../save/types'
 
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
+/** 傳說展示台素材（71×30）台面中央的列：台面上的道具腳底落在這一列 */
+const STAND_TOP = 11
+
 export class PixelEngine {
   layout: Layout = computeLayout(1280, 692, 1)
   actors = new Map<string, Actor>()
@@ -137,6 +144,9 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
+  /** 4.0-C 傳說展示台：台面顯示哪一對傳說道具（null = 一對都沒集齊，台面空的）、兩對都集齊時點展示台可以切換（畫面層依存檔設定） */
+  standPair: LegendPair | null = null
+  standToggle = false
   /**
    * 滑鼠互動（v3.8.1，hover.ts）：停下來看你、黏人靠近、膽小閃開、摸頭、小名字標籤、貓拍狗吠。
    * enabled 由畫面層依「這個裝置有沒有 hover 能力（桌面滑鼠）」設定；預設關閉（Node 測試與觸控裝置不受影響）。
@@ -152,6 +162,8 @@ export class PixelEngine {
   /** 已購買的建築 id（存檔的 ownedBuildings）；食盆今天還剩幾份 */
   /** v3.9.0：存檔的 farmLayout 與算出來的擺放結果（setLayoutData 時換新的） */
   private farmLayout: FarmLayout | undefined = undefined
+  /** v4.0：存檔 shop.decor（商店買來的擺設實例） */
+  private decor: readonly DecorInstance[] | undefined = undefined
   placement: Placement = defaultPlacement()
   /**
    * v3.9.0 擺設模式（農場模式）：寵物暫停（位置與動畫都停住）、滑鼠互動關閉；畫面層同時隱藏畫布上的透明入口。
@@ -305,17 +317,18 @@ export class PixelEngine {
    * 設定已購買的建築（存檔變動時呼叫）：保留目前的擺放紀錄，重新算擺放結果（見 setLayoutData）。
    */
   setOwned(ids: readonly string[]): void {
-    this.setLayoutData(ids, this.farmLayout)
+    this.setLayoutData(ids, this.farmLayout, this.decor)
   }
 
   /**
    * v3.9.0：設定已購買的建築與存檔的擺放紀錄（任一個變動時呼叫）→ 換一個新的擺放結果（擺放版本 +1，所有版面快取跟著失效）。
    * 擺出來的物件腳下佔地是障礙，寵物繞行；站在新障礙裡的寵物會被推出來。載入時不檢查重疊、不改寫存檔。
    */
-  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined): void {
+  setLayoutData(owned: readonly string[], farmLayout: FarmLayout | undefined, decor?: readonly DecorInstance[]): void {
     const before = this.buildings()
     this.farmLayout = farmLayout
-    this.placement = resolvePlacement(owned, farmLayout)
+    this.decor = decor
+    this.placement = resolvePlacement(owned, farmLayout, decor)
     setPlacement(this.layout, this.placement)
     // v3.9.0：建築收進庫存或換了位置 → 正在使用（走過去、坐著、睡著、吃著）的寵物離開那個建築，回到座位旁的地面
     // （睡著的繼續睡，之後照一般規則睡在地上或走去新位置）。座位旁剛好被別的物件佔住就推到最近的可站位置
@@ -408,6 +421,7 @@ export class PixelEngine {
   }
 
   update(dt: number, f: FrameInfo): void {
+    this.syncSkinGeometry()
     this.time += dt
     this.lastFrame = f
     if (this.editing) {
@@ -467,6 +481,7 @@ export class PixelEngine {
     const L = this.renderLayout()
     const f = this.lastFrame
     if (!assets.ready) return
+    this.syncSkinGeometry()
     // v3.9.0 非整數倍：先在 1 倍的暫存畫布畫出整個可見範圍，再關掉平滑等比放大貼上（不會有接縫，像素寬度會差 1 個裝置像素）
     if (!view && !L.whole) {
       this.renderScaled(ctx)
@@ -480,13 +495,19 @@ export class PixelEngine {
     const ext = view ? view.ext : L.view
 
     const night = this.isHouseLit(f.hour)
+    // 4.0-B2 環境主題：穿著且圖集載入完成 = 用主題的遠景／地板／小路／路燈／樹，否則（沒穿、還沒載入）用預設草地，和以前逐像素相同
+    const env = this.envNow()
+    const ek = env ? envKeys(env) : null
+    // 無塵室的遠景是「看窗外」：雨雪畫在雲之後、遠景之前（只出現在窗玻璃裡，牆與地面不會有雨）；其他主題的順序不變（雨雪在最上層）
+    const windowView = env !== null && ENV_WINDOW_THEMES.has(env)
     drawSky(ctx, L, f.hour, f.weather, ext)
     drawStars(ctx, L, f.hour, this.time, ext)
     drawCelestial(ctx, L, f.hour, f.weather)
     drawClouds(ctx, L, f.weather, this.time, 0, ext)
-    drawFar(ctx, L, ext)
-    drawGrass(ctx, L, ext)
-    drawPath(ctx, L, ext)
+    if (windowView && (f.weather === 'rain' || f.weather === 'snow')) drawDrops(ctx, this.drops, f.weather)
+    drawFar(ctx, L, ext, ek?.far)
+    drawGrass(ctx, L, ext, ek?.floor)
+    drawPath(ctx, L, ext, ek?.path)
     // v3.8.0 野餐墊（落地後）：平鋪在地上，畫在所有物件與寵物之前（墊子頂端在後排景物腳底之下，所以不會蓋到樹與裝飾）
     const pst = this.picnicState
     const mat = pst?.mat ?? null
@@ -500,12 +521,15 @@ export class PixelEngine {
       y: L.house.baseY,
       draw: () => {
         const s = this.houseSprite(night)
-        if (s) drawSprite(ctx, s, L.house.x0 + s.ax, L.house.baseY)
+        if (s) {
+          drawSprite(ctx, s, L.house.x0 + s.ax, L.house.baseY)
+          this.drawAcc(ctx, 'house', L.house.x0, L.house.baseY - s.ay)
+        }
       },
     })
     const pond = pondPos(L)
     // v3.7.0：公佈欄（水池上方的遠景區，腳底在草地上緣，排在所有後排物件之前）
-    const board = assets.get('board')
+    const board = this.kindSprite('board')
     if (board) {
       const bp = boardPos(L)
       items.push({ y: bp.y, draw: () => drawSprite(ctx, board, bp.x, bp.y) })
@@ -516,20 +540,22 @@ export class PixelEngine {
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
-      const key = KIND_GEOM[o.kind].sprite
-      const s = o.key === 'clocktower' ? this.towerSprite() : key ? assets.get(key) : null
+      // 4.0-B1：穿了外殼就用外殼的圖（kindSprite 集中處理；鐘樓依滑鼠換開門版）
+      const s = this.kindSprite(o.kind)
       if (!s) continue
       items.push({
         y: o.y,
         draw: () => {
           drawSprite(ctx, s, o.x, o.y)
+          if (o.kind === 'tower') this.drawAcc(ctx, 'tower', Math.round(o.x) - s.ax, Math.round(o.y) - s.ay)
+          else if (o.kind === 'legend_stand') this.drawStandItems(ctx, Math.round(o.x) - s.ax, Math.round(o.y) - s.ay)
         },
       })
     }
     // 已購買的建築（這個視窗放得下的才畫）：依腳底 y 排前後；食盆空了在上方顯示「空」
     for (const slot of ownedSlots(L)) {
       const def = buildingDef(slot.id)
-      const spr = def?.sprite ? assets.get(def.sprite) : null
+      const spr = this.skinFrame(slot.id as SkinPart) ?? (def?.sprite ? assets.get(def.sprite) : null)
       if (spr) items.push({ y: slot.y, draw: () => drawSprite(ctx, spr, slot.x, slot.y) })
       if (slot.id === 'bowls' && this.bowlLeft <= 0) items.push({ y: slot.y + 60, draw: () => drawEmptyIcon(ctx, slot.x, slot.y - slot.h - 3 + Math.round(Math.sin(this.time * 3) * 1)) })
     }
@@ -624,7 +650,7 @@ export class PixelEngine {
     ctx.globalAlpha = 1
 
     // 天氣
-    if (f.weather === 'rain' || f.weather === 'snow') drawDrops(ctx, this.drops, f.weather)
+    if ((f.weather === 'rain' || f.weather === 'snow') && !windowView) drawDrops(ctx, this.drops, f.weather)
 
     // 夜晚：暗色疊層，之後再畫鐘面、路燈光暈
     const dark = drawDarkness(ctx, L, f.hour, f.weather, ext)
@@ -648,8 +674,17 @@ export class PixelEngine {
     }
     const glow = Math.min(1, Math.max(0, (dark - 0.18) / 0.3))
     if (glow > 0) {
-      const lamp = sceneObjects(L).find((o) => o.key === 'lamp')
-      if (lamp) drawGlow(ctx, lamp.x, lamp.y - 62, glow)
+      // 路燈的光暈錨點依環境主題各自設定（原本寫死「腳下往上 62」= 預設路燈）；水晶球座、資訊終端擺出來也各自發光（GLOW 表）
+      const objs = sceneObjects(L)
+      const lamp = objs.find((o) => o.key === 'lamp')
+      if (lamp) {
+        const g: GlowDef = (env ? GLOW[`lamp_${env}`] : undefined) ?? LAMP_GLOW_DEFAULT
+        drawGlow(ctx, lamp.x + g.dx, lamp.y - g.dy, glow, g === LAMP_GLOW_DEFAULT ? undefined : g)
+      }
+      for (const o of objs) {
+        const g = o.kind === 'crystal_ball' || o.kind === 'info_terminal' ? GLOW[o.kind] : undefined
+        if (g && assets.get(o.kind)) drawGlow(ctx, o.x + g.dx, o.y - g.dy, glow, g)
+      }
     }
 
     // 「可揭曉」的星星（疊在每個寶物上方）與揭曉動畫（在暗色疊層之上，夜晚也清楚）
@@ -787,11 +822,12 @@ export class PixelEngine {
 
   /** 水池本體＋泡澡中的寵物（用水面橢圓裁切，只露出水面以上）＋漣漪 */
   private drawPond(ctx: CanvasRenderingContext2D, x: number, y: number, f: FrameInfo): void {
-    const s = assets.get('pond')
+    const s = this.kindSprite('pond')
     if (!s) return
     drawSprite(ctx, s, x, y)
-    // 水面跟著這次畫的水池位置（擺設模式拖曳水池時是預覽位置）
-    const w = { cx: x - POND_AX + WATER.cx, cy: y - POND_H + WATER.cy, rx: WATER.rx, ry: WATER.ry }
+    // 水面跟著這次畫的水池位置（擺設模式拖曳水池時是預覽位置）；4.0-B1：池塘外裝用該外觀自己的水面（只影響泡澡裁切與漣漪）
+    const wm = s.meta?.water ?? WATER
+    const w = { cx: x - POND_AX + wm.cx, cy: y - POND_H + wm.cy, rx: wm.rx, ry: wm.ry }
     const line = w.cy + 6 // 水面線
     for (const a of this.actors.values()) {
       if (a.bath?.phase !== 'soak') continue
@@ -847,13 +883,14 @@ export class PixelEngine {
     const spr = this.actorSprite(a)
     const left = slot.x - KENNEL_AX
     const top = slot.y - KENNEL_H
+    const kg = kennelGeometry()
     return {
-      x: left + KENNEL_INSIDE_RIGHT - (spr ? spr.w - spr.ax : 24),
-      y: top + KENNEL_INSIDE_BOTTOM,
-      clip: KENNEL_DOOR_CLIP.map((r) => ({ x0: left + r.x0, x1: left + r.x1, y0: top + r.y0, y1: top + r.y1 })),
+      x: left + kg.insideRight - (spr ? spr.w - spr.ax : 24),
+      y: top + kg.insideBottom,
+      clip: kg.clip.map((r) => ({ x0: left + r.x0, x1: left + r.x1, y0: top + r.y0, y1: top + r.y1 })),
       sortY: slot.y + 0.5,
-      iconX: left + KENNEL_DOOR_CX,
-      iconBottom: top + KENNEL_DOOR_CLIP[0].y0 - 2,
+      iconX: left + kg.doorCx,
+      iconBottom: top + kg.clip[0].y0 - 2,
     }
   }
 
@@ -881,7 +918,7 @@ export class PixelEngine {
   /** 住家的圖：穿了外觀（圖集 skins 已載入）就用外觀的，否則用預設圖 */
   private houseSprite(night: boolean): Sprite | null {
     const base = night ? 'house_night' : this.doorHover ? 'house_open' : 'house_closed'
-    const def = this.skins.house ? skinDef(this.skins.house) : undefined
+    const def = equippedSkinDef(this.skins, 'house')
     const k = def ? (night ? def.frames.night : this.doorHover ? def.frames.open : def.frames.closed) : null
     return (k ? assets.get(k) : null) ?? assets.get(base)
   }
@@ -889,7 +926,7 @@ export class PixelEngine {
   /** 鐘樓的圖（滑鼠在門上換開門版）：穿了外觀就用外觀的 */
   private towerSprite(): Sprite | null {
     const base = this.towerHover ? 'clocktower_open' : 'clocktower'
-    const def = this.skins.tower ? skinDef(this.skins.tower) : undefined
+    const def = equippedSkinDef(this.skins, 'tower')
     const k = def ? (this.towerHover ? def.frames.open : def.frames.closed) : null
     return (k ? assets.get(k) : null) ?? assets.get(base)
   }
@@ -1061,6 +1098,8 @@ export class PixelEngine {
     }
     const a = this.petAt(x, y)
     if (a) return { kind: 'pet', id: a.id }
+    const st = this.standHit(x, y)
+    if (st) return { kind: 'stand', id: st }
     // 寶物（土堆、布包，連同上方的「可揭曉」星星）：腳底往上約 2 倍半徑、往下半個半徑；y 大的在前面先判斷
     const R = this.findReach()
     const pts = this.findPoints()
@@ -1140,7 +1179,7 @@ export class PixelEngine {
 
   /**
    * v3.7.0 工具包的點擊區（CSS 座標）：窗戶（計算機）、鐘面（碼表與倒數）、塔門（遊戲館）、公佈欄。
-   * 鐘面位置用目前鐘樓圖（含開門版、黃金鐘樓）的 meta.clock；不足 minCss 的點擊區放大（畫面不變）。
+   * 鐘面位置用目前鐘樓圖（含開門版、外殼鐘樓）的 meta.clock；不足 minCss 的點擊區放大（畫面不變）。
    */
   toolHits(minCss: number): ToolHits {
     return toolHitRects(this.layout, this.towerSprite()?.meta?.clock, minCss)
@@ -1515,12 +1554,85 @@ export class PixelEngine {
     }
   }
 
-  /** 物件種類的素材（住家、鐘樓依目前狀態挑圖） */
+  /** 物件種類的素材（住家、鐘樓依目前狀態挑圖；4.0-B1：池塘、公佈欄、狗窩、貓跳台、食盆穿了外殼就用外殼的圖） */
   private kindSprite(kind: LayoutKind): Sprite | null {
     if (kind === 'house') return this.houseSprite(this.isHouseLit(this.lastFrame.hour))
     if (kind === 'tower') return this.towerSprite()
+    if ((SKIN_PARTS as readonly string[]).includes(kind)) {
+      const s = this.skinFrame(kind as SkinPart)
+      if (s) return s
+    }
+    // 4.0-B2：環境主題的路燈、樹（圖集還沒載入 = 預設圖）
+    if (kind === 'lamp' || kind === 'tree') {
+      const env = this.envNow()
+      const s = env ? assets.get(kind === 'lamp' ? envKeys(env).lamp : envKeys(env).tree) : null
+      if (s) return s
+    }
     const key = KIND_GEOM[kind].sprite
     return key ? assets.get(key) : null
+  }
+
+  /**
+   * 4.0-C 傳說展示台：台面（素材左上角 tlx、tly；台面上緣約在素材第 STAND_TOP 列）放最先集齊那一對的兩件傳說道具（收藏冊圖示 48×48 縮成一半 24×24，剛好 2 倍整數縮放），並排站在台面中央。
+   * 道具往上超出展示台的素材外框（站在台面上），不影響擺放判斷（輪廓只算展示台本身）。
+   */
+  private drawStandItems(ctx: CanvasRenderingContext2D, tlx: number, tly: number): void {
+    if (!this.standPair) return
+    const stand = assets.get('legend_stand')
+    if (!stand) return
+    PAIR_ITEMS[this.standPair].forEach((key, i) => {
+      const s = assets.get(key)
+      if (!s) return
+      const w = Math.round(s.w / 2), h = Math.round(s.h / 2)
+      const cx = tlx + stand.ax + (i === 0 ? -13 : 13)
+      ctx.drawImage(s.img, s.x, s.y, s.w, s.h, cx - Math.floor(w / 2), tly + STAND_TOP - h, w, h)
+    })
+  }
+
+  /** 展示台上的道具與台面的點擊範圍（兩對都集齊時點一下切換）：展示台素材外框，再往上加道具的高度 */
+  private standHit(x: number, y: number): string | null {
+    if (!this.standToggle) return null
+    for (const p of this.layout.placement.placed.values()) {
+      if (p.kind !== 'legend_stand') continue
+      const b = spriteBoxAt('legend_stand', p.x, p.y)
+      if (x >= b.x0 && x < b.x1 && y >= b.y0 - 24 && y < b.y1) return p.id
+    }
+    return null
+  }
+
+  /**
+   * 4.0-C 房屋與鐘樓配件：畫在目前的房屋／鐘樓圖上（tlx、tly = 素材左上角）。掛點是相對素材左上角的固定座標（config/accessories.ts 的 ACC_MOUNT），
+   * 所有房屋／鐘樓外觀的畫布大小相同，所以每個外觀都用同一組座標；圖集 acc 還沒載入 = 不畫。
+   */
+  private drawAcc(ctx: CanvasRenderingContext2D, part: AccPart, tlx: number, tly: number): void {
+    for (const slot of ACC_SLOTS) {
+      const d = accDef(this.skins[slot])
+      if (!d || d.part !== part || d.slot !== slot) continue
+      const s = assets.get(d.frame)
+      if (s) drawSprite(ctx, s, tlx + ACC_MOUNT[slot].x, tly + ACC_MOUNT[slot].y)
+    }
+  }
+
+  /** 4.0-B2：目前生效的環境主題（穿著、而且 env_<主題> 圖集已載入）；沒穿或還沒載入 = null = 預設草地 */
+  envNow(): ThemeId | null {
+    const t = envThemeOf(this.skins[ENV_SLOT])
+    return t && assets.has(envKeys(t).far) && assets.get(envKeys(t).far) ? t : null
+  }
+
+  /** 4.0-B1：某個部位穿著的外殼圖（只看 closed；沒穿或圖集還沒載入 = null，呼叫端退回預設圖） */
+  private skinFrame(part: SkinPart): Sprite | null {
+    const d = equippedSkinDef(this.skins, part)
+    return d ? assets.get(d.frames.closed) : null
+  }
+
+  /** 4.0-B1：狗窩門洞、貓跳台座位跟著畫面上真的畫出來的圖（外殼圖載入後才換，之前用預設） */
+  private lastGeom: unknown = null
+  private syncSkinGeometry(): void {
+    const door = this.skinFrame('kennel')?.meta?.door ?? null
+    const seats = this.skinFrame('catTree')?.meta?.seats ?? null
+    if (this.lastGeom && (this.lastGeom as { door: unknown; seats: unknown }).door === door && (this.lastGeom as { door: unknown; seats: unknown }).seats === seats) return
+    this.lastGeom = { door, seats }
+    setSkinGeometry(door, seats)
   }
 
   /** 素材的紅色版本（不合法的位置）：不透明像素疊半透明紅色，快取 */

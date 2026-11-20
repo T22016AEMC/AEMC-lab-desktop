@@ -71,7 +71,7 @@ async function importFile(page) {
   await page.clock.runFor(5000)
   await page.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).points === 124, KEY)
   const raw1 = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY)
-  ok(same(raw1.farmLayout.items, CLEAN) && raw1.dataRev === 5 && raw1.schemaVersion === 5, '自動存檔後：合法紀錄原樣保留（重疊的路燈與狗窩位置沒動）、dataRev 4（v3.10.0：5）、schema 5')
+  ok(same(raw1.farmLayout.items, CLEAN) && raw1.dataRev === 6 && raw1.schemaVersion === 5, '自動存檔後：合法紀錄原樣保留（重疊的路燈與狗窩位置沒動）、dataRev 4（v3.10.0：5；v4.0：6）、schema 5')
   // 匯入格式 6：確認視窗有「農場擺放」那一行
   await importFile(page)
   await page.getByTestId('import-confirm').waitFor({ state: 'visible' })

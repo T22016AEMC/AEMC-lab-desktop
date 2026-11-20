@@ -79,15 +79,16 @@ export interface PlayOps {
 /**
  * 叼球時球心的位置：各品種、各幀，相對腳底錨點（面向右時；往左走水平翻轉，x 跟著反號）。y 是球心離腳底的高度（負 = 往上）。
  * 逐張量過吻部最右邊的不透明像素（上半身），球心放在吻部前緣往內 1 像素、嘴的高度；柯基頭小，球往下 2 像素。
- * 球是 toy_ball_s（11×12）。改狗素材後要重量（測試會檢查每個品種都有 stand／walk_a／walk_b）。
+ * 球是 toy_ball_s（11×11）。改狗素材後要重量（測試會檢查每個品種都有 stand／walk_a／walk_b）。
+ * 4.0-R（原圖換成整齊 4×4 格）：逐幀量「上半身最右邊的不透明像素」換圖前後的位移，照位移平移（8 格動了 1 像素，其餘不變）。
  */
 export const MOUTH: Record<string, Record<string, readonly [number, number]>> = {
-  shiba: { stand: [17, -20], walk_a: [19, -19], walk_b: [19, -18] },
-  corgi: { stand: [16, -14], walk_a: [17, -15], walk_b: [17, -15] },
-  husky: { stand: [21, -24], walk_a: [23, -22], walk_b: [23, -24] },
-  golden: { stand: [23, -31], walk_a: [26, -31], walk_b: [27, -32] },
-  collie: { stand: [21, -25], walk_a: [23, -25], walk_b: [23, -25] },
-  poodle: { stand: [15, -20], walk_a: [17, -20], walk_b: [18, -20] },
+  shiba: { stand: [17, -20], walk_a: [19, -19], walk_b: [19, -19] },
+  corgi: { stand: [16, -14], walk_a: [16, -14], walk_b: [17, -15] },
+  husky: { stand: [21, -24], walk_a: [23, -22], walk_b: [23, -23] },
+  golden: { stand: [23, -31], walk_a: [25, -30], walk_b: [27, -32] },
+  collie: { stand: [20, -26], walk_a: [23, -25], walk_b: [23, -25] },
+  poodle: { stand: [15, -20], walk_a: [17, -19], walk_b: [18, -19] },
 }
 
 export function mouthOffset(assetKey: string, frame: string, facing: 1 | -1): { x: number; y: number } | null {

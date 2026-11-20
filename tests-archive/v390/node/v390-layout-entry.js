@@ -61,7 +61,9 @@ const man = JSON.parse(readFileSync(DIR + readdirSync(DIR).find((f) => /^manifes
 {
   for (const [k, e] of Object.entries(ENVELOPES)) {
     const f = man.frames[{ house: 'house_closed' }[k] ?? k]
-    eq([e.w, e.h, e.ax, e.ay], [f.w, f.h, f.ax, f.ay], 'B 輪廓尺寸與錨點和 manifest 相同：' + k)
+    // 4.0-B1：輪廓含外殼聯集（腳底對齊），高度可以比預設圖高（食盆外殼 31、預設 27）
+    eq([e.w, e.ax, e.ay], [f.w, f.ax, e.h], 'B 輪廓寬度與錨點和 manifest 相同、腳底在底邊：' + k)
+    ok(e.h >= f.h, 'B 輪廓高度至少是預設圖的高度：' + k)
   }
   const L = mkL()
   const items = [...L.placement.placed.values()]

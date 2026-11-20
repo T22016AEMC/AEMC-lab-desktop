@@ -91,11 +91,16 @@ function hash32(n: number): number {
   return (h ^ (h >>> 16)) >>> 0
 }
 
+/** 晴天娃娃對天氣機率的調整（絕對值：下雨 −5%、晴天 +5%） */
+export const SUNNY_DOLL_SHIFT = 0.05
+
 /** 每隔數小時換一次天氣；用時間區段當種子，所以重新整理不會跳變，也不用連網 */
-export function weatherAt(ms: number): Weather {
+export function weatherAt(ms: number, sunnyDoll = false): Weather {
   const block = Math.floor(ms / (BALANCE.weatherBlockHours * 3_600_000))
-  const w = BALANCE.weatherWeights
-  const total = w.sunny + w.cloudy + w.rain + w.snow
+  const base = BALANCE.weatherWeights
+  const total = base.sunny + base.cloudy + base.rain + base.snow
+  // 4.0-C 晴天娃娃：下雨機率 −5%、晴天機率 +5%（絕對值：權重換算成機率後加減，其他天氣不變；沒有娃娃時和以前完全相同）
+  const w = sunnyDoll ? { ...base, sunny: base.sunny + SUNNY_DOLL_SHIFT * total, rain: Math.max(0, base.rain - SUNNY_DOLL_SHIFT * total) } : base
   let r = (hash32(block) / 4294967296) * total
   for (const k of ['sunny', 'cloudy', 'rain', 'snow'] as const) {
     if (r < w[k]) return k

@@ -24,6 +24,10 @@ export interface Frame {
     window?: { x0: number; y0: number; x1: number; y1: number }
     /** v3.8.0 野餐墊的墊面（每 4 列一筆 [y, 左緣, 右緣)） */
     mat?: { top: number; bottom: number; rows: [number, number, number][] }
+    /** 4.0-B1 外殼：池塘水面（相對素材左上角）、狗窩門洞與貓跳台座位（和預設圖的差） */
+    water?: { cx: number; cy: number; rx: number; ry: number }
+    door?: { dx: number; dyTop: number; dyFront: number }
+    seats?: { dyTop: number; dyMid: number }
   }
 }
 
@@ -47,8 +51,11 @@ export interface LoadProgress {
 
 const RETRIES = 2
 
-/** 不在啟動時載入的圖集（解鎖才用到）：外觀（金色住家、黃金鐘樓）。用 assets.loadGroup(名稱) 載入，載入前 assets.get 回傳 null，畫面用預設圖 */
-export const LAZY_ATLASES: readonly string[] = ['skins', 'polaroid'] // v3.8.0：拍立得相框在野餐開始時才載入
+/**
+ * 不在啟動時載入的圖集（解鎖才用到）：外殼（4.0-B1 依部位拆開：住家、鐘樓、池塘、公佈欄、小建築）；4.0-B2：環境主題（env_<主題>，穿上才載入）、商店縮圖 env_thumbs、主題裝飾 decor_themes（有買、或開商店裝飾品分頁才載入）。用 assets.loadGroup(名稱) 載入，
+ * 載入前 assets.get 回傳 null，畫面用預設圖。v3.8.0：拍立得相框在野餐開始時才載入
+ */
+export const LAZY_ATLASES: readonly string[] = ['skins_house', 'skins_tower', 'skins_pond', 'skins_board', 'skins_small', 'polaroid', 'env_atlantis', 'env_cleanroom', 'env_forest', 'env_magic', 'env_punk', 'env_plaid', 'env_thumbs', 'decor_themes', 'acc']
 
 async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   let last: unknown

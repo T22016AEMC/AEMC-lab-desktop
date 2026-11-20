@@ -16,7 +16,7 @@ const MENU = 28
 const SZ17 = [[1920, 900, 1], [1920, 930, 1], [1920, 950, 1], [1900, 1000, 1.25], [1920, 1000, 1], [1920, 1120, 1], [1536, 730, 1], [1536, 864, 1], [1440, 780, 1], [1366, 650, 1], [1280, 620, 1], [1280, 720, 1], [1024, 768, 1], [2560, 1300, 1], [2560, 1440, 1], [1536, 730, 1.25], [1920, 930, 1.25]]
 const DIR = (process.env.REPO_ROOT + '/public/assets/')
 const man = JSON.parse(readFileSync(DIR + readdirSync(DIR).find((f) => /^manifest\..*\.json$/.test(f)), 'utf8'))
-const CLOCKS = ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold'].map((k) => [k, man.frames[k].meta.clock])
+const CLOCKS = ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open'].map((k) => [k, man.frames[k].meta.clock]) // 4.0-B1：全黃金鐘樓換成亞特蘭提斯鐘樓
 const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
 const rows = []
 
@@ -38,7 +38,7 @@ for (const [vw, vh, d] of SZ17) {
     // ---- 1. 和 v3.6.3 完全相同的部分 ----
     // v3.9.0：洗澡通道、障礙（改成腳下佔地）、寵物活動範圍（整片地面）、野餐墊空位是刻意改的，不再比對
     eq(__pondStand(L), OLD.pondStand(O), tag + ' 洗澡站位不變')
-    eq(LAY.buildingSlots(L), OLD.buildingSlots(O).filter((s) => s.id !== 'picnicMat'), tag + ' 三個建築位置不變')
+    eq(LAY.buildingSlots(L), OLD.buildingSlots(O).filter((s) => s.id !== 'picnicMat').map((s) => (s.id === 'bowls' ? { ...s, h: 27 } : s)), tag + ' 三個建築位置不變（4.0-R：食盆水盆素材高 26→27）')
     eq(LAY.sceneObjects(L).map((o) => ({ key: o.key, x: o.x, y: o.y })), OLD.sceneObjects(O), tag + ' 場景物件位置不變')
     // v3.9.0：buildingAvailability 已拿掉（場景固定，三個建築一定擺得下）
     // ---- 2. 公佈欄的位置 ----

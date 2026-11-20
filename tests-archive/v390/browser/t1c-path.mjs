@@ -9,7 +9,7 @@ const SCEN = [
   { name: '多雲傍晚、三個建築', hour: 17.5, weather: 'cloudy', owned: ['kennel', 'bowls', 'catTree'] },
   { name: '夜晚、三個建築（路燈光暈、鐘面）', hour: 22, weather: 'sunny', owned: ['kennel', 'bowls', 'catTree'] },
   { name: '夜晚、鐘塔開門（暖光）', hour: 22, weather: 'sunny', owned: [], towerHover: true },
-  { name: '金色住家＋黃金鐘樓', hour: 10, weather: 'sunny', owned: ['kennel'], skins: { house: 'house.gold', tower: 'tower.gold' } },
+  // 4.0-B1：全黃金住家／鐘樓換成亞特蘭提斯（新圖、新鍵名、圖集拆成 skins_house／skins_tower），和 v3.8.1 比沒有意義，移除這個情境（外殼由 tests-archive/v400b1 測）
   { name: '下雨（固定雨絲）', hour: 13, weather: 'rain', owned: ['bowls'], drops: true },
   { name: '下雪（固定雪花）', hour: 8, weather: 'snow', owned: [], drops: true },
 ]
@@ -23,7 +23,7 @@ async function boot(url) {
   await bt.click()
   await bt.waitFor({ state: 'detached' })
   await page.waitForFunction(async () => (await import('/src/farm/pixel/assets.ts')).assets.ready)
-  await page.evaluate(async () => (await import('/src/farm/pixel/assets.ts')).assets.loadGroup('skins'))
+  await page.evaluate(async () => (await import('/src/farm/pixel/assets.ts')).assets.loadGroup('skins').catch(() => {})) // 4.0-B1：skins 圖集已拆開（新版沒有）
   return page
 }
 async function shoot(page, [w, h], sc, raw = false) {

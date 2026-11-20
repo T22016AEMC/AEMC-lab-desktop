@@ -5,6 +5,9 @@ import { useUIStore } from '../store/uiStore'
 import { useWindowStore } from '../store/windowStore'
 import { BALANCE } from './config/balance'
 import { gameNow, overrides, worldHour, worldWeather } from './overrides'
+import { skinAtlasesFor } from './config/skins'
+import { DECOR_ATLAS, isThemeDecorKind } from './config/themeDecor'
+import { PAIR_NAME, legendStandView } from './config/legendStand'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
@@ -13,11 +16,11 @@ import { bowlLeft } from './sim/buildings'
 import { findsBlock } from './sim/dig'
 import { useFarmStore } from './store/farmStore'
 import { AdoptDialog } from './ui/AdoptDialog'
+import { ShopDialog } from './ui/ShopDialog'
 import { EventDialog } from './ui/EventDialog'
 import { LegacyRefundNotice } from './ui/LegacyRefundNotice'
 import { NewerDataNotice } from './ui/NewerDataNotice'
 import { ResetNotice } from './ui/ResetNotice'
-import { BuildLayer } from './ui/BuildLayer'
 import { EditLayer } from './ui/EditLayer'
 import { PICK_TEXT, PicnicPickLayer } from './ui/PicnicPickLayer'
 import { isFarmHotkey } from './ui/farmHotkey'
@@ -90,14 +93,14 @@ export function Farm() {
   const petCount = useFarmStore((s) => s.save?.pets.length ?? 0)
   /** 還沒有任何寵物（全新玩家，或一次性重置之後）：走第一次領養流程（第一隻免費）；重置提示或失敗說明顯示期間先不顯示 */
   const needFirst = useFarmStore((s) => (s.save === null || s.save.pets.length === 0) && !s.save?.resetNotice && !s.resetFailed && !s.newerData)
-  const adoptOpen = useUIStore((s) => s.adoptOpen)
+  /** v4.0：商店開著（取代領養視窗） */
+  const shopOpen = useUIStore((s) => s.shopTab !== null)
   const launchpadOpen = useUIStore((s) => s.launchpadOpen)
   const aboutOpen = useUIStore((s) => s.aboutOpen)
   const collectionOpen = useUIStore((s) => s.collectionOpen)
   const toolOpen = useUIStore((s) => s.toolOpen)
   const importState = useUIStore((s) => s.importState)
   const buildMode = useUIStore((s) => s.buildMode)
-  const farmTab = useUIStore((s) => s.farmTab)
   /** v3.9.1 野餐選位置中（寵物暫停、入口與相機隱藏，和編輯農場一致） */
   const picnicPick = useUIStore((s) => s.picnicPick)
   /** v3.9.0 農場（擺設）模式、v3.9.1 選野餐位置：主迴圈每個影格看這個旗標隱藏透明入口、暫停野餐墊的檢查 */
@@ -189,8 +192,11 @@ export function Farm() {
     let lastPets: unknown = null
     let lastOwned: unknown = null
     let lastLayout: unknown = null
+    let lastShop: unknown = null
     let lastFinds: unknown = null
     let lastSkins: unknown = null
+    let lastCollection: unknown = null
+    let lastEvents: unknown = null
     let lastDraw = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
@@ -209,23 +215,35 @@ export function Farm() {
 
       const st = useFarmStore.getState()
       const nowMs = gameNow()
-      const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs), gifts: st.gifts }
+      const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save), gifts: st.gifts }
       // v3.9.0：已購買的建築或農場擺放變了 → 重新算擺放結果
-      if (st.save?.ownedBuildings !== lastOwned || st.save?.farmLayout !== lastLayout) {
+      // v4.0：商店買來的擺設實例（shop）變了也要重算
+      if (st.save?.ownedBuildings !== lastOwned || st.save?.farmLayout !== lastLayout || st.save?.shop !== lastShop) {
         lastOwned = st.save?.ownedBuildings
         lastLayout = st.save?.farmLayout
-        engine.setLayoutData(st.save?.ownedBuildings ?? [], st.save?.farmLayout)
+        lastShop = st.save?.shop
+        engine.setLayoutData(st.save?.ownedBuildings ?? [], st.save?.farmLayout, st.save?.shop?.decor)
+        // 4.0-B2：有買主題裝飾才載入延後載入的圖集 decor_themes（載入完成前引擎略過沒有圖的擺設，載入完立刻出現）
+        if (st.save?.shop?.decor.some((d) => isThemeDecorKind(d.kind) || d.kind === 'legend_stand')) assets.loadGroup(DECOR_ATLAS).catch(() => {})
       }
       engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
       if (st.save?.finds !== lastFinds) {
         lastFinds = st.save?.finds
         engine.setFinds(st.save?.finds ?? [])
       }
-      // 外觀（金色屋頂、黃金鐘樓）：解鎖才載入圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
+      // 4.0-C 傳說展示台：台面顯示哪一對、兩對都集齊時可以點擊切換（只看收藏與事件旗標）
+      if (st.save?.collection !== lastCollection || st.save?.events !== lastEvents) {
+        lastCollection = st.save?.collection
+        lastEvents = st.save?.events
+        const v = st.save ? legendStandView(st.save) : { pair: null, canToggle: false }
+        engine.standPair = v.pair
+        engine.standToggle = v.canToggle
+      }
+      // 外觀（外殼）：穿上的部位才載入它的圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
       if (st.save?.skins !== lastSkins) {
         lastSkins = st.save?.skins
         engine.skins = st.save?.skins.equipped ?? {}
-        if (Object.keys(engine.skins).length > 0) assets.loadGroup('skins').catch(() => {})
+        for (const g of skinAtlasesFor(engine.skins)) assets.loadGroup(g).catch(() => {})
       }
       if (st.save?.pets !== lastPets) {
         lastPets = st.save?.pets
@@ -392,12 +410,12 @@ export function Farm() {
   }, [engine])
   // 開啟啟動台、領養、建築模式、關於、收藏冊、工具、匯入、找新主人、拍立得、視窗被蓋住：滑鼠互動立即解除（引擎每個影格看這個旗標）
   useEffect(() => {
-    engine.hover.blocked = Boolean(adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
-  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
+    engine.hover.blocked = Boolean(shopOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || !!importState || rehomeId !== null || shot !== null || covered)
+  }, [engine, shopOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState, rehomeId, shot, covered])
   // 開啟遊戲視窗、啟動台、領養、建築模式、關於、匯入對話框：玩耍提前結算（只結算數值，不演開心）
   useEffect(() => {
-    if (adoptOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
-  }, [engine, adoptOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState])
+    if (shopOpen || launchpadOpen || buildMode || picnicPick || aboutOpen || collectionOpen || toolOpen || importState) engine.endPlay('window')
+  }, [engine, shopOpen, launchpadOpen, buildMode, picnicPick, aboutOpen, collectionOpen, toolOpen, importState])
   // 開工具視窗：關掉氣泡選單（建築模式由 setToolOpen 自己關）
   useEffect(() => {
     if (toolOpen) setSelected(null)
@@ -425,12 +443,12 @@ export function Farm() {
   }, [engine])
   // 領養視窗或啟動台開著時，關掉氣泡選單
   useEffect(() => {
-    if (adoptOpen || launchpadOpen) {
+    if (shopOpen || launchpadOpen) {
       setSelected(null)
       useUIStore.getState().setBuildMode(false)
       useUIStore.getState().setPicnicPick(false)
     }
-  }, [adoptOpen, launchpadOpen])
+  }, [shopOpen, launchpadOpen])
   // 農場（擺設）模式、選野餐位置：關掉氣泡選單、清掉入口的滑鼠停留狀態；沒有存檔（還沒領養）時不能進入
   useEffect(() => {
     if (buildMode || picnicPick) {
@@ -448,7 +466,7 @@ export function Farm() {
       const ui = useUIStore.getState()
       const st = useFarmStore.getState()
       const windowsOpen = Object.values(useWindowStore.getState().windows).some((w) => !w.minimized)
-      const blocked = ui.adoptOpen || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
+      const blocked = ui.shopTab !== null || ui.launchpadOpen || ui.aboutOpen || ui.collectionOpen || !!ui.toolOpen || !!ui.importState || rehomeId !== null || shotRef.current !== null || windowsOpen
       const canEnter = !!st.save && st.save.pets.length > 0
       if (ui.picnicPick) return // v3.9.1：選野餐位置中不能進出編輯農場（要先取消）
       if (!isFarmHotkey(e, blocked)) return
@@ -465,7 +483,7 @@ export function Farm() {
   }, [hasSave, petCount, buildMode, picnicPick])
   // v3.9.1 選野餐位置中：有對話框打開（關於、收藏冊、匯入、找新主人、拍立得、事件與存檔提示）或視窗最大化 → 取消選位置
   const farmDialog = useFarmStore((s) => s.pendingEvents.length > 0 || s.save?.resetNotice === true || s.resetFailed || s.legacyRefund > 0 || s.newerData)
-  const dialogOpen = Boolean(adoptOpen || aboutOpen || collectionOpen || !!importState || rehomeId !== null || shot !== null || covered || farmDialog)
+  const dialogOpen = Boolean(shopOpen || aboutOpen || collectionOpen || !!importState || rehomeId !== null || shot !== null || covered || farmDialog)
   useEffect(() => {
     if (dialogOpen && useUIStore.getState().picnicPick) useUIStore.getState().setPicnicPick(false)
   }, [dialogOpen])
@@ -503,7 +521,7 @@ export function Farm() {
     }
     const id = engine.pointerMove(p.x, p.y)
     const hk = engine.hitTest(p.x, p.y)?.kind
-    const over = id || hk === 'gift' || hk === 'find'
+    const over = id || hk === 'gift' || hk === 'find' || hk === 'stand'
     // 玩耍中：除了別的寵物與禮物，整個畫布都是球游標
     e.currentTarget.style.cursor = over ? 'pointer' : playingRef.current ? ballCursor(engine.layout) : 'default'
   }
@@ -514,6 +532,11 @@ export function Farm() {
     const hit = engine.hitTest(p.x, p.y)
     if (hit?.kind === 'gift') useFarmStore.getState().collectGift(hit.id)
     else if (hit?.kind === 'find') revealAt(hit.id)
+    else if (hit?.kind === 'stand') {
+      // 4.0-C 傳說展示台：兩對都集齊時點一下切換台面顯示的那一對
+      const pair = useFarmStore.getState().toggleLegendStandView()
+      if (pair) useUIStore.getState().showToast(`展示台：${PAIR_NAME[pair]}`)
+    }
     else if (hit?.kind === 'pet') {
       // 走去水池的途中被點到或拖曳：取消洗澡
       engine.cancelBathWalk(hit.id)
@@ -630,7 +653,7 @@ export function Farm() {
   const picnicStartBlock = (): string | null => {
     const st = useFarmStore.getState()
     const nowMs = gameNow()
-    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save) }
     const why = picnicBlock(st.save, ctx)
     if (why) return why
     if (!engine.picnicMatFits()) return PICNIC_TEXT.noRoom
@@ -646,7 +669,7 @@ export function Farm() {
     const ui = useUIStore.getState()
     const st = useFarmStore.getState()
     const nowMs = gameNow()
-    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save) }
     const why = picnicStartBlock()
     if (why) {
       ui.showToast(why)
@@ -961,7 +984,6 @@ export function Farm() {
       {picnicPick && !buildMode && hasSave && assetsReady && (
         <PicnicPickLayer engine={engine} layoutVersion={layoutVersion} startBlock={picnicStartBlock} onStart={beginPicnic} />
       )}
-      {buildMode && hasSave && assetsReady && farmTab === 'buy' && <BuildLayer engine={engine} layoutVersion={layoutVersion} />}
 
       {selected && <PetMenu ref={menuRef} petId={selected} onBath={onBath} onPlay={onPlay} playBlock={engine.playBlock(selected)} toyBlock={toyBlock} onRehome={setRehomeId} />}
       {rehomeId && <RehomeDialog petId={rehomeId} onCancel={() => setRehomeId(null)} onConfirm={confirmRehome} />}
@@ -971,7 +993,7 @@ export function Farm() {
       {status === 'ready' && assetsReady && <LegacyRefundNotice />}
       {status === 'ready' && assetsReady && <NewerDataNotice />}
       {status === 'ready' && assetsReady && <EventDialog />}
-      {hasSave && !needFirst && adoptOpen && <AdoptDialog />}
+      {hasSave && !needFirst && shopOpen && assetsReady && <ShopDialog engine={engine} />}
 
       {DevPanel && (
         <Suspense fallback={null}>

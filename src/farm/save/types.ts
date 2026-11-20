@@ -11,8 +11,9 @@ export const CURRENT_SCHEMA_VERSION = 5
  * 同一個 schema 內的資料修訂（v3.6.0 起寫進存檔的 dataRev）：舊存檔沒有這個欄位，視為 0。
  * 儲存層寫入前如果發現已存的資料 dataRev（或 schemaVersion）比這份程式認得的新，就不覆寫並提示重新整理（storage.ts）。
  */
-export const DATA_REV = 5
-// DATA_REV 歷史：5 = v3.10.0（簽到紀錄 checkins）；4 = v3.9.0（農場擺放 farmLayout）；1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+export const DATA_REV = 6
+// DATA_REV 歷史：6 = v4.0（商店購買的擺設實例 shop）；5 = v3.10.0（簽到紀錄 checkins）；4 = v3.9.0（農場擺放 farmLayout）；1 = v3.6.0（寶物、收藏、事件、外觀）；2 = v3.7.0（公佈欄 notes）；3 = v3.8.0（寵物個性 personality、lastInteract、野餐 picnic）。
+// 升到 6 的用意：v3.10.x 的舊分頁讀到 dataRev 6 會停止自動存檔並提示重新整理，不會把商店買的擺設（shop）與實例的擺放紀錄洗掉。
 // 升到 5 的用意：v3.9.x 的舊分頁讀到 dataRev 5 會停止自動存檔並提示重新整理，不會把簽到紀錄洗掉。
 // 升到 4 的用意：v3.8.x 的舊分頁讀到 dataRev 4 會停止自動存檔並提示重新整理，不會把擺放紀錄洗掉。
 // 升到 3 的用意：v3.7.x 的舊分頁讀到 dataRev 3 會停止自動存檔並提示重新整理，不會把個性與野餐紀錄洗掉。
@@ -76,7 +77,7 @@ export interface Find {
 }
 
 /**
- * 外觀（v3.6.0 最小版）：owned = 已擁有的外觀 id（例如 house.gold）、equipped = 各部位目前穿的外觀 id。
+ * 外觀（v3.6.0 最小版）：owned = 已擁有的外觀 id（例如 house.gold＝亞特蘭提斯房屋）、equipped = 各部位目前穿的外觀 id。
  * 之後的外觀商店（金幣購買）只要把 id 加進 owned；換裝介面再改 equipped。
  */
 export interface SkinState {
@@ -127,6 +128,20 @@ export interface FarmLayout {
   items: LayoutItem[]
 }
 
+/**
+ * v4.0 商店：買來的擺設實例（id「種類#編號」，種類必須在 config/layoutItems.ts 的 INSTANCE_KINDS）。
+ * 擁有與擺放分開記：實例存在與否只看這裡；farmLayout 沒有它的紀錄 = 在倉庫（所以收進倉庫後重新整理仍在）。
+ */
+export interface DecorInstance {
+  id: string
+  kind: LayoutKind
+}
+export interface ShopState {
+  decor: DecorInstance[]
+  /** 下一個實例編號（全體共用、只增不減，用過的編號不再用） */
+  nextDecorId: number
+}
+
 /** 存檔：單一物件，包含 schemaVersion 以便未來升級資料格式 */
 export interface SaveData {
   schemaVersion: number
@@ -171,6 +186,8 @@ export interface SaveData {
   picnic?: PicnicState
   /** 農場擺放（v3.9.0，可缺少：沒有 = 全部在預設狀態；驗證在 migrate.ts 的 cleanFarmLayout） */
   farmLayout?: FarmLayout
+  /** 商店（v4.0，可缺少：沒有 = 沒買過擺設；驗證在 migrate.ts 的 cleanShop） */
+  shop?: ShopState
   /** 重置後第一次畫面要顯示的一次性提示（按「確定」後清掉）；全新玩家沒有這個欄位 */
   resetNotice?: true
 }

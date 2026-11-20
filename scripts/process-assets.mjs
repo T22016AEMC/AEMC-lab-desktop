@@ -24,7 +24,9 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const SRC = resolve(process.argv[2] ?? process.env.ASSET_SRC ?? join(ROOT, '..', '像素風圖片'))
+/** 直接執行（node scripts/process-assets.mjs）才是 true；被 import 時命令列參數屬於別的程式，不讀 */
+const IS_MAIN = !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+const SRC = resolve((IS_MAIN ? process.argv[2] : undefined) ?? process.env.ASSET_SRC ?? join(ROOT, '..', '像素風圖片'))
 const OUT = join(ROOT, 'public', 'assets')
 const SHOTS = join(ROOT, 'screenshots')
 mkdirSync(OUT, { recursive: true })
@@ -64,6 +66,8 @@ const isBgStrict = (r, g, b) => {
  * v3.9.0：只認「接近純洋紅背景色」的像素（背景約 245,5,250）。小建築.png 右下格的珊瑚有粉紅枝（粉紅填色 R≈B、G 偏低，
  * 和 isBg／isBgStrict 的「R、B 接近而 G 低」條件重疊），用那兩個會把粉紅填色吃掉、只剩黑色輪廓，所以這一格改用這個很窄的判斷。
  */
+/** 4.0-B2：新原圖（路燈、樹、主題裝飾）的底色是「恰好」#FF00FF，畫作裡的紫、粉紅、霓虹都不會是這個值，所以只認這一個顏色（不放寬色鍵） */
+const isBgExact = (r, g, b) => r === 255 && g === 0 && b === 255
 const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b) <= 30
 
 /**
@@ -72,7 +76,7 @@ const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b)
  * 回傳 { spr: 重新裁切後的素材, n: 移除的像素數 }
  */
 const fringeMagenta = (r, g, b) => Math.min(r, b) >= 60 && g < Math.min(r, b) * 0.45 && Math.abs(r - b) <= 50
-function trimMagentaFringe(spr, passes = 2) {
+function trimMagentaFringe(spr, passes = 2, bg = isBgNear) {
   const { w, h, rgba } = spr
   let n = 0
   for (let k = 0; k < passes; k++) {
@@ -88,7 +92,104 @@ function trimMagentaFringe(spr, passes = 2) {
     n += hit.length
     if (!hit.length) break
   }
-  return { spr: cleanSprite(spr, isBgNear), n }
+  return { spr: cleanSprite(spr, bg), n }
+}
+
+/**
+ * 4.0-R：邊緣洋紅偏色（統計與測試用）：緊鄰透明處（上下左右任一邊透明或在素材外）的不透明像素，
+ * R、B 都明顯高於 G（洋紅混色的特徵；藍色輪廓混洋紅會偏藍紫、黑色輪廓混洋紅會是暗紫，所以 R、B 可以差到 90）。
+ * 這個計數也會算到真正的粉紅、紫色邊緣（花、珊瑚），所以只拿來和換圖前比「有沒有變多」，不要求 0。
+ */
+const magentaCast = (r, g, b) => Math.min(r, b) >= 40 && Math.min(r, b) - g >= 35 && Math.abs(r - b) <= 90
+const isEdge = (rgba, w, h, x, y) => {
+  const open = (xx, yy) => xx < 0 || yy < 0 || xx >= w || yy >= h || !rgba[(yy * w + xx) * 4 + 3]
+  return open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1)
+}
+function edgeMagentaCount(spr) {
+  const { w, h, rgba } = spr
+  let n = 0
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      if (rgba[i + 3] && magentaCast(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) n++
+    }
+  return n
+}
+
+/**
+ * 4.0-R：去邊（管線的通用步驟，每張素材加進圖集前都做；只改顏色、不改透明度，所以尺寸、輪廓、錨點不變）。
+ * 原圖的洋紅底和物件邊緣混色，去背只拿掉接近純洋紅的像素，留下「一半洋紅、一半物件色」的淡紫邊點。
+ * 對緊鄰透明處、色相偏洋紅的像素 P：在周圍 5×5 的不透明像素 N（本身不是候選）裡找「P 落在 N 到洋紅 M 的連線上」的那一個
+ * （P ≈ N + t·(M − N)，t ≥ DEFRINGE_T、離連線 ≤ DEFRINGE_RES），P 改成 N 的顏色（鄰居是暗輪廓時就是輪廓色）。
+ * 真正的紫色、粉紅不在「某個鄰色＋洋紅」的連線上（離連線遠），不會被改；內部（不緊鄰透明處）的像素一律不動。最多 3 輪（邊點可能 2 格寬，外層的要等內層改好）。
+ */
+const DEFRINGE_M = [250, 0, 250]
+const DEFRINGE_T = 0.1
+const DEFRINGE_RES = 26
+/** 第二段（只給洋紅很重的像素：G ≤ 0.35 × min(R, B)）：允許離連線較遠（藍色輪廓混洋紅的藍紫點，鄰近沒有剛好的輪廓色）。正常的粉紅、紫花、珊瑚 G 比這高，不會進第二段 */
+const DEFRINGE_STRONG_G = 0.35
+const DEFRINGE_STRONG_T = 0.15
+const DEFRINGE_STRONG_RES = 48
+/** 第三段：洋紅很重而且很暗（max(R, B) ≤ 90）的像素 = 黑色輪廓混到洋紅，改成 5×5 內最近的暗色（亮度 ≤ 90）非候選輪廓色 */
+const DEFRINGE_DARK = 90
+function defringeEdges(spr, passes = 3) {
+  const { w, h, rgba } = spr
+  // 候選：R、B 都高於 G（洋紅混色）；或偏藍紫（B > R、R 也明顯高於 G：藍色輪廓混洋紅）
+  const loose = (r, g, b) => Math.min(r, b) >= 40 && Math.min(r, b) - g >= 25 && (Math.abs(r - b) <= 90 || (b > r && r - g >= 30))
+  let total = 0
+  for (let k = 0; k < passes; k++) {
+    const cand = new Uint8Array(w * h)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        if (rgba[i + 3] && loose(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) cand[y * w + x] = 1
+      }
+    const fix = []
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        if (!cand[y * w + x]) continue
+        const i = (y * w + x) * 4
+        const P = [rgba[i], rgba[i + 1], rgba[i + 2]]
+        let best = null
+        const strong = P[1] <= DEFRINGE_STRONG_G * Math.min(P[0], P[2])
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) {
+            if (!dx && !dy) continue
+            const xx = x + dx, yy = y + dy
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h || cand[yy * w + xx]) continue
+            const j = (yy * w + xx) * 4
+            if (!rgba[j + 3]) continue
+            const N = [rgba[j], rgba[j + 1], rgba[j + 2]]
+            const d = [DEFRINGE_M[0] - N[0], DEFRINGE_M[1] - N[1], DEFRINGE_M[2] - N[2]]
+            const dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+            if (!dd) continue
+            const t = ((P[0] - N[0]) * d[0] + (P[1] - N[1]) * d[1] + (P[2] - N[2]) * d[2]) / dd
+            if (t < (strong ? Math.min(DEFRINGE_T, DEFRINGE_STRONG_T) : DEFRINGE_T) || t > 1) continue
+            const res = Math.hypot(P[0] - N[0] - t * d[0], P[1] - N[1] - t * d[1], P[2] - N[2] - t * d[2])
+            // 同樣貼近連線時，取近的鄰居（距離加權）
+            const score = res + (Math.abs(dx) + Math.abs(dy) - 1) * 2
+            const lim = strong && t >= DEFRINGE_STRONG_T ? DEFRINGE_STRONG_RES : DEFRINGE_RES
+            if (res <= lim && (!best || score < best.score)) best = { score, N }
+          }
+        if (!best && strong && Math.max(P[0], P[2]) <= DEFRINGE_DARK) {
+          let bd = Infinity
+          for (let dy = -2; dy <= 2; dy++)
+            for (let dx = -2; dx <= 2; dx++) {
+              const xx = x + dx, yy = y + dy
+              if ((!dx && !dy) || xx < 0 || yy < 0 || xx >= w || yy >= h || cand[yy * w + xx]) continue
+              const j = (yy * w + xx) * 4
+              if (!rgba[j + 3] || Math.max(rgba[j], rgba[j + 1], rgba[j + 2]) > DEFRINGE_DARK) continue
+              const d = Math.abs(dx) + Math.abs(dy)
+              if (d < bd) { bd = d; best = { N: [rgba[j], rgba[j + 1], rgba[j + 2]] } }
+            }
+        }
+        if (best) fix.push([i, best.N])
+      }
+    for (const [i, N] of fix) { rgba[i] = N[0]; rgba[i + 1] = N[1]; rgba[i + 2] = N[2] }
+    total += fix.length
+    if (!fix.length) break
+  }
+  return total
 }
 
 async function load(file) {
@@ -183,8 +284,38 @@ function spectrum(g, pMin, pMax) {
   return out
 }
 
+/** 永遠不是背景（keepEnclosed 時 cleanSprite 不再清掉內部的洋紅色畫作） */
+const NEVER_BG = () => false
+/** 遮罩裡沒連到圖片邊緣的背景（0）改成前景（1）：從四邊沿著背景做 flood fill，走不到的背景就是被物件圍住的 */
+function keepEnclosedPixels(mask, W, H) {
+  const out = new Uint8Array(W * H)
+  const st = []
+  const seed = (i) => { if (!mask[i] && !out[i]) { out[i] = 1; st.push(i) } }
+  for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x) }
+  for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1) }
+  while (st.length) {
+    const p = st.pop(), x = p % W, y = (p / W) | 0
+    if (x > 0) seed(p - 1)
+    if (x < W - 1) seed(p + 1)
+    if (y > 0) seed(p - W)
+    if (y < H - 1) seed(p + W)
+  }
+  for (let i = 0; i < W * H; i++) if (!mask[i] && !out[i]) mask[i] = 1
+}
+
+/** estimateP 的預設搜尋範圍 */
+const P_RANGE = [4, 12]
+/**
+ * 4.0-R：估出的格大小碰到搜尋範圍的下限或上限 = 估算不可靠（例如原圖已經是整齊的 4×4 像素格，估出來剛好 4.00），
+ * 這時用估算值取樣會讓素材靜默變大或變小，所以沒有明確參數（pFixed／targets／fitMax…）的素材一律報錯。
+ */
+function guardEstimate(file, e, range = P_RANGE, what = '') {
+  if (e.p <= range[0] + 1e-9 || e.p >= range[1] - 1e-9)
+    throw new Error(`${file}${what}：估出的像素格 p=${e.p.toFixed(2)} 碰到搜尋範圍 [${range[0]}, ${range[1]}] 的邊界，估算不可靠；請在 process-assets.mjs 給這張圖明確的 pFixed／pFrames／targets`)
+}
+
 /** 估算整張圖的像素格大小 p（x、y 方向的頻譜相加，取最強的峰；偏好較小的 p 以免選到倍數） */
-function estimateP(img, mask, range = [4, 12]) {
+function estimateP(img, mask, range = P_RANGE) {
   const box = [0, 0, img.W - 1, img.H - 1]
   const sx = spectrum(gradProfile(img, mask, 0, box), range[0], range[1])
   const sy = spectrum(gradProfile(img, mask, 1, box), range[0], range[1])
@@ -281,6 +412,45 @@ function groupCells(comps, cols, rows) {
   return cells
 }
 
+/**
+ * 4.0-R：固定欄×列切格（grid: 'even'）。先照一般做法找連通塊；寬度超過 1.5 格（W / cols）的大連通塊是「相鄰幾隻黏在一起」，
+ * 依寬度拆成 round(寬 / 格寬) 份：每條切線在該連通塊「等分線左右 1/4 份寬」內找這個連通塊前景最少的那一欄，切線左右的像素分成不同的連通塊。
+ * 只切黏在一起的連通塊，其他連通塊整塊保留（外框互相交錯的相鄰動物不會被直線切到）。之後照一般的 groupCells 分到欄×列。
+ * 回傳 { cells, lab, splits }：splits = 被切開的連通塊與切線位置（報告用）。
+ */
+function evenCells(mask, W, H, cols, rows, minArea) {
+  const { lab, comps: all } = label(mask, W, H)
+  const comps = keepComps(all, minArea)
+  const cellW = W / cols
+  let next = all.length + 1
+  const out = []
+  const splits = []
+  for (const c of comps) {
+    const bw = c.x1 - c.x0 + 1
+    const k = Math.round(bw / cellW)
+    if (bw <= cellW * 1.5 || k < 2) { out.push(c); continue }
+    const colCount = (x) => { let n = 0; for (let y = c.y0; y <= c.y1; y++) if (lab[y * W + x] === c.id) n++; return n }
+    const cuts = []
+    for (let i = 1; i < k; i++) {
+      const t = Math.round(c.x0 + (bw * i) / k), r = Math.floor(bw / k / 4)
+      let best = t, bc = Infinity
+      for (let x = t - r; x <= t + r; x++) { const n = colCount(x); if (n < bc || (n === bc && Math.abs(x - t) < Math.abs(best - t))) { bc = n; best = x } }
+      cuts.push(best)
+    }
+    splits.push({ box: [c.x0, c.y0, c.x1, c.y1], cuts })
+    const edges = [c.x0, ...cuts, c.x1 + 1]
+    for (let j = 0; j < edges.length - 1; j++) {
+      const id = next++
+      let x0 = W, y0 = H, x1 = -1, y1 = -1, area = 0
+      for (let y = c.y0; y <= c.y1; y++)
+        for (let x = edges[j]; x < edges[j + 1]; x++)
+          if (lab[y * W + x] === c.id) { lab[y * W + x] = id; area++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+      if (area) out.push({ id, x0, y0, x1, y1, area })
+    }
+  }
+  return { cells: groupCells(out, cols, rows), lab, splits }
+}
+
 // ---------------------------------------------------------------------------
 // 還原真像素
 // ---------------------------------------------------------------------------
@@ -333,7 +503,7 @@ function depixelate(img, mask, lab, keep, box, p, phases) {
 }
 
 /** 裁到不透明內容的外框，並清掉殘留的洋紅色像素、孤立的單點 */
-function cleanSprite(s, bg = isBg) {
+function cleanSprite(s, bg = isBg, keepSpecks = false) {
   if (!s) return null
   const { w, h, rgba } = s
   // 殘留的洋紅色（邊緣混色）→ 透明
@@ -342,9 +512,10 @@ function cleanSprite(s, bg = isBg) {
   }
   // 孤立單點（上下左右都沒有鄰居）→ 移除
   const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rgba[(y * w + x) * 4 + 3] === 255
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      if (solid(x, y) && !solid(x - 1, y) && !solid(x + 1, y) && !solid(x, y - 1) && !solid(x, y + 1)) rgba[(y * w + x) * 4 + 3] = 0
+  if (!keepSpecks)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (solid(x, y) && !solid(x - 1, y) && !solid(x + 1, y) && !solid(x, y - 1) && !solid(x, y + 1)) rgba[(y * w + x) * 4 + 3] = 0
   let x0 = w, y0 = h, x1 = -1, y1 = -1
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rgba[(y * w + x) * 4 + 3]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
   if (x1 < 0) return null
@@ -398,8 +569,22 @@ function detectWater(s) {
 const atlases = {} // name → { frames: [{key,w,h,rgba,ax,ay}] }
 const manifest = { version: 1, pixelSize: 1, atlases: {}, frames: {}, animations: {}, notes: {} }
 
+/** 4.0-R：去邊的逐張紀錄 { 素材鍵: [去邊前的邊緣洋紅偏色數, 去邊後, 改色的像素數] }；DEFRINGE=0（環境變數）= 不去邊（只供前後比對） */
+const DEFRINGE = process.env.DEFRINGE !== '0'
+const defringeLog = {}
 function addFrame(group, key, spr, extra = {}) {
   atlases[group] ??= []
+  // 4.0-B2：底色恰好是 #FF00FF 的原圖（exactBg）沒有混色的邊，通用去邊只會動到畫作本身的紫、粉紅邊，不做
+  if (extra.exactBg) extra = { ...extra, noDefringe: true }
+  // 4.0-R：通用去邊（只改顏色，不改透明度與尺寸）。spr 可能被別的素材共用（例如鐘樓），所以複製一份再改
+  if (DEFRINGE && !extra.noDefringe) {
+    const before = edgeMagentaCount(spr)
+    if (before) {
+      spr = { ...spr, rgba: Buffer.from(spr.rgba) }
+      const fixed = defringeEdges(spr)
+      defringeLog[key] = [before, edgeMagentaCount(spr), fixed]
+    }
+  }
   const frame = { key, w: spr.w, h: spr.h, rgba: spr.rgba, ax: extra.ax ?? Math.round(spr.w / 2), ay: extra.ay ?? spr.h, ...extra }
   atlases[group].push(frame)
   return frame
@@ -454,6 +639,13 @@ const STAND_HEIGHT = {
   dog_golden: 46, dog_husky: 43, dog_collie: 41, dog_shiba: 36, dog_poodle: 34, dog_corgi: 31,
   cat_ragdoll: 33, cat_bluecat: 32, cat_siamese: 31, cat_orange: 30, cat_calico: 29, cat_black: 29,
 }
+/** 4.0-R：動物改用明確的 p 之後，站姿高度只檢查（STAND_HEIGHT 註明的容許範圍 ±2，超過就警告） */
+function standCheck(key, sheetResult) {
+  const st = sheetResult.frames.find((f) => f.name === 'stand')
+  if (!st) return warn(key + '：找不到站姿')
+  const d = st.spr.h - STAND_HEIGHT[key]
+  ;(Math.abs(d) > 2 ? warn : info)(`${key} 站姿 ${st.spr.w}×${st.spr.h}（目標高 ${STAND_HEIGHT[key]}，p=${sheetResult.p.toFixed(3)}）`)
+}
 /** 反推 p 時的起點（原圖大約的像素格） */
 const P_GUESS = 6.1
 /** 貓 extra 原圖是縮小後再放大的：像素格 = 同一隻貓 core 的 p × 這個倍率（沿用先前與 core 的相對取樣關係） */
@@ -470,7 +662,9 @@ async function catCoreFix(id, core) {
   const cfg = CAT_CORE_FIX[id]
   const oldOf = (n) => core.frames.find((f) => f.name === n).spr
   const group = { sleep: ['w', oldOf('sleep').w], eat: ['w', oldOf('eat').w], groom: ['h', oldOf('sit_a').h] }
-  const r = await sheet({ file: cfg.file, cols: 3, rows: 1, names: cfg.names, solveGroup: group })
+  // 4.0-R：三隻共用的 p 改成明確值（P_FIXED.orangeFix；原本是 solveGroup 以 group 的尺寸求解，group 現在只用在下面的報告）
+  void group
+  const r = await sheet({ file: cfg.file, cols: 3, rows: 1, names: cfg.names, pFixed: P_FIXED.orangeFix })
   for (const f of r.frames) {
     const o = oldOf(f.name)
     info('  橘貓換圖 ' + f.name + '：新 ' + f.spr.w + '×' + f.spr.h + '（舊 ' + o.w + '×' + o.h + '），錨點 ax=' + Math.round(f.spr.w / 2) + ' ay=' + f.spr.h)
@@ -511,7 +705,294 @@ const pCache = {}
 /** 小球（toy_ball_s）的目標高度（邏輯像素）；BALL_S_H 環境變數可覆寫來比較 */
 const BALL_S_H = Number(process.env.BALL_S_H ?? 12)
 const BUILDING_SCALES = { doghouse: 1.15, cat_tree: 1.15, bowls: Number(process.env.BOWL_SCALE ?? 0.7), planter: Number(process.env.PLANTER_SCALE ?? 0.7), coral: Number(process.env.CORAL_SCALE ?? 0.7) }
+/** BUILDING_SCALES 的預設值（下面 P_FIXED.small 是用這組係數量出來的；環境變數改了係數時，p 依比例換算） */
+const BUILDING_SCALES_DEFAULT = { doghouse: 1.15, cat_tree: 1.15, bowls: 0.7, planter: 0.7, coral: 0.7 }
+
+/**
+ * 4.0-R：明確指定的像素格 p。
+ * 2026-11 原圖換成「整齊的 4×4 像素格」之後，估算的格大小每張都剛好落在 4.00（= 估算範圍的下限），用估算值或「從估算值開始求解」都會讓素材變大或差 1～2 像素。
+ * 為了維持畫面上原本的大小，每張圖改用固定的 p：值由 tests-archive/v400r/tune-p.mjs、tune-terrain.mjs 掃描找出，
+ * 讓輸出尺寸與換圖前（tests-archive/v400r/before.json）相同；找不到完全相同的 p 時取最接近的（差異列在階段 R 報告）。
+ *  - 數字是「這張圖實際取樣用的 p」：small 的值已經除過 BUILDING_SCALES，pFrames 不再除縮放係數。
+ *  - 動物：每隻一個 p（同一隻的所有姿勢共用，core 與 extra 相同；貓 extra = core × CAT_EXTRA_RATIO），站姿高度 = 換圖前的站姿高度。
+ * 原圖再被換成別的格大小時：管線不會報錯（因為都是明確參數），但輸出尺寸會變；tests-archive/v400r 的尺寸測試會抓到，再用調參工具重找。
+ */
+const P_FIXED = {
+  animal: {
+    dog_shiba: 8.534, dog_corgi: 8.294, dog_husky: 7.151, dog_golden: 6.229, dog_collie: 6.898, dog_poodle: 8.432,
+    cat_orange: 9.365, cat_black: 10.231, cat_calico: 10.049, cat_siamese: 9.564, cat_bluecat: 8.86, cat_ragdoll: 8.98,
+  },
+  orangeFix: 15.543,
+  front: 5.362,
+  tree: 5.517,
+  tower: { clocktower: 3.6044, clocktower_open: 4.404 },
+  small: { doghouse: 4.9714, cat_tree: 4.997, bowls: 8.146, lamp: 5.702, planter: 8.098, coral: 8.098 },
+  buildingsNew: 4.003,
+  decor: { bush: 8.676, rocks: 8.547, flowers: 10.339, tall_grass: 9.323, mushroom: 9.102, stump: 8.547 },
+  sky: 7.707,
+  snowflake: 14.249,
+  fxIcons: { fx_heart: 8.013, fx_zzz: 10.37, fx_note: 8.624, fx_sweat: 9.198, fx_exclaim: 11.211, fx_sparkle: 10.354, fx_bubble: 11.244, fx_question: 10.994 },
+  fxWater: 10.155,
+  toysDog: 4.341,
+  toysCat: 4.315,
+  toyBallS: 10.527,
+  moundS: 8.94,
+  grass: 9.457,
+  path: 6.188,
+  far: 5.501,
+  digB: { coin_bronze: 19.874, coin_silver: 20.296, coin_gold: 19.172, fx_reveal: 15.873 },
+  board: 7.065,
+  papers: 6.805,
+  mats: 6.16,
+  camera: 47.336,
+  food: 35.766,
+  polaroid: 7.73,
+  /**
+   * 4.0-B1 主題外殼（含亞特蘭提斯房屋／鐘樓）：逐格的 p，輸出要填滿該部位的畫布但不可超過（tests-archive/v400r/tune-p.mjs 的 skin_* 項目；
+   * 掃描時已包含 nearBg 去背與 trimMagentaFringe）。鍵 = 輸出素材鍵名
+   */
+  skins: {
+    house_atlantis_closed: 3.461, house_atlantis_open: 3.456, house_atlantis_night: 3.468, house_cleanroom_closed: 3.493,
+    house_cleanroom_open: 3.494, house_cleanroom_night: 3.494, house_forest_closed: 3.461, house_forest_open: 3.473,
+    house_forest_night: 3.486, house_magic_closed: 3.486, house_magic_open: 3.486, house_magic_night: 3.487,
+    house_punk_closed: 3.494, house_punk_open: 3.498, house_punk_night: 3.494, house_plaid_closed: 3.479,
+    house_plaid_open: 3.479, house_plaid_night: 3.46, tower_atlantis: 3.596, tower_atlantis_open: 3.598,
+    tower_cleanroom: 3.581, tower_cleanroom_open: 3.581, tower_forest: 3.603, tower_forest_open: 3.601,
+    tower_magic: 3.59, tower_magic_open: 3.59, tower_punk: 3.607, tower_punk_open: 3.608,
+    tower_plaid: 3.585, tower_plaid_open: 3.585, pond_plaid: 3.908, pond_atlantis: 3.917,
+    pond_forest: 3.915, pond_magic: 3.917, pond_punk: 3.925, pond_cleanroom: 3.917,
+    board_atlantis: 7.091, board_cleanroom: 7.062, board_forest: 7.066, board_magic: 7.073,
+    board_punk: 7.094, board_plaid: 7.066, doghouse_atlantis: 4.926, doghouse_cleanroom: 4.916,
+    doghouse_forest: 4.931, doghouse_magic: 4.921, doghouse_punk: 4.929, doghouse_plaid: 4.911,
+    cat_tree_atlantis: 4.978, cat_tree_cleanroom: 4.973, cat_tree_forest: 4.981, cat_tree_magic: 4.961,
+    cat_tree_punk: 4.956, cat_tree_plaid: 4.981, bowls_atlantis: 8.307, bowls_cleanroom: 8.188,
+    bowls_forest: 8.22, bowls_magic: 8.212, bowls_punk: 8.196, bowls_plaid: 8.212,
+  },
+}
+/**
+ * 4.0-B1：主題外殼。六個主題 id（原圖檔名的主題字）；池塘那張原圖的格子順序不同。
+ * 每組進自己的延後載入圖集（穿上或商店預覽才載入），畫布 = 該部位預設圖的大小（食盆 57×31：新圖比例較高，寬對齊 57）。
+ */
+const THEMES = ['atlantis', 'cleanroom', 'forest', 'magic', 'punk', 'plaid']
+const POND_ORDER = ['plaid', 'atlantis', 'forest', 'magic', 'punk', 'cleanroom']
+const SKIN_CANVAS = { house: [139, 134], tower: [123, 160], pond: [110, 79], board: [64, 50], doghouse: [99, 83], cat_tree: [72, 90], bowls: [57, 31] }
+const skinLog = []
+/**
+ * 外殼原圖的共同處理：底色是純洋紅（#FF00FF），魔法主題的紫色、龐克與亞特蘭提斯的紅紫色接近洋紅，一般的 isBg 會把物件內部吃掉，
+ * 所以一律用 isBgNear 去背（只認接近純洋紅）＋ trimMagentaFringe 去掉貼著透明處的暗紫邊，最後 addFrame 時再做通用去邊。
+ * 每格的 p 一律來自 P_FIXED.skins（缺了 → 走估算 → guardEstimate 報錯）。
+ */
+/**
+ * 被物件圍住的純洋紅（原圖）：是畫作本身的顏色（保留）還是真的空洞（透明）。逐格看過原圖決定（tests-archive/v400b1 的 enclosed 檢查圖）：
+ * 保留 = 魔法住家與鐘樓的洋紅屋瓦、魔法池塘的星雲、魔法食盆的水、龐克住家與鐘樓的霓虹、亞特蘭提斯鐘樓的珊瑚；
+ * 透明（不列在這裡）= 龐克池塘欄杆的空隙、魔法與龐克貓跳台的柱子之間。
+ */
+/** 貼著透明處的純洋紅（isBgNear）改成透明，最多 2 輪；回傳拿掉的像素數 */
+function dropEdgeNear(spr) {
+  const { w, h, rgba } = spr
+  let n = 0
+  for (let k = 0; k < 2; k++) {
+    const hit = []
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (rgba[i + 3] && isBgNear(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) hit.push(i) }
+    for (const i of hit) rgba[i + 3] = 0
+    n += hit.length
+    if (!hit.length) break
+  }
+  return n
+}
+const SKIN_KEEP_ENCLOSED = new Set([
+  'house_magic_closed', 'house_magic_open', 'house_magic_night', 'house_punk_closed', 'house_punk_open', 'house_punk_night',
+  'tower_magic', 'tower_magic_open', 'tower_punk', 'tower_punk_open', 'tower_atlantis', 'tower_atlantis_open', 'pond_magic', 'bowls_magic',
+])
+async function skinSheet(file, cols, rows, names) {
+  const out = {}
+  // 保留內部洋紅的格子與其他格子分兩次切（同一張原圖、同樣的格子與 p）
+  for (const keepEnclosed of [false, true]) {
+    const part = names.map((n) => (n && SKIN_KEEP_ENCLOSED.has(n) === keepEnclosed ? n : null))
+    if (!part.some(Boolean)) continue
+    const pFrames = {}
+    for (const n of part) if (n && P_FIXED.skins[n] != null) pFrames[n] = P_FIXED.skins[n]
+    const r = await sheet({ file, cols, rows, names: part, nearBg: true, keepEnclosed, pFrames, ...(cols * rows > 1 ? { grid: 'even' } : {}) })
+    for (const f of r.frames) {
+      const t = trimMagentaFringe(f.spr, 2, keepEnclosed ? NEVER_BG : isBgNear)
+      // keepEnclosed：內部的洋紅保留，但貼著透明處（外緣）的純洋紅仍是背景殘留 → 最多 2 輪拿掉
+      if (keepEnclosed) t.n += dropEdgeNear(t.spr)
+      out[f.name] = { spr: keepEnclosed ? cleanSprite(t.spr, NEVER_BG) : t.spr, trimmed: t.n, p: f.p, keepEnclosed }
+    }
+  }
+  return out
+}
+function skinFit(name, cell, canvas, ox) {
+  const [W, H] = canvas
+  if (cell.spr.w > W || cell.spr.h > H) warn(`${name}：${cell.spr.w}×${cell.spr.h} 比畫布 ${W}×${H} 大（會被裁）`)
+  skinLog.push([name, cell.spr.w, cell.spr.h, W, H, cell.p, cell.trimmed])
+  return ox == null ? padBottomCenter(cell.spr, W, H) : padBottomAt(cell.spr, W, H, ox)
+}
+/** 貼到 W×H 畫布、底邊對齊、左邊留 ox 欄（padBottomCenter 的 ox 由寬度決定；鐘樓關門／開門寬度差 1 時用來對齊鐘面） */
+function padBottomAt(spr, W, H, ox) {
+  const out = Buffer.alloc(W * H * 4)
+  const oy = H - spr.h
+  for (let y = 0; y < spr.h; y++)
+    for (let x = 0; x < spr.w; x++) {
+      const tx = x + ox, ty = y + oy
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
+      spr.rgba.copy(out, (ty * W + tx) * 4, (y * spr.w + x) * 4, (y * spr.w + x + 1) * 4)
+    }
+  return { w: W, h: H, rgba: out }
+}
+/**
+ * 4.0-B1 池塘水面（相對素材左上角的橢圓）：藍色水面用 detectWater；偵測不可靠的（星雲、岩漿不是藍色；森林只抓到瀑布；
+ * 亞特蘭提斯、無塵室會把藍色池緣算進去）用這張表，數字是看 ×5 放大圖量的（tests-archive/v400b1 的 water 檢查圖）。
+ * 站位與洗澡通道一律用預設 WATER（layout.ts），這裡的水面只用在泡澡裁切與漣漪。
+ */
+const WATER_TABLE = {
+  atlantis: { cx: 55, cy: 36, rx: 32, ry: 17 },
+  cleanroom: { cx: 55, cy: 34, rx: 41, ry: 27 },
+  forest: { cx: 55, cy: 44, rx: 38, ry: 16 },
+  magic: { cx: 56, cy: 32, rx: 41, ry: 19 },
+  punk: { cx: 55, cy: 36, rx: 40, ry: 20 },
+}
+const lum = (rgba, i) => (rgba[i] + rgba[i + 1] + rgba[i + 2]) / 3
+/**
+ * 狗窩門洞的量法（預設狗窩與外殼用同一套，外殼存「和預設的差」）：第 52 列從門洞中心找暗色（亮度 < 60）連續段 → 左右緣；
+ * 從中心往上到不暗為止 → 拱頂；往下「暗色占門洞寬一半以上」的列結束後（墊子），下一個又過半的列 → 墊子前緣
+ */
+function doorProbe(s) {
+  const dark = (x, y) => { const i = (y * s.w + x) * 4; return s.rgba[i + 3] > 0 && lum(s.rgba, i) < 60 }
+  let sx = -1
+  for (const x of [39, 38, 40, 37, 41, 36, 42, 35, 43]) if (dark(x, 52)) { sx = x; break }
+  if (sx < 0) return null
+  let left = sx, right = sx
+  while (left > 0 && dark(left - 1, 52)) left--
+  while (right < s.w - 1 && dark(right + 1, 52)) right++
+  let top = 52
+  while (top > 0 && dark(sx, top - 1)) top--
+  const frac = (y) => { let n = 0; for (let x = left; x <= right; x++) if (dark(x, y)) n++; return n / (right - left + 1) }
+  let y = 53
+  while (y < s.h && frac(y) >= 0.5) y++
+  let front = -1
+  for (; y < s.h; y++) if (frac(y) >= 0.5) { front = y; break }
+  return { left, right, top, front }
+}
+/** 貓跳台平台的頂面：x 欄從 from 列往下第一個不透明像素（頂層 x46 從 0、中層 x19 從 20） */
+function surfaceTop(s, x, from) {
+  let y = from
+  while (y < s.h && !s.rgba[(y * s.w + x) * 4 + 3]) y++
+  return y
+}
+
+/** 外殼的鐘面：關門版偵測、取整數，同主題的開門版共用（和預設鐘樓 sharedClock 同一規則） */
+function themeClock(name, closed, open) {
+  const c = detectClockFace(closed)
+  if (!c) throw new Error(name + '：偵測不到鐘面')
+  const face = { cx: Math.round(c.cx), cy: Math.round(c.cy), r: Math.round(c.r) }
+  const o = detectClockFace(open)
+  if (!o || Math.abs(o.cx - face.cx) > 1 || Math.abs(o.cy - face.cy) > 1 || Math.abs(o.r - face.r) > 1)
+    warn(`${name}：開門版鐘面 ${o ? `(${o.cx},${o.cy}) r=${o.r}` : '無'} 和關門版共用值 (${face.cx},${face.cy}) r=${face.r} 差超過 1 像素`)
+  info(`${name}：鐘面偵測 關門 (${c.cx},${c.cy}) r=${c.r}、開門 ${o ? `(${o.cx},${o.cy}) r=${o.r}` : '無'} → 共用 (${face.cx},${face.cy}) r=${face.r}`)
+  return face
+}
+/**
+ * 全部外殼 → 圖集 skins_house、skins_tower、skins_pond、skins_board、skins_small。鍵名：
+ * house_<主題>_closed/open/night、tower_<主題>、tower_<主題>_open、pond_<主題>、board_<主題>、doghouse_<主題>、cat_tree_<主題>、bowls_<主題>。
+ * 亞特蘭提斯房屋／鐘樓（傳說獎勵，外觀 id house.gold／tower.gold）就是 house_atlantis_*、tower_atlantis*。回傳住家與鐘樓（剪影、對位檢查用）
+ */
+async function buildSkins() {
+  const house = {}, tower = {}
+  for (const t of THEMES) {
+    const names = ['closed', 'open', 'night'].map((n) => `house_${t}_${n}`)
+    const cells = await skinSheet(`house_${t}.png`, 3, 1, names)
+    house[t] = {}
+    for (const n of names) {
+      const spr = skinFit(n, cells[n], SKIN_CANVAS.house)
+      house[t][n.split('_').pop()] = spr
+      addFrame('skins_house', n, spr, { nearBg: true, keepEnclosed: cells[n].keepEnclosed })
+    }
+  }
+  for (const t of THEMES) {
+    const c = (await skinSheet(`tower_${t}.png`, 1, 1, [`tower_${t}`]))[`tower_${t}`]
+    const o = (await skinSheet(`tower_${t}_open.png`, 1, 1, [`tower_${t}_open`]))[`tower_${t}_open`]
+    // 關門與開門寬度差 1（122／123）時，置中會差半格、鐘面跟著偏：兩張各試「左邊留 floor／ceil」，取兩張鐘面中心最接近的組合
+    // （同樣接近時用置中），換開門版時鐘面不跳
+    const [W] = SKIN_CANVAS.tower
+    const oxs = (w) => [...new Set([Math.floor((W - w) / 2), Math.ceil((W - w) / 2)])]
+    let best = null
+    for (const a of oxs(c.spr.w))
+      for (const b of oxs(o.spr.w)) {
+        const fc = detectClockFace(padBottomAt(c.spr, W, SKIN_CANVAS.tower[1], a)), fo = detectClockFace(padBottomAt(o.spr, W, SKIN_CANVAS.tower[1], b))
+        const d = fc && fo ? Math.abs(fc.cx - fo.cx) + Math.abs(fc.cy - fo.cy) : 99
+        const centered = a === Math.round((W - c.spr.w) / 2) && b === Math.round((W - o.spr.w) / 2)
+        if (!best || d < best.d || (d === best.d && centered)) best = { d, a, b }
+      }
+    const closed = skinFit(`tower_${t}`, c, SKIN_CANVAS.tower, best.a), open = skinFit(`tower_${t}_open`, o, SKIN_CANVAS.tower, best.b)
+    const clock = themeClock(`tower_${t}`, closed, open)
+    tower[t] = { closed, open }
+    addFrame('skins_tower', `tower_${t}`, closed, { nearBg: true, keepEnclosed: c.keepEnclosed, meta: { clock: { ...clock } } })
+    addFrame('skins_tower', `tower_${t}_open`, open, { nearBg: true, keepEnclosed: o.keepEnclosed, meta: { clock: { ...clock } } })
+  }
+  // 小建築、池塘的 meta：狗窩門洞與貓跳台座位是「和預設圖的差」（引擎用自己的常數加上差），池塘是水面橢圓
+  const refDog = atlases.scene.find((f) => f.key === 'doghouse'), refCat = atlases.scene.find((f) => f.key === 'cat_tree')
+  const dogRef = doorProbe(refDog)
+  const catRef = { top: surfaceTop(refCat, 46, 0), mid: surfaceTop(refCat, 19, 20) }
+  const metaOf = (n, spr) => {
+    const t = n.slice(n.lastIndexOf('_') + 1)
+    if (n.startsWith('pond_')) {
+      const water = WATER_TABLE[t] ?? detectWater(spr)
+      if (!water || water.rx < 25 || water.ry < 10) throw new Error(n + '：水面偵測失敗，請加進 WATER_TABLE')
+      info(`  ${n}：水面 ${JSON.stringify(water)}（${WATER_TABLE[t] ? '表格' : '偵測'}）`)
+      return { water }
+    }
+    if (n.startsWith('doghouse_')) {
+      const d = doorProbe(spr)
+      if (!d || d.front < 0) throw new Error(n + '：量不到門洞')
+      const door = { dx: d.right - dogRef.right, dyTop: d.top - dogRef.top, dyFront: d.front - dogRef.front }
+      info(`  ${n}：門洞 左 ${d.left} 右 ${d.right} 拱頂 ${d.top} 墊子前緣 ${d.front}（預設 ${dogRef.left}／${dogRef.right}／${dogRef.top}／${dogRef.front}）→ ${JSON.stringify(door)}`)
+      return { door }
+    }
+    if (n.startsWith('cat_tree_')) {
+      const seats = { dyTop: surfaceTop(spr, 46, 0) - catRef.top, dyMid: surfaceTop(spr, 19, 20) - catRef.mid }
+      info(`  ${n}：平台頂面差 ${JSON.stringify(seats)}`)
+      return { seats }
+    }
+    return null
+  }
+  const six = async (file, order, prefix, canvas, atlas) => {
+    const names = order.map((t) => prefix + t)
+    const cells = await skinSheet(file, 3, 2, names)
+    for (const n of names) {
+      const spr = skinFit(n, cells[n], canvas)
+      const meta = metaOf(n, spr)
+      addFrame(atlas, n, spr, { nearBg: true, keepEnclosed: cells[n].keepEnclosed, ...(meta ? { meta } : {}) })
+    }
+  }
+  await six('pond_themes.png', POND_ORDER, 'pond_', SKIN_CANVAS.pond, 'skins_pond')
+  await six('board_themes.png', THEMES, 'board_', SKIN_CANVAS.board, 'skins_board')
+  await six('doghouse_themes_v2.png', THEMES, 'doghouse_', SKIN_CANVAS.doghouse, 'skins_small')
+  await six('cattree_themes_v2.png', THEMES, 'cat_tree_', SKIN_CANVAS.cat_tree, 'skins_small')
+  await six('bowl_themes_v2.png', THEMES, 'bowls_', SKIN_CANVAS.bowls, 'skins_small')
+  info('')
+  info('===== 4.0-B1 主題外殼（素材、輸出內容尺寸、畫布、p、去暗紫邊像素） =====')
+  for (const [n, w, h, W, H, pp, tr] of skinLog) info(`  ${n}：${w}×${h} → 畫布 ${W}×${H}（p=${pp.toFixed(3)}，去暗紫邊 ${tr}）`)
+  return { house, tower }
+}
+
+/** 小建築逐格的 p（BUILDING_SCALES 被環境變數改過時依比例換算） */
+const smallP = (name) => P_FIXED.small[name] * ((BUILDING_SCALES_DEFAULT[name] ?? 1) / (BUILDING_SCALES[name] ?? 1))
+
 let clockClosedSpr = null
+/**
+ * 4.0-R：預設鐘樓的關門、開門共用同一個鐘面（中心、半徑）：關門鐘樓偵測到的值取整數。4.0-B1 起外殼鐘樓各主題自己共用（themeClock）。
+ * 各張各自偵測會差半格到 1 格，滑鼠移上去換開門版時程式畫的鐘面會跳；偵測值和共用值差超過 1 像素就警告（素材可能真的不同）。
+ */
+let towerClock = null
+function sharedClock(name, spr) {
+  const own = detectClockFace(spr)
+  if (!own) warn(name + '：偵測不到鐘面，用共用值')
+  else if (Math.abs(own.cx - towerClock.cx) > 1 || Math.abs(own.cy - towerClock.cy) > 1 || Math.abs(own.r - towerClock.r) > 1)
+    warn(`${name}：鐘面偵測 (${own.cx},${own.cy}) r=${own.r} 和共用值 (${towerClock.cx},${towerClock.cy}) r=${towerClock.r} 差超過 1 像素`)
+  info(`${name}：鐘面偵測 ${own ? `(${own.cx},${own.cy}) r=${own.r}` : '無'} → 共用 (${towerClock.cx},${towerClock.cy}) r=${towerClock.r}`)
+  return { ...towerClock }
+}
 let moundSpr = null
 /** 水池的目標寬度（邏輯像素） */
 const POND_W = 110
@@ -525,13 +1006,26 @@ const POND_W = 110
  *  - pScale：整張圖的 p 再乘上的倍率（貓 extra 原圖是縮小後再放大的，相對 core 取 0.56）
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
-async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false }) {
+async function sheet(opts) {
+  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe, keepEnclosed = false, exactBg = false } = opts
   const img = await load(file)
-  const bgFn = nearBg ? isBgNear : strictBg ? isBgStrict : isBg
+  const bgFn = exactBg ? isBgExact : nearBg ? isBgNear : strictBg ? isBgStrict : isBg
   const mask = fgMask(img, bgFn)
-  const { lab, comps: all } = label(mask, img.W, img.H)
-  const comps = keepComps(all, minArea)
-  const cells = groupCells(comps, cols, rows)
+  // 4.0-B1 keepEnclosed：只有「連到圖片邊緣」的洋紅才是背景；被物件圍住的洋紅是畫作本身的顏色（魔法主題的星雲、洋紅屋瓦、龐克的霓虹），保留
+  if (keepEnclosed) keepEnclosedPixels(mask, img.W, img.H)
+  let lab, all, comps, cells
+  if (grid === 'even') {
+    // 4.0-R：固定欄×列切格（相鄰的格子像素連在一起也會切開），見 evenCells
+    const ev = evenCells(mask, img.W, img.H, cols, rows, minArea)
+    lab = ev.lab
+    cells = ev.cells
+    comps = all = cells.flat()
+    info(`${file}：固定 ${cols}×${rows} 切格；黏在一起而切開的連通塊 ${ev.splits.map((s) => `[${s.box.join(',')}] 切在 x=${s.cuts.join('、')}`).join('；') || '無'}`)
+  } else {
+    ;({ lab, comps: all } = label(mask, img.W, img.H))
+    comps = keepComps(all, minArea)
+    cells = grid === 'nominal' ? nominalCells(comps, img.W, img.H, cols, rows) : groupCells(comps, cols, rows)
+  }
   const e = estimateP(img, mask, pRange)
   const base = (pFixed ?? e.p) * pScale
   pCache[file] = { p: base, amp: e.amp }
@@ -542,8 +1036,13 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
     // 相位：每格各自估算（避開 AI 圖的整體漂移）
     const clip = [Math.max(0, box[0] - 4), Math.max(0, box[1] - 4), Math.min(img.W - 2, box[2] + 4), Math.min(img.H - 2, box[3] + 4)]
     const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
-    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), bgFn)
+    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), keepEnclosed ? NEVER_BG : bgFn, exactBg)
   }
+  // 只給調參工具用（tests-archive/v400r/tune-p.mjs）：回傳切好的格子與取樣函式，不輸出任何東西
+  if (probe) return { render, cells, names, e }
+  // 4.0-R：有任何一格會直接用「估算值」取樣（沒有 pFixed、fitMax、solveGroup、solveFrom，這一格也沒有 targets／pFrames），而估算值碰到範圍邊界 → 報錯
+  const usesEstimate = pFixed == null && !fitMax && !solveGroup && !solveFrom && names.some((n) => n && (Array.isArray(n) || (!targets[n] && pFrames[n] == null)))
+  if (usesEstimate) guardEstimate(file, e, pRange)
   /** 反推 p，讓這一格輸出的高度等於 target（高度是整數，會在 ±1 內收斂） */
   const solve = (cell, target, p0) => {
     let pp = p0
@@ -623,7 +1122,8 @@ async function sheet({ file, cols, rows, names, minArea = 300, pRange, pFixed, t
       continue
     }
     // scales[名稱] = 縮放係數（> 1 放大）：像素格 p 除以係數重新取樣（最近鄰、仍是整數像素，不是事後縮放）
-    const pp = solveFrom || !targets[name] ? animalP / (scales[name] ?? 1) : solve(cell, targets[name], base)
+    // pFrames[名稱]（4.0-R）= 這一格明確指定的像素格，優先於 targets 與整張的 p（已含縮放，不再除 scales）
+    const pp = pFrames[name] != null ? pFrames[name] : solveFrom || !targets[name] ? animalP / (scales[name] ?? 1) : solve(cell, targets[name], base)
     const spr = render(cell, pp)
     if (!spr) {
       warn(file + ' ' + name + '：處理後是空的')
@@ -820,7 +1320,9 @@ async function main() {
   const animalP = {}
   for (const [id, file] of Object.entries(DOGS)) {
     const key = 'dog_' + id
-    const core = await sheet({ file, cols: 4, rows: 2, names: DOG_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    // 4.0-R：每隻狗用明確的 p（P_FIXED.animal；原本是「站姿目標高度」從 P_GUESS 求解），core 與 extra 共用
+    const core = await sheet({ file, cols: 4, rows: 2, names: DOG_CORE, pFixed: P_FIXED.animal[key] })
+    standCheck(key, core)
     animalP[key] = core.p
     for (const f of core.frames) addFrame(key, key + '_' + f.name, f.spr)
     const extra = await sheet({ file: 'dog_' + id + '_extra.png', cols: 3, rows: 2, names: DOG_EXTRA, pFixed: core.p })
@@ -831,10 +1333,12 @@ async function main() {
   const despills = {}
   for (const id of CATS) {
     const key = 'cat_' + id
-    const coreSheet = (file) => sheet({ file, cols: 4, rows: 2, names: CAT_CORE, pFixed: P_GUESS, targets: { stand: STAND_HEIGHT[key] }, solveFrom: 'stand' })
+    // 4.0-R：每隻貓用明確的 p（P_FIXED.animal；原本是「站姿目標高度」求解）；extra = core × CAT_EXTRA_RATIO（不變）
+    const coreSheet = (file) => sheet({ file, cols: 4, rows: 2, names: CAT_CORE, pFixed: P_FIXED.animal[key] })
     // v3.8.1：core、extra 改用 _hd 圖（CAT_HD=0 回到舊圖，只供新舊比對用）；CAT_HD_REVERT 列出的幀退回舊圖
     const revert = CAT_HD_REVERT[id] ?? { core: [], extra: [] }
     const core = await coreSheet(key + (CAT_HD ? '_core_hd.png' : '_core.png'))
+    standCheck(key, core)
     animalP[key] = core.p
     // 舊圖的 core：橘貓換圖（fix）要對齊的「舊」尺寸、以及退回舊圖的幀，都以舊圖為準（不因新圖的細微差異而改變）
     const coreOld = CAT_HD && (CAT_CORE_FIX[id] || revert.core.length) ? await coreSheet(key + '_core.png') : core
@@ -865,7 +1369,8 @@ async function main() {
   // 3) 領養預覽正面圖
   {
     const names = [...Object.keys(DOGS).map((d) => 'front_dog_' + d), ...CATS.map((c) => 'front_cat_' + c)]
-    const { frames } = await sheet({ file: '大家的正面照.png', cols: 6, rows: 2, names })
+    // 4.0-R：固定 6×2 切格（新原圖裡黃金獵犬＋邊牧、暹羅＋藍貓的像素連在一起，原本的分群只切得出 10 格）；明確的 p
+    const { frames } = await sheet({ file: '大家的正面照.png', cols: 6, rows: 2, names, grid: 'even', pFixed: P_FIXED.front })
     for (const f of frames) addFrame('ui', f.name, f.spr)
   }
 
@@ -880,12 +1385,10 @@ async function main() {
       for (let y = 0; y < f.spr.h; y++) f.spr.rgba.copy(out, ((y + oy) * W + ox) * 4, y * f.spr.w * 4, (y + 1) * f.spr.w * 4)
       addFrame('scene', f.name, { w: W, h: H, rgba: out })
     }
-    for (const [file, name] of [['scene_clocktower.png', 'clocktower'], ['scene_tree.png', 'tree']]) {
-      const r = await sheet({ file, cols: 1, rows: 1, names: [name], targets: name === 'clocktower' ? { clocktower: 160 } : {} })
-      for (const f of r.frames) {
-        if (f.name === 'clocktower') clockClosedSpr = f.spr
-        addFrame('scene', f.name, f.spr, f.name === 'clocktower' ? { meta: { clock: detectClockFace(f.spr) } } : {})
-      }
+    // 4.0-R：樹用明確的像素格（原本用估算值）；鐘樓（關門）在下面跟開門版一起處理
+    {
+      const r = await sheet({ file: 'scene_tree.png', cols: 1, rows: 1, names: ['tree'], pFixed: P_FIXED.tree })
+      for (const f of r.frames) addFrame('scene', f.name, f.spr)
     }
     // 水池：原圖有兩幀（只有水面亮紋不同），但切換時輪廓差 1px 會抖，所以只取第一幀、不輸出第二幀（水面靜止）。
     // 用寬度 110 反推 p；水面橢圓由這一幀偵測
@@ -897,21 +1400,21 @@ async function main() {
       info('水池（只用第一幀）' + f.spr.w + '×' + f.spr.h + '，水面橢圓 cx=' + water.cx + ' cy=' + water.cy + ' rx=' + water.rx + ' ry=' + water.ry + '（p=' + pond.p.toFixed(2) + '）')
     }
     {
-      // 開門鐘樓：和關門版用同一個高度 160，貼到 123×160 的畫布（底部中心對齊），並比對兩張的輪廓差異
-      const closed = clockClosedSpr
-      const r = await sheet({ file: 'scene_clocktower_open.png', cols: 1, rows: 1, names: ['clocktower_open'], targets: { clocktower_open: 160 }, solveFrom: 'clocktower_open' })
-      const f = r.frames[0]
-      const W = closed.w, H = closed.h
-      const out = Buffer.alloc(W * H * 4)
-      const ox = Math.round((W - f.spr.w) / 2), oy = H - f.spr.h
-      for (let y = 0; y < f.spr.h; y++)
-        for (let x = 0; x < f.spr.w; x++) {
-          const tx = x + ox, ty = y + oy
-          if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
-          f.spr.rgba.copy(out, (ty * W + tx) * 4, (y * f.spr.w + x) * 4, (y * f.spr.w + x + 1) * 4)
-        }
-      const spr = { w: W, h: H, rgba: out }
-      addFrame('scene', 'clocktower_open', spr, { meta: { clock: detectClockFace(spr) } })
+      // 鐘樓關門版與開門版（4.0-R）：各自用明確的像素格（P_FIXED.tower，原本是「目標高度 160」求解）；
+      // 兩張貼到同一張畫布，畫布取兩張裡最大的寬高（和住家三幀同一個做法；以前開門版貼進關門版大小的畫布，比較寬時右邊會被裁掉），底部中心對齊
+      const rc = await sheet({ file: 'scene_clocktower.png', cols: 1, rows: 1, names: ['clocktower'], pFrames: { clocktower: P_FIXED.tower.clocktower } })
+      const r = await sheet({ file: 'scene_clocktower_open.png', cols: 1, rows: 1, names: ['clocktower_open'], pFrames: { clocktower_open: P_FIXED.tower.clocktower_open } })
+      const c0 = rc.frames[0].spr, f = r.frames[0]
+      const W = Math.max(c0.w, f.spr.w), H = Math.max(c0.h, f.spr.h)
+      const closed = padBottomCenter(c0, W, H)
+      const spr = padBottomCenter(f.spr, W, H)
+      clockClosedSpr = closed
+      const face = detectClockFace(closed)
+      if (!face) throw new Error('關門鐘樓偵測不到鐘面')
+      towerClock = { cx: Math.round(face.cx), cy: Math.round(face.cy), r: Math.round(face.r) }
+      addFrame('scene', 'clocktower', closed, { meta: { clock: sharedClock('clocktower', closed) } })
+      addFrame('scene', 'clocktower_open', spr, { meta: { clock: sharedClock('clocktower_open', spr) } })
+      const out = spr.rgba
       let a = 0, b = 0, both = 0
       for (let i = 0; i < W * H; i++) {
         const ca = closed.rgba[i * 4 + 3] > 0, cb = out[i * 4 + 3] > 0
@@ -919,59 +1422,62 @@ async function main() {
         if (cb) b++
         if (ca !== cb) both++
       }
-      info('開門鐘樓：處理後 ' + f.spr.w + '×' + f.spr.h + '，貼到 ' + W + '×' + H + '（偏移 ' + ox + ',' + oy + '）；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
+      info('鐘樓：關門 ' + c0.w + '×' + c0.h + '、開門 ' + f.spr.w + '×' + f.spr.h + '，都貼到 ' + W + '×' + H + '；關門版不透明像素 ' + a + '，開門版 ' + b + '，輪廓差異（XOR）' + both + ' 像素 = ' + ((both / a) * 100).toFixed(1) + '%')
     }
     // v3.3.1：狗窩、貓跳台放大 1.15 倍，食盆水盆縮小到 0.7 倍（其餘不動）
-    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], scales: BUILDING_SCALES })
+    // 4.0-R：逐格明確的 p（已含 BUILDING_SCALES 係數，見 smallP；原本是整張估算值 ÷ 係數）
+    const small = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: ['doghouse', 'cat_tree', 'bowls', null, 'lamp', null], pFrames: Object.fromEntries(['doghouse', 'cat_tree', 'bowls', 'lamp'].map((n) => [n, smallP(n)])) })
     // 花圃（flowerbed）取消（v3.4.0 不使用）：原圖左下格不在這裡輸出（v3.9.0 的花槽在下面另外處理，id 是 planter）
     for (const f of small.frames) addFrame('scene', f.name, f.spr)
     // v3.9.0：左下格 = 花槽（planter）、右下格 = 珊瑚石堆（coral）。兩者都有粉紅色（珊瑚的粉紅枝、花槽的粉紅花），
     // 一般的洋紅判斷（isBg 第二條「玫瑰紅陰影」）與嚴格判斷（isBgStrict）都會把粉紅填色吃掉一部分，所以這兩格用 isBgNear（只認接近背景色的洋紅）去背；
     // 取樣格大小 p 沿用上面同一張圖算出的值（整張共用同一個比例），其他物件的圖完全不受影響。
-    const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], scales: BUILDING_SCALES, pFixed: small.p, nearBg: true })
+    const small2 = await sheet({ file: '小建築.png', cols: 3, rows: 2, names: [null, null, null, 'planter', null, 'coral'], pFrames: { planter: smallP('planter'), coral: smallP('coral') }, nearBg: true })
     for (const f of small2.frames) {
       const t = trimMagentaFringe(f.spr)
       info('  ' + f.name + '：移除暗紫色洋紅邊 ' + t.n + ' 像素 → ' + t.spr.w + '×' + t.spr.h)
       addFrame('scene', f.name, t.spr, { nearBg: true })
     }
     // 營火（v3.4.0）於 v3.5.1 移除：不輸出 campfire_a、campfire_b、campfire_off；蹺蹺板、蝴蝶也不使用；沙坑（v3.6.0 開發期間做過又取消）沒有任何程式使用，不輸出
-    const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'] })
+    const bn = await sheet({ file: 'buildings_new.png', cols: 4, rows: 2, names: ['bathtub', 'seesaw', 'sandbox', 'campfire_a', 'campfire_b', 'picnic', 'butterfly_open', 'butterfly_closed'], pFixed: P_FIXED.buildingsNew })
     for (const f of bn.frames) if (f.name !== 'seesaw' && f.name !== 'sandbox' && !f.name.startsWith('butterfly') && !f.name.startsWith('campfire')) addFrame('scene', f.name, f.spr)
     // 裝飾物各縮小到目標高度：蘑菇 36、樹樁 36、灌木 40、高草叢 38、石頭堆 34、小花叢 28
-    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], targets: { bush: 40, rocks: 34, flowers: 28, tall_grass: 38, mushroom: 36, stump: 36 } })
+    // 4.0-R：逐格明確的 p（P_FIXED.decor；原本是上面的目標高度從估算值求解）
+    const dc = await sheet({ file: 'decor.png', cols: 3, rows: 2, names: ['bush', 'rocks', 'flowers', 'tall_grass', 'mushroom', 'stump'], pFrames: P_FIXED.decor })
     for (const f of dc.frames) addFrame('scene', f.name, f.spr)
   }
 
   // 5) 天空物件、特效、玩具
   {
-    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'], targets: { snowflake: 9 } })
+    const sky = await sheet({ file: 'scene_sky_objects.png', cols: 4, rows: 2, names: ['sun', 'moon', 'star', 'cloud_a', 'cloud_b', 'cloud_c', 'raindrop', 'snowflake'], pFixed: P_FIXED.sky, pFrames: { snowflake: P_FIXED.snowflake } })
     for (const f of sky.frames) addFrame('fx', f.name, f.spr)
-    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, targets: Object.fromEntries(['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => ['fx_' + n, 15])) })
+    const fx = await sheet({ file: 'fx_icons.png', cols: 4, rows: 2, names: ['heart', 'zzz', 'note', 'sweat', 'exclaim', 'sparkle', 'bubble', 'question'].map((n) => 'fx_' + n), minArea: 150, pFrames: P_FIXED.fxIcons })
     for (const f of fx.frames) addFrame('fx', f.name, f.spr)
     // 水花、漣漪、水滴、泡泡：所有格共用同一個 p（以最高的水花高 30 反推）
     const wn = ['water_ripple_1', 'water_ripple_2', 'water_ripple_3', 'water_splash_1', 'water_splash_2', 'water_splash_3', ['water_drop_1', 'water_drop_2', 'water_drop_3'], ['water_bubble_s', 'water_bubble_l']]
-    const fw = await sheet({ file: 'fx_water.png', cols: 4, rows: 2, names: wn, minArea: 150, targets: { water_splash_2: 30 }, solveFrom: 'water_splash_2' })
+    const fw = await sheet({ file: 'fx_water.png', cols: 4, rows: 2, names: wn, minArea: 150, pFixed: P_FIXED.fxWater })
     for (const f of fw.frames) {
       const center = !f.name.startsWith('water_splash')
       addFrame('fx', f.name, f.spr, center ? { ay: Math.round(f.spr.h / 2) } : {})
     }
-    const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120 })
+    const td = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog })
     for (const f of td.frames) addFrame('toys', f.name, f.spr)
     // v3.5.0：場景裡的球（飛行、落地、叼著）用同一張原圖的球依目標高度重新取樣的小尺寸版（toy_ball_s），不改其他玩具；
     // 目標高度 BALL_S_H（預設見下方）。不是縮放：像素格 p 反推，一樣是整數像素。
-    const bs = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_ball: BALL_S_H } })
+    // 4.0-R：沒有用 BALL_S_H 環境變數比較時，用明確的 p（P_FIXED.toyBallS）
+    const bs = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog, ...(process.env.BALL_S_H ? { targets: { toy_ball: BALL_S_H } } : { pFrames: { toy_ball: P_FIXED.toyBallS } }) })
     const ballS = bs.frames.find((f) => f.name === 'toy_ball')
     if (!ballS) throw new Error('找不到小球')
     addFrame('toys', 'toy_ball_s', ballS.spr)
     info('小球 toy_ball_s：' + ballS.spr.w + '×' + ballS.spr.h + '（目標高度 ' + BALL_S_H + '）')
     // v3.6.0：場景裡的土堆用同一張原圖的土堆依目標寬度重新取樣的小尺寸版（toy_dirt_mound_s，寬約 26）
-    const ms = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, targets: { toy_dirt_mound: MOUND_S_W }, solveDim: 'w' })
+    const ms = await sheet({ file: 'toys_dog.png', cols: 4, rows: 2, names: ['ball', 'frisbee', 'rope', 'bone', 'shoe', 'chest_closed', 'chest_open', 'dirt_mound'].map((n) => 'toy_' + n), minArea: 120, pFixed: P_FIXED.toysDog, pFrames: { toy_dirt_mound: P_FIXED.moundS } })
     const moundS = ms.frames.find((f) => f.name === 'toy_dirt_mound')
     if (!moundS) throw new Error('找不到土堆')
     addFrame('toys', 'toy_dirt_mound_s', moundS.spr)
     moundSpr = moundS.spr
     info('土堆 toy_dirt_mound_s：' + moundS.spr.w + '×' + moundS.spr.h + '（目標寬度 ' + MOUND_S_W + '）')
-    const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120 })
+    const tc = await sheet({ file: 'toys_cat.png', cols: 3, rows: 3, names: ['toy_laser_dot', 'toy_wand', 'toy_yarn'], minArea: 120, pFixed: P_FIXED.toysCat })
     for (const f of tc.frames) addFrame('toys', f.name, f.spr)
   }
 
@@ -982,8 +1488,10 @@ async function main() {
     const e = estimateP(img, mask)
     info(`scene_tiles.png: p=${e.p.toFixed(2)}`)
     const box = [0, 0, 508, 490] // 草地格；底邊 20 像素左右比較粗糙，裁掉
-    const phases = [estimatePhase(img, mask, box, e.p, 0), estimatePhase(img, mask, box, e.p, 1)]
-    const t = depixelate(img, mask, null, null, box, e.p, phases)
+    // 4.0-R：草地用明確的 p（P_FIXED.grass；估算值只印在報告裡）
+    const gp = P_FIXED.grass
+    const phases = [estimatePhase(img, mask, box, gp, 0), estimatePhase(img, mask, box, gp, 1)]
+    const t = depixelate(img, mask, null, null, box, gp, phases)
     // 裁掉不完整的最外圈
     const trim = (s) => {
       const w = s.w - 2, h = s.h - 2
@@ -1005,19 +1513,19 @@ async function main() {
       pm[i] = r >= g - 6 && !(g > r + 10 && g > b + 30) ? 1 : 0
     }
     const pe = estimateP(pimg, new Uint8Array(pimg.W * pimg.H).fill(1))
-    info(`scene_path.png: p=${pe.p.toFixed(2)}`)
+    info(`scene_path.png: 估算 p=${pe.p.toFixed(2)}，採用 p=${P_FIXED.path}`)
     const { lab: plab, comps: pcomps } = label(pm, pimg.W, pimg.H)
     const biggest = pcomps.reduce((a, c) => (c.area > a.area ? c : a))
     const keep = new Set(pcomps.filter((c) => c.area > 400).map((c) => c.id))
     const pbox = [0, biggest.y0 - 4, pimg.W - 2, biggest.y1 + 4]
-    const pph = [estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, pe.p, 0), estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, pe.p, 1)]
-    const pr = depixelate(pimg, pm, plab, keep, pbox, pe.p, pph)
+    const pph = [estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, P_FIXED.path, 0), estimatePhase(pimg, new Uint8Array(pimg.W * pimg.H).fill(1), pbox, P_FIXED.path, 1)]
+    const pr = depixelate(pimg, pm, plab, keep, pbox, P_FIXED.path, pph)
     const path = cleanSprite(pr)
     const pathLoop = hcat(path, flipX(path))
     addFrame('terrain', 'path', pathLoop, { ax: 0, ay: pathLoop.h })
     info(`小路 ${pathLoop.w}×${pathLoop.h}（左右鏡像，可水平重複）`)
 
-    const far = await sheet({ file: 'scene_far.png', cols: 1, rows: 1, names: ['far'], minArea: 5000 })
+    const far = await sheet({ file: 'scene_far.png', cols: 1, rows: 1, names: ['far'], minArea: 5000, pFixed: P_FIXED.far })
     for (const f of far.frames) {
       const loop = hcat(f.spr, flipX(f.spr))
       addFrame('terrain', 'far', loop, { ax: 0, ay: loop.h })
@@ -1025,7 +1533,7 @@ async function main() {
     }
   }
 
-  // 7) v3.6.0：收藏品圖示、錢幣、完整紙張（圖集 items，必載）；金色住家與黃金鐘樓（圖集 skins，解鎖才載）
+  // 7) v3.6.0：收藏品圖示、錢幣、完整紙張（圖集 items，必載）；4.0-B1：主題外殼與亞特蘭提斯房屋／鐘樓（圖集 skins_*，穿上或商店預覽才載）
   {
     const built = await buildItemIcons(ITEM_BOX)
     for (const [k, s] of Object.entries(built.icons)) addFrame('items', k, s, { ax: ITEM_BOX / 2, ay: ITEM_BOX })
@@ -1034,56 +1542,52 @@ async function main() {
 
     const db = await sheet({
       file: 'items_dig_b.png', cols: 3, rows: 2, names: ['coin_bronze', 'coin_silver', 'coin_gold', 'fx_reveal', null, null],
-      targets: { coin_bronze: COIN_H, coin_silver: COIN_H, coin_gold: COIN_H, fx_reveal: REVEAL_H },
+      // 4.0-R：逐格明確的 p（P_FIXED.digB；原本是 COIN_H／REVEAL_H 目標高度從估算值求解）
+      pFrames: P_FIXED.digB,
     })
     for (const f of db.frames) addFrame('items', f.name, f.spr)
-    const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], fitMax: PAPER_MAX })
+    // 4.0-R：明確的 p（原本是 fitMax PAPER_MAX 求解，新原圖求出來會差 1 像素）
+    const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], pFixed: P_FIXED.papers })
     for (const f of papers.frames) { const n = defringePink(f.spr, true); info(f.name + '：移除偏粉紅殘邊 ' + n + ' 個像素'); addFrame('items', f.name, f.spr) }
 
-    // 金色住家：和原住家用同一個 p 規則、貼到同樣大小的畫布
+    // 4.0-B1：主題外殼（延後載入圖集 skins_*）。亞特蘭提斯房屋／鐘樓（傳說獎勵）取代原本的全黃金住家與鐘樓，
+    // 畫布 = 預設住家 139×134、預設鐘樓 123×160（底部中心對齊，錨點和預設圖相同）
     const hc = atlases.scene.find((f) => f.key === 'house_closed')
-    const hg = await sheet({ file: 'house_gold.png', cols: 3, rows: 1, names: ['house_gold_closed', 'house_gold_open', 'house_gold_night'], targets: { house_gold_closed: 134 }, solveFrom: 'house_gold_closed' })
-    const goldHouse = {}
-    for (const f of hg.frames) {
-      goldHouse[f.name] = padBottomCenter(f.spr, hc.w, hc.h)
-      addFrame('skins', f.name, goldHouse[f.name])
-    }
-    // 黃金鐘樓：關門、開門都用高度 160，貼到 123×160（和現有開門鐘樓同一做法）
     const tcl = atlases.scene.find((f) => f.key === 'clocktower')
     const top = atlases.scene.find((f) => f.key === 'clocktower_open')
-    const tg1 = await sheet({ file: 'scene_clocktower_gold.png', cols: 1, rows: 1, names: ['clocktower_gold'], targets: { clocktower_gold: 160 }, solveFrom: 'clocktower_gold' })
-    const tg2 = await sheet({ file: 'scene_clocktower_open_gold.png', cols: 1, rows: 1, names: ['clocktower_open_gold'], targets: { clocktower_open_gold: 160 }, solveFrom: 'clocktower_open_gold' })
-    const gClosed = padBottomCenter(tg1.frames[0].spr, tcl.w, tcl.h)
-    const gOpen = padBottomCenter(tg2.frames[0].spr, tcl.w, tcl.h)
+    if (hc.w !== SKIN_CANVAS.house[0] || hc.h !== SKIN_CANVAS.house[1] || tcl.w !== SKIN_CANVAS.tower[0] || tcl.h !== SKIN_CANVAS.tower[1])
+      throw new Error(`外殼畫布和預設圖大小不同：住家 ${hc.w}×${hc.h}、鐘樓 ${tcl.w}×${tcl.h}`)
+    const sk = await buildSkins()
+    const goldHouse = { house_atlantis_closed: sk.house.atlantis.closed, house_atlantis_open: sk.house.atlantis.open, house_atlantis_night: sk.house.atlantis.night }
+    const gClosed = sk.tower.atlantis.closed
+    const gOpen = sk.tower.atlantis.open
     const clockOf = (s) => detectClockFace(s)
-    addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: clockOf(gClosed) } })
-    addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: clockOf(gOpen) } })
-    // 收藏冊的「獎勵剪影」預先烘好放進 items（skins 沒載入時收藏冊也能顯示）
-    addFrame('items', 'sil_house_gold', padCenter(shrinkSilhouette(goldHouse.house_gold_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
-    addFrame('items', 'sil_tower_gold', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    // 收藏冊的「獎勵剪影」預先烘好放進 items（外殼圖集沒載入時收藏冊也能顯示）：由亞特蘭提斯房屋／鐘樓的關門圖產生
+    addFrame('items', 'sil_house_atlantis', padCenter(shrinkSilhouette(goldHouse.house_atlantis_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    addFrame('items', 'sil_tower_atlantis', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
 
-    // ---- 檢查：金色版與原版的鐘面、門、窗、輪廓 ----
+    // ---- 檢查：亞特蘭提斯版與原版的鐘面、門、窗、輪廓（4.0-B1 起；原本是金色版） ----
     info('')
-    info('===== v3.6.0 金色外觀對位檢查 =====')
+    info('===== 亞特蘭提斯外觀對位檢查 =====')
     for (const [name, orig, gold] of [['關門鐘樓', tcl, gClosed], ['開門鐘樓', top, gOpen]]) {
       const co = clockOf(orig), cg = clockOf(gold)
       const dx = cg.cx - co.cx, dy = cg.cy - co.cy, dr = cg.r - co.r
-      const line = `${name}：鐘面 原 (${co.cx},${co.cy}) r=${co.r} → 金 (${cg.cx},${cg.cy}) r=${cg.r}；差 dx=${dx} dy=${dy} dr=${dr}`
+      const line = `${name}：鐘面 原 (${co.cx},${co.cy}) r=${co.r} → 亞特蘭提斯 (${cg.cx},${cg.cy}) r=${cg.r}；差 dx=${dx} dy=${dy} dr=${dr}`
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2 || Math.abs(dr) > 2) warn(line + '（超過 2px）')
       else info(line)
       const db1 = doorBox(orig), db2 = doorBox(gold)
-      info(`${name}：門（木色像素外框，相對素材）原 ${JSON.stringify(db1)} → 金 ${JSON.stringify(db2)}`)
+      info(`${name}：門（木色像素外框，相對素材）原 ${JSON.stringify(db1)} → 亞特蘭提斯 ${JSON.stringify(db2)}`)
       const w1 = windowCenters(orig), w2 = windowCenters(gold)
-      info(`${name}：窗（藍灰玻璃塊）原 ${w1.length} 個、金 ${w2.length} 個`)
+      info(`${name}：窗（藍灰玻璃塊）原 ${w1.length} 個、亞特蘭提斯 ${w2.length} 個`)
       let worst = 0
-      for (const a of w1) { const d = Math.min(...w2.map((b) => Math.hypot(a.x - b.x, a.y - b.y))); if (d > worst) worst = d }
-      info(`${name}：每個原版窗到金版最近窗的距離，最大 ${worst.toFixed(1)} px`)
+      if (w2.length) for (const a of w1) { const d = Math.min(...w2.map((b) => Math.hypot(a.x - b.x, a.y - b.y))); if (d > worst) worst = d }
+      info(`${name}：每個原版窗到亞特蘭提斯版最近窗的距離，最大 ${w2.length ? worst.toFixed(1) : '—'} px`)
       const x = alphaXor(orig, gold)
       info(`${name}：輪廓差異（XOR）${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%（原版不透明 ${x.tot}）`)
     }
-    for (const [n, o, g] of [['住家 關門', 'house_closed', 'house_gold_closed'], ['住家 開門', 'house_open', 'house_gold_open'], ['住家 夜晚', 'house_night', 'house_gold_night']]) {
+    for (const [n, o, g] of [['住家 關門', 'house_closed', 'house_atlantis_closed'], ['住家 開門', 'house_open', 'house_atlantis_open'], ['住家 夜晚', 'house_night', 'house_atlantis_night']]) {
       const x = alphaXor(atlases.scene.find((f) => f.key === o), goldHouse[g])
-      info(`${n}：金色版 ${goldHouse[g].w}×${goldHouse[g].h}，與原版輪廓差異 ${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%`)
+      info(`${n}：亞特蘭提斯版 ${goldHouse[g].w}×${goldHouse[g].h}，與原版輪廓差異 ${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%`)
     }
 
     // ---- 預覽圖 ----
@@ -1101,8 +1605,8 @@ async function main() {
     const other = [...db.frames, ...papers.frames].map((f) => ({ spr: f.spr, label: f.name + ` ${f.spr.w}x${f.spr.h}`, scale: f.name.startsWith('paper') ? 2 : 4 }))
     other.push({ spr: moundSpr, label: `mound_s ${moundSpr.w}x${moundSpr.h}`, scale: 4 })
     other.push({ spr: atlases.toys.find((f) => f.key === 'toy_dirt_mound'), label: 'toy_dirt_mound (old)', scale: 2 })
-    other.push({ spr: atlases.items.find((f) => f.key === 'sil_house_gold'), label: 'sil_house_gold', scale: 4 })
-    other.push({ spr: atlases.items.find((f) => f.key === 'sil_tower_gold'), label: 'sil_tower_gold', scale: 4 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_house_atlantis'), label: 'sil_house_atlantis', scale: 4 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_tower_atlantis'), label: 'sil_tower_atlantis', scale: 4 })
     await composePreview('v360-coins-reveal-mound-silhouettes.png', other, { cols: 5, cellW: 210, cellH: 210, scale: 3, bg: bgPrev })
 
     // 去粉紅殘邊處理後的檢查圖：容易有粉紅光暈的 6 個圖示，放在草地綠底上（48 版，×4）
@@ -1136,7 +1640,7 @@ async function main() {
     })
     await composePreview('v360-shard-F-vs-A-E.png', shards, { cols: 6, cellW: ITEM_BOX * 6 + 8, cellH: ITEM_BOX * 6 + 20, scale: 6, bg: bgPrev })
 
-    // 黃金鐘樓與現有鐘樓：原版、金色版、疊圖（紅 = 只有原版有；藍 = 只有金色版有；灰 = 兩者都有）
+    // 亞特蘭提斯鐘樓與現有鐘樓：原版、亞特蘭提斯版、疊圖（紅 = 只有原版有；藍 = 只有亞特蘭提斯版有；灰 = 兩者都有）
     const overlay = (a, b) => {
       const out = Buffer.alloc(a.w * a.h * 4)
       for (let i = 0; i < a.w * a.h; i++) {
@@ -1153,21 +1657,21 @@ async function main() {
       if (m) for (let d = -3; d <= 3; d++) for (const [x, y] of [[m[0] + d, m[1]], [m[0], m[1] + d]]) { const o = (y * s.w + x) * 4; out[o] = 255; out[o + 1] = 0; out[o + 2] = 0; out[o + 3] = 255 }
       return { w: s.w, h: s.h, rgba: out }
     }
-    await composePreview('v360-tower-gold-vs-orig.png', [
+    await composePreview('b1-tower-atlantis-vs-orig.png', [
       { spr: ring(tcl, clockOf(tcl)), label: 'clocktower (orig)', scale: 4 },
-      { spr: ring(gClosed, clockOf(gClosed)), label: 'clocktower_gold', scale: 4 },
-      { spr: overlay(tcl, gClosed), label: 'overlay red=orig only blue=gold only', scale: 4 },
+      { spr: ring(gClosed, clockOf(gClosed)), label: 'tower_atlantis', scale: 4 },
+      { spr: overlay(tcl, gClosed), label: 'overlay red=orig only blue=atlantis only', scale: 4 },
       { spr: ring(top, clockOf(top)), label: 'clocktower_open (orig)', scale: 4 },
-      { spr: ring(gOpen, clockOf(gOpen)), label: 'clocktower_open_gold', scale: 4 },
+      { spr: ring(gOpen, clockOf(gOpen)), label: 'tower_atlantis_open', scale: 4 },
       { spr: overlay(top, gOpen), label: 'overlay', scale: 4 },
     ], { cols: 3, cellW: 123 * 4 + 8, cellH: 160 * 4 + 20, scale: 4, bg: bgPrev })
-    await composePreview('v360-house-gold-vs-orig.png', [
+    await composePreview('b1-house-atlantis-vs-orig.png', [
       { spr: atlases.scene.find((f) => f.key === 'house_closed'), label: 'house_closed (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_closed, label: 'house_gold_closed', scale: 3 },
+      { spr: goldHouse.house_atlantis_closed, label: 'house_atlantis_closed', scale: 3 },
       { spr: atlases.scene.find((f) => f.key === 'house_open'), label: 'house_open (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_open, label: 'house_gold_open', scale: 3 },
+      { spr: goldHouse.house_atlantis_open, label: 'house_atlantis_open', scale: 3 },
       { spr: atlases.scene.find((f) => f.key === 'house_night'), label: 'house_night (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_night, label: 'house_gold_night', scale: 3 },
+      { spr: goldHouse.house_atlantis_night, label: 'house_atlantis_night', scale: 3 },
     ], { cols: 2, cellW: 139 * 3 + 8, cellH: 134 * 3 + 20, scale: 3, bg: bgPrev })
   }
 
@@ -1188,7 +1692,7 @@ async function main() {
     }
     // 公佈欄（items_dig_b 第 5 格：深綠黑板、木框、粉筆槽、三張空白便條）：依目標寬度 BOARD_W 反推 p（整數像素，不是事後縮放）。
     // 第 6 格（農場告示牌）這版不用。黑板的綠色範圍寫進 meta.board（場景上疊標題縮圖用）
-    const bd = await sheet({ file: 'items_dig_b.png', cols: 3, rows: 2, names: [null, null, null, null, 'board', null], targets: { board: BOARD_W }, solveDim: 'w' })
+    const bd = await sheet({ file: 'items_dig_b.png', cols: 3, rows: 2, names: [null, null, null, null, 'board', null], pFrames: { board: P_FIXED.board } })
     const board = bd.frames.find((f) => f.name === 'board')
     if (!board) throw new Error('找不到公佈欄')
     const green = boardGreen(board.spr)
@@ -1216,7 +1720,7 @@ async function main() {
       tiles.push({ spr: padCenter(f.spr, PERSONALITY_ICON), label: f.name, scale: 4 })
     }
     // 野餐墊 3 款（紅格、藍格、粉色）：整張共用 p，紅格的寬度 = PICNIC_MAT_W
-    const mats = await sheet({ file: 'picnic_mats.png', cols: 3, rows: 1, names: ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'], targets: { picnic_mat_red: PICNIC_MAT_W }, solveFrom: 'picnic_mat_red', solveDim: 'w', strictBg: true })
+    const mats = await sheet({ file: 'picnic_mats.png', cols: 3, rows: 1, names: ['picnic_mat_red', 'picnic_mat_blue', 'picnic_mat_pink'], ...(process.env.PICNIC_MAT_W ? { targets: { picnic_mat_red: PICNIC_MAT_W }, solveFrom: 'picnic_mat_red', solveDim: 'w' } : { pFixed: P_FIXED.mats }), strictBg: true })
     for (const f of mats.frames) {
       const spr = padBottomCenter(f.spr, PICNIC_MAT_W, Math.max(...mats.frames.map((g) => g.spr.h)))
       addFrame('picnic', f.name, spr, { meta: { mat: matShape(spr) }, strictBg: true })
@@ -1231,7 +1735,7 @@ async function main() {
       tiles.push({ spr: f.spr, label: f.name, scale: 4 })
     }
     // 食物 4 種（2×2：三明治、水果盤 / 草莓蛋糕、柳橙汁）：共用 p，最大那張長邊 = PICNIC_FOOD
-    const fd = await sheet({ file: 'picnic_food.png', cols: 2, rows: 2, names: ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'], fitMax: PICNIC_FOOD })
+    const fd = await sheet({ file: 'picnic_food.png', cols: 2, rows: 2, names: ['picnic_food_sandwich', 'picnic_food_fruit', 'picnic_food_cake', 'picnic_food_juice'], ...(process.env.PICNIC_FOOD ? { fitMax: PICNIC_FOOD } : { pFixed: P_FIXED.food }) })
     for (const f of fd.frames) {
       addFrame('picnic', f.name, f.spr)
       info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${fd.p.toFixed(2)}）`)
@@ -1245,7 +1749,7 @@ async function main() {
       tiles.push({ spr: f.spr, label: f.name, scale: 4 })
     }
     // 相機圖示（相機提示按鈕）
-    const cam = await sheet({ file: 'picnic_camera.png', cols: 1, rows: 1, names: ['picnic_camera'], fitMax: PICNIC_CAMERA })
+    const cam = await sheet({ file: 'picnic_camera.png', cols: 1, rows: 1, names: ['picnic_camera'], pFixed: P_FIXED.camera })
     for (const f of cam.frames) {
       addFrame('picnic', f.name, f.spr)
       info(`${f.name}：${f.spr.w}×${f.spr.h}（p=${cam.p.toFixed(2)}）`)
@@ -1253,7 +1757,7 @@ async function main() {
     }
     // 拍立得相框 3 款（polaroid_frames_b：愛心＋腳印、花朵＋野餐籃、星星＋貓咪）：共用 p，最大那張長邊 = POLAROID_MAX。
     // 中間的洋紅窗口去背後是透明的：用程式找「被相框圍住、碰不到外框的透明區塊」，外框寫進 meta.window（照片放在這個矩形裡，相框疊在上面）
-    const pf = await sheet({ file: 'polaroid_frames_b.png', cols: 3, rows: 1, names: ['polaroid_hearts', 'polaroid_flowers', 'polaroid_stars'], fitMax: POLAROID_MAX })
+    const pf = await sheet({ file: 'polaroid_frames_b.png', cols: 3, rows: 1, names: ['polaroid_hearts', 'polaroid_flowers', 'polaroid_stars'], ...(process.env.POLAROID_MAX ? { fitMax: POLAROID_MAX } : { pFixed: P_FIXED.polaroid }) })
     for (const f of pf.frames) {
       // 不做 defringePink：愛心款的愛心本身是粉紅色、又貼著外緣，會被當成殘邊削掉（實測 149 格）
       const n = 0
@@ -1265,6 +1769,11 @@ async function main() {
     }
     await composePreview('v380-assets.png', tiles, { cols: 5, cellW: 300, cellH: 300, scale: 3, bg: bgPrev })
   }
+
+  // 10) 4.0-B2：環境主題（地板、小路、遠景、路燈、樹；延後載入圖集 env_<主題>、env_thumbs）、主題裝飾（延後載入圖集 decor_themes）
+  await buildEnvThemes()
+  await buildThemeDecor()
+  await buildAccessories()
 
   await writeOutputs()
 }
@@ -1420,8 +1929,9 @@ async function writeOutputs() {
   for (const frames of Object.values(atlases))
     for (const f of frames) {
       let magenta = 0
-      const bgFn = f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
-      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) magenta++
+      const bgFn = f.exactBg ? isBgExact : f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
+      // 4.0-B1：保留內部洋紅畫作的外殼（keepEnclosed）只算貼著透明處的殘留
+      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2]) && (!f.keepEnclosed || isEdge(f.rgba, f.w, f.h, i % f.w, (i / f.w) | 0))) magenta++
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
       // v3.8.0 新素材：逐張列出洋紅殘留（嚴格判斷＝純洋紅；一般判斷＝含玫瑰紅陰影，粉色墊的滾邊本來就是粉紅色，所以墊子只看嚴格判斷）
       if (/^(pers_|picnic_|polaroid_)/.test(f.key)) {
@@ -1431,6 +1941,15 @@ async function writeOutputs() {
       }
       if (f.w < 6 || f.h < 6) warn(`${f.key} 太小（${f.w}×${f.h}）`)
     }
+  // 4.0-R：去邊報告
+  {
+    const rows = Object.entries(defringeLog)
+    const sum = (i) => rows.reduce((t, [, v]) => t + v[i], 0)
+    info('')
+    info(`===== 去邊（邊緣洋紅偏色）${DEFRINGE ? '' : '：已用 DEFRINGE=0 關閉'} =====`)
+    info(`有偏色的素材 ${rows.length} 張；邊緣洋紅偏色 去邊前 ${sum(0)} → 去邊後 ${sum(1)}，改色 ${sum(2)} 像素`)
+    for (const [k, v] of rows) info(`  ${k}：${v[0]} → ${v[1]}（改色 ${v[2]}）`)
+  }
   // 前後尺寸對照表
   info('')
   info('===== 尺寸對照表（寬×高，邏輯像素；前 = 第一版統一 p=6.1，後 = 本版） =====')
@@ -1462,7 +1981,7 @@ async function overview(tag, bg) {
   const SCALE = 3
   const groups = Object.entries(atlases)
   const rows = []
-  for (const [group, frames] of groups) rows.push({ group, frames: frames.filter((f) => group !== 'terrain') })
+  for (const [group, frames] of groups) rows.push({ group, frames: frames.filter((f) => group !== 'terrain' && !/^env_(?!thumbs)/.test(group)) })
   const MAXW = 1800
   const layout = []
   let y = 6
@@ -1498,4 +2017,314 @@ async function overview(tag, bg) {
   info(`總覽圖：screenshots/assets-overview-${tag}.png（${W}×${H}）`)
 }
 
-await main()
+// ===========================================================================
+// 4.0-B2：環境主題（地板＋小路＋遠景＋路燈＋樹）與主題裝飾
+// ===========================================================================
+
+/**
+ * 原圖：<主題>_tiles.png（地板，1024×1024，2×2 四塊變化版 A～D；指令稱 floor_<主題>.png，實際檔名是 *_tiles.png）、path_<主題>.png、far_<主題>.png（2172×724，
+ * 真透明 alpha）、lamp_themes.png／tree_themes.png（3×2，每格 512）、*_decor.png。順序一律 THEMES：亞特蘭提斯、無塵室、森林、魔法、龐克、野餐鄉村。
+ * 新原圖的底色是恰好 #FF00FF（exactBg）。地板、小路、遠景是 4×4 像素格的圖，取樣用 resampleRect（格子大小可以不是整數，輸出格數固定）。
+ */
+const ENV_THEMES = THEMES
+/** 地板：整張 1024×1024（A～D 四塊）取樣成 round(1024 / FLOOR_P) 格，再 2×2 鏡像成可無縫拼接的方塊（接縫在 A～D 之間本來就有，鏡像保證外緣無縫） */
+const FLOOR_P = P_FIXED.grass
+/** 小路：每主題的「中間路面帶」在原圖的列範圍 [y0, y1)（量法：列平均色的跳變；都落在 4 的倍數上，= 原圖的像素格邊），高度一律縮成 PATH_H = 67 列 */
+const PATH_H_LOGICAL = 67
+/**
+ * 4.0-C 小修：地板用哪幾塊。原圖 A（左上）B（右上）C（左下）D（右下）；森林的 D 是小路狀土徑、無塵室與龐克的 D 是大塊警示條紋，這三個主題只用 A～C，D 的位置補 A（其他主題 A～D）。
+ * 小路的取樣寬度：無塵室與龐克的原圖右緣（x ≥ 約 2125）有一段漸層瑕疵，只取「左右接起來誤差最小」的整數個條紋週期（無塵室 2040、龐克 2008；接縫誤差各約 2%、1%），瑕疵段不取樣，左右直接接。
+ */
+const FLOOR_BLOCKS = { forest: 'ABCA', cleanroom: 'ABCA', punk: 'ABCA' }
+const PATH_X1 = { cleanroom: 2040, punk: 2008 }
+const PATH_BANDS = { atlantis: [184, 556], cleanroom: [204, 504], forest: [136, 556], magic: [204, 512], punk: [208, 520], plaid: [224, 544] }
+/** 遠景：像素格 = 舊遠景（P_FIXED.far），輸出高度是「不透明內容的高度」（FAR_H 每張各自量；無塵室是牆填滿整張高度 → 約 131） */
+const FAR_P = P_FIXED.far
+/** 路燈、樹：每格各自求 p，讓高度 = 舊素材（路燈 84、樹 103）；樹太寬時以寬度上限為準。錨點 = 最下面幾列的水平中心（底部中心對位） */
+const LAMP_TARGET = { h: 84, maxW: 60 }
+const TREE_TARGET = { h: 103, maxW: 100 }
+/**
+ * 主題裝飾（連通區域偵測切件）：[原圖, 欄, 列, [[種類, 級別] | null …]]，順序 = 原圖左到右、上到下。級別決定輸出大小（邏輯像素的外框面積）：
+ * 小 ≈ 1300、中 ≈ 2100、大 ≈ 4000，另有寬高上限。legend_stand（傳說展示台）不賣，只切好放進圖集（C 階段用）。
+ * 這張表要和 src/farm/config/themeDecor.ts 一致（測試比對）。
+ */
+const DECOR_SHEETS = [
+  ['atlantis_decor.png', 4, 2, [['jelly_lamp', 'S'], ['conch_lamp', 'S'], ['old_pillar', 'M'], ['seahorse_statue', 'M'], ['trident_statue', 'L'], ['temple_arch', 'L'], ['legend_stand', 'M'], null]],
+  ['cleanroom_decor.png', 4, 2, [['warn_light', 'S'], ['tube_rack', 'S'], ['lab_bench', 'M'], ['air_filter', 'M'], ['centrifuge', 'M'], ['air_shower', 'L'], null, null]],
+  ['forest_decor.png', 4, 2, [['firefly_jar', 'S'], ['bird_house', 'S'], ['moss_log', 'M'], ['hollow_stump_door', 'M'], ['vine_arch', 'M'], ['tree_house', 'L'], null, null]],
+  ['magic_decor.png', 4, 2, [['crystal_cluster', 'S'], ['spell_books', 'S'], ['float_candles', 'M'], ['star_telescope', 'M'], ['magic_cauldron', 'M'], ['rune_circle', 'L'], null, null]],
+  ['punk_decor.png', 4, 2, [['neon_star', 'S'], ['spray_cans', 'S'], ['speaker', 'M'], ['graffiti_wall', 'M'], ['fire_barrel', 'M'], ['neon_stage', 'L'], null, null]],
+  ['plaid_decor.png', 4, 2, [['cake_stand', 'S'], ['lemonade_jar', 'S'], ['rocking_chair', 'M'], ['picnic_set', 'M'], ['vine_gazebo', 'L'], ['carousel', 'L'], null, null]],
+  ['extra_decor_a.png', 3, 2, [['coral_pot', 'S'], ['twin_jar', 'S'], ['gas_cylinders', 'S'], ['info_terminal', 'S'], ['mushroom_ring', 'S'], ['stone_stack', 'S']]],
+  ['extra_decor_b.png', 3, 2, [['crystal_ball', 'S'], ['magic_broom', 'S'], ['guitar_stand', 'S'], ['tire_stack', 'S'], ['red_pots', 'S'], ['windmill', 'S']]],
+]
+const DECOR_AREA = { S: 1300, M: 2100, L: 4000 }
+const DECOR_MAX = { S: { w: 46, h: 46 }, M: { w: 72, h: 62 }, L: { w: 100, h: 90 } }
+
+/** 不是整數大小的格子取樣：把原圖矩形 [x0,x1)×[y0,y1) 平均成 w×h 格（每格取中央一半的前景像素平均；前景佔格子 ≥ 50% 才算不透明，和 depixelate 同一規則） */
+function resampleRect(img, mask, x0, y0, x1, y1, w, h) {
+  const { data, W } = img
+  const dx = (x1 - x0) / w, dy = (y1 - y0) / h
+  const rgba = Buffer.alloc(w * h * 4)
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const sx0 = Math.round(x0 + i * dx), sx1 = Math.max(sx0, Math.round(x0 + (i + 1) * dx) - 1)
+      const sy0 = Math.round(y0 + j * dy), sy1 = Math.max(sy0, Math.round(y0 + (j + 1) * dy) - 1)
+      const mx0 = sx0 + (sx1 - sx0) * 0.25, mx1 = sx1 - (sx1 - sx0) * 0.25
+      const my0 = sy0 + (sy1 - sy0) * 0.25, my1 = sy1 - (sy1 - sy0) * 0.25
+      let fg = 0, tot = 0, r = 0, g = 0, b = 0, cn = 0, ar = 0, ag = 0, ab = 0, an = 0
+      for (let y = sy0; y <= sy1; y++)
+        for (let x = sx0; x <= sx1; x++) {
+          const k = y * W + x
+          tot++
+          if (!mask[k]) continue
+          fg++
+          ar += data[k * 3]; ag += data[k * 3 + 1]; ab += data[k * 3 + 2]; an++
+          if (x >= mx0 && x <= mx1 && y >= my0 && y <= my1) { r += data[k * 3]; g += data[k * 3 + 1]; b += data[k * 3 + 2]; cn++ }
+        }
+      if (tot && fg / tot >= 0.5) {
+        const o = (j * w + i) * 4
+        if (!cn) { r = ar; g = ag; b = ab; cn = an }
+        rgba[o] = Math.round(r / cn); rgba[o + 1] = Math.round(g / cn); rgba[o + 2] = Math.round(b / cn); rgba[o + 3] = 255
+      }
+    }
+  return { w, h, rgba }
+}
+
+/** 讀有 alpha 的原圖：RGB 與前景遮罩（alpha ≥ 128） */
+async function loadAlpha(file) {
+  const path = join(SRC, file)
+  if (!existsSync(path)) throw new Error('找不到原圖：' + path)
+  const { data, info: i } = await sharp(path).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const rgb = Buffer.alloc(i.width * i.height * 3)
+  const mask = new Uint8Array(i.width * i.height)
+  for (let k = 0; k < i.width * i.height; k++) { rgb[k * 3] = data[k * 4]; rgb[k * 3 + 1] = data[k * 4 + 1]; rgb[k * 3 + 2] = data[k * 4 + 2]; mask[k] = data[k * 4 + 3] >= 128 ? 1 : 0 }
+  return { img: { data: rgb, W: i.width, H: i.height, file }, mask }
+}
+
+/** 裁到不透明內容外框的列（只裁上下，不裁左右：遠景要保持可水平重複的寬度） */
+function cropRows(spr) {
+  let y0 = spr.h, y1 = -1
+  for (let y = 0; y < spr.h; y++) for (let x = 0; x < spr.w; x++) if (spr.rgba[(y * spr.w + x) * 4 + 3]) { y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
+  if (y1 < 0) throw new Error('遠景是空的')
+  return { w: spr.w, h: y1 - y0 + 1, rgba: Buffer.from(spr.rgba.subarray(y0 * spr.w * 4, (y1 + 1) * spr.w * 4)) }
+}
+
+/** 底部中心：最下面 6 列不透明像素的水平中心（路燈、樹的錨點 x） */
+function baseCenterX(spr, rows = 6) {
+  let lo = spr.w, hi = -1
+  for (let y = Math.max(0, spr.h - rows); y < spr.h; y++) for (let x = 0; x < spr.w; x++) if (spr.rgba[(y * spr.w + x) * 4 + 3]) { lo = Math.min(lo, x); hi = Math.max(hi, x) }
+  return Math.round((lo + hi + 1) / 2)
+}
+
+/** 逐格求 p：輸出高度 = target.h（±1 內收斂）；寬度超過 target.maxW 時改以寬度為準。回傳 { spr, p } */
+function fitCell(render, cell, target) {
+  const bx = Math.max(...cell.map((c) => c.x1)) - Math.min(...cell.map((c) => c.x0)) + 1
+  const by = Math.max(...cell.map((c) => c.y1)) - Math.min(...cell.map((c) => c.y0)) + 1
+  let pp = Math.max(by / target.h, bx / target.maxW)
+  let best = null
+  for (let k = 0; k < 10; k++) {
+    const spr = render(cell, pp)
+    if (!spr) break
+    const dim = spr.w > target.maxW ? spr.w / target.maxW : spr.h / target.h
+    const err = Math.abs(dim - 1)
+    if (!best || err < best.err) best = { spr, p: pp, err }
+    if (spr.w <= target.maxW && spr.h === target.h) break
+    pp *= dim
+  }
+  return best
+}
+
+/** 主題裝飾：外框面積 ≈ DECOR_AREA[級別]，再套寬高上限（求 p 的方式和 fitCell 一樣收斂到整數大小） */
+function fitDecor(render, cell, size) {
+  const bx = Math.max(...cell.map((c) => c.x1)) - Math.min(...cell.map((c) => c.x0)) + 1
+  const by = Math.max(...cell.map((c) => c.y1)) - Math.min(...cell.map((c) => c.y0)) + 1
+  const mx = DECOR_MAX[size]
+  let pp = Math.max(Math.sqrt((bx * by) / DECOR_AREA[size]), bx / mx.w, by / mx.h)
+  let spr = render(cell, pp)
+  for (let k = 0; k < 4 && spr; k++) {
+    if (spr.w <= mx.w && spr.h <= mx.h) break
+    pp *= Math.max(spr.w / mx.w, spr.h / mx.h)
+    spr = render(cell, pp)
+  }
+  return { spr, p: pp }
+}
+
+/**
+ * 4.0-C 房屋與鐘樓配件（house_acc.png、tower_acc.png，各 2×2，底色恰好 #FF00FF）：[鍵名, 大小目標, 錨點]。
+ * 大小：晴天娃娃、敲鐘人、旗幟以高度為準，門牌以寬度為準（最大寬高 maxW）。錨點：doll／sign = 上方中心（掛點，ay = 0）；flag／bellman = 底部（旗桿底、腳底）中心。
+ */
+const ACC_SHEETS = [
+  ['house_acc.png', [['acc_doll', { h: 22, maxW: 30 }, 'top'], ['acc_sign_home', { h: 999, maxW: 22 }, 'top'], ['acc_sign_paw', { h: 999, maxW: 22 }, 'top'], ['acc_sign_lab', { h: 999, maxW: 22 }, 'top']]],
+  ['tower_acc.png', [['acc_bellman', { h: 34, maxW: 36 }, 'bottom'], ['acc_flag_paw', { h: 26, maxW: 30 }, 'bottom'], ['acc_flag_clock', { h: 26, maxW: 30 }, 'bottom'], ['acc_flag_aemc', { h: 26, maxW: 30 }, 'bottom']]],
+]
+async function buildAccessories() {
+  info('')
+  info('===== 4.0-C 房屋與鐘樓配件 =====')
+  for (const [file, list] of ACC_SHEETS) {
+    const names = list.map((e) => e[0])
+    const r = await sheet({ file, cols: 2, rows: 2, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    list.forEach(([key, target, anchor], i) => {
+      const cell = r.cells[i]
+      if (!cell?.length) { warn('偵測失敗：' + file + ' 第 ' + (i + 1) + ' 格（' + key + '）找不到內容'); return }
+      const { spr, p } = fitCell(r.render, cell, target)
+      const ax = anchor === 'top' ? Math.round(spr.w / 2) : baseCenterX(spr, 3)
+      addFrame('acc', key, spr, { ax, ay: anchor === 'top' ? 0 : spr.h, exactBg: true })
+      info('  ' + key + '：' + spr.w + '×' + spr.h + '（p=' + p.toFixed(3) + '，連通塊 ' + cell.length + '），錨點 (' + ax + ', ' + (anchor === 'top' ? 0 : spr.h) + ')')
+    })
+  }
+}
+
+const envLog = []
+const decorLog = []
+async function buildEnvThemes() {
+  const thumbParts = {}
+  // ---- 地板、小路、遠景 ----
+  for (const t of ENV_THEMES) {
+    const g = 'env_' + t
+    // 地板
+    {
+      const { img, mask } = await loadAlpha(`${t}_tiles.png`)
+      // 只用 A～C 的主題：把 D（右下 512×512）換成指定的那一塊（A）
+      const blocks = FLOOR_BLOCKS[t] ?? 'ABCD'
+      const Q = { A: [0, 0], B: [512, 0], C: [0, 512], D: [512, 512] }
+      if (blocks[3] !== 'D') {
+        const [sx, sy] = Q[blocks[3]]
+        for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+          const s = ((sy + y) * img.W + sx + x) * 3, d = ((512 + y) * img.W + 512 + x) * 3
+          img.data[d] = img.data[s]; img.data[d + 1] = img.data[s + 1]; img.data[d + 2] = img.data[s + 2]
+        }
+      }
+      const cells = Math.floor(img.W / FLOOR_P)
+      const one = resampleRect(img, mask, 0, 0, img.W, img.H, cells, cells)
+      const top = hcat(one, flipX(one))
+      const tile = vcat(top, flipY(top))
+      addFrame(g, `floor_${t}`, tile, { ax: 0, ay: 0, exactBg: true })
+      envLog.push(`floor_${t}：原圖 ${img.W}×${img.H} → ${cells}×${cells} 格（p=${(img.W / cells).toFixed(3)}），2×2 鏡像 ${tile.w}×${tile.h}`)
+      thumbParts[t] = { floor: tile }
+    }
+    // 小路
+    {
+      const { img, mask } = await loadAlpha(`path_${t}.png`)
+      const [y0, y1] = PATH_BANDS[t]
+      const x1 = PATH_X1[t] ?? img.W
+      const w = Math.round(x1 / ((y1 - y0) / PATH_H_LOGICAL))
+      const spr = resampleRect(img, mask, 0, y0, x1, y1, w, PATH_H_LOGICAL)
+      addFrame(g, `path_${t}`, spr, { ax: 0, ay: spr.h, exactBg: true })
+      envLog.push(`path_${t}：原圖列 ${y0}～${y1}（${y1 - y0} 列）→ ${spr.w}×${spr.h}（p=${((y1 - y0) / PATH_H_LOGICAL).toFixed(3)}），左右直接接（原圖橫向可無縫）`)
+      thumbParts[t].path = spr
+    }
+    // 遠景
+    {
+      const { img, mask } = await loadAlpha(`far_${t}.png`)
+      const w = Math.round(img.W / FAR_P)
+      const dx = img.W / w
+      const h = Math.floor(img.H / dx)
+      const full = resampleRect(img, mask, 0, img.H - h * dx, img.W, img.H, w, h)
+      const spr = cropRows(full)
+      addFrame(g, `far_${t}`, spr, { ax: 0, ay: spr.h, exactBg: true })
+      envLog.push(`far_${t}：原圖 ${img.W}×${img.H} → ${spr.w}×${spr.h}（p=${dx.toFixed(3)}；FAR_H = ${spr.h}${t === 'cleanroom' ? '，牆填滿整張高度、只有窗玻璃透明' : ''}）`)
+      thumbParts[t].far = spr
+    }
+  }
+  // ---- 路燈、樹（3×2；底色恰好 #FF00FF）----
+  for (const [file, prefix, target] of [['lamp_themes.png', 'lamp_', LAMP_TARGET], ['tree_themes.png', 'tree_', TREE_TARGET]]) {
+    const names = ENV_THEMES.map((t) => prefix + t)
+    const r = await sheet({ file, cols: 3, rows: 2, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    for (let i = 0; i < names.length; i++) {
+      const cell = r.cells[i]
+      if (!cell?.length) throw new Error(`${file} 第 ${i + 1} 格（${names[i]}）找不到內容`)
+      const { spr, p } = fitCell(r.render, cell, target)
+      const ax = baseCenterX(spr)
+      const t = ENV_THEMES[i]
+      addFrame('env_' + t, names[i], spr, { ax, ay: spr.h, exactBg: true })
+      envLog.push(`${names[i]}：${spr.w}×${spr.h}（p=${p.toFixed(3)}），錨點 x=${ax}（底部中心）`)
+      thumbParts[t][prefix.slice(0, -1)] = spr
+    }
+  }
+  // ---- 商店縮圖（env_thumbs，延後載入）：遠景 24 列＋地板／小路 36 列，裁自成品（沒有縮放）----
+  const defaults = { far: atlases.terrain.find((f) => f.key === 'far'), floor: atlases.terrain.find((f) => f.key === 'grass_tile'), path: atlases.terrain.find((f) => f.key === 'path') }
+  const thumb = (parts, name, farX0) => {
+    const W = 96, FAR = 24, GROUND = 36
+    const out = Buffer.alloc(W * (FAR + GROUND) * 4)
+    const blit = (src, sx, sy, dw, dh, dx, dy) => {
+      for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+        const xx = (sx + x) % src.w, yy = Math.min(src.h - 1, sy + y)
+        if (yy < 0) continue
+        src.rgba.copy(out, ((dy + y) * W + dx + x) * 4, (yy * src.w + xx) * 4, (yy * src.w + xx + 1) * 4)
+      }
+    }
+    const f = parts.far
+    // 遠景：底邊對齊縮圖的第 24 列；比 24 列高的（無塵室）取中間 24 列
+    const sy = f.h > FAR ? Math.floor((f.h - FAR) / 2) : 0
+    if (f.h >= FAR) blit(f, farX0, sy, W, FAR, 0, 0)
+    else blit(f, farX0, 0, W, f.h, 0, FAR - f.h)
+    blit(parts.floor, 10, 10, W, 10, 0, FAR)
+    blit(parts.path, 10, Math.floor((parts.path.h - 16) / 2), W, 16, 0, FAR + 10)
+    blit(parts.floor, 10, 30, W, 10, 0, FAR + 26)
+    addFrame('env_thumbs', name, { w: W, h: FAR + GROUND, rgba: out }, { ax: W / 2, ay: FAR + GROUND, exactBg: true })
+  }
+  for (const t of ENV_THEMES) thumb(thumbParts[t], 'envthumb_' + t, 40)
+  thumb(defaults, 'envthumb_grass', 40)
+  info('')
+  info('===== 4.0-B2 環境主題（地板、小路、遠景、路燈、樹） =====')
+  for (const l of envLog) info('  ' + l)
+}
+
+async function buildThemeDecor() {
+  info('')
+  info('===== 4.0-B2 主題裝飾（連通區域偵測切件） =====')
+  const failed = []
+  for (const [file, cols, rows, entries] of DECOR_SHEETS) {
+    const names = entries.map((e) => (e ? e[0] : null))
+    const r = await sheet({ file, cols, rows, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    const found = r.cells.map((c) => c.length)
+    info(`${file}：連通區域分到 ${cols}×${rows} 格，每格的連通塊數 [${found.join(',')}]`)
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]
+      if (!e) {
+        if (found[i]) failed.push(`${file} 第 ${i + 1} 格預期是空的，卻有 ${found[i]} 個連通塊`)
+        continue
+      }
+      if (!found[i]) { failed.push(`${file} 第 ${i + 1} 格（${e[0]}）找不到內容`); continue }
+      const { spr, p } = fitDecor(r.render, r.cells[i], e[1])
+      if (!spr) { failed.push(`${file} ${e[0]}：處理後是空的`); continue }
+      addFrame('decor_themes', e[0], spr, { ax: baseCenterX(spr), ay: spr.h, exactBg: true })
+      decorLog.push(`${e[0]}（${e[1]}）：${spr.w}×${spr.h}＝${spr.w * spr.h}（p=${p.toFixed(3)}，連通塊 ${r.cells[i].length}）`)
+    }
+  }
+  for (const l of decorLog) info('  ' + l)
+  info('名義格切件時被丟掉的遠離小碎塊：' + nominalDropped + ' 個')
+  if (failed.length) for (const f of failed) warn('偵測失敗：' + f)
+}
+
+/**
+ * 4.0-B2：依「名義上的欄×列」把連通塊分到格子（主題裝飾、路燈、樹用）：大塊（面積 ≥ 400）看外框中心落在哪一格；小碎塊（閃光、水母觸手）歸到外框最近的那一格（距離 < 80），
+ * 太遠的丟掉並記數（nominalDropped，報告用）。和 groupCells 不同：不靠「大塊分群」，所以小件（小級別裝飾）不會因為面積比大件小很多而被分錯格。
+ */
+let nominalDropped = 0
+function nominalCells(comps, W, H, cols, rows) {
+  const cells = Array.from({ length: rows * cols }, () => [])
+  const cw = W / cols, ch = H / rows
+  const at = (c) => Math.min(rows - 1, Math.floor((c.y0 + c.y1) / 2 / ch)) * cols + Math.min(cols - 1, Math.floor((c.x0 + c.x1) / 2 / cw))
+  for (const c of comps) if (c.area >= 400) cells[at(c)].push(c)
+  const bb = (items) => ({ x0: Math.min(...items.map((c) => c.x0)), y0: Math.min(...items.map((c) => c.y0)), x1: Math.max(...items.map((c) => c.x1)), y1: Math.max(...items.map((c) => c.y1)) })
+  for (const c of comps) {
+    if (c.area >= 400) continue
+    let best = -1, bd = Infinity
+    cells.forEach((items, i) => {
+      if (!items.length) return
+      const b = bb(items)
+      const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2
+      const d = Math.hypot(Math.max(b.x0 - cx, 0, cx - b.x1), Math.max(b.y0 - cy, 0, cy - b.y1))
+      if (d < bd) { bd = d; best = i }
+    })
+    if (best >= 0 && bd < 80) cells[best].push(c)
+    else nominalDropped++
+  }
+  return cells
+}
+
+// 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
+export { ACC_SHEETS, ENV_THEMES, FLOOR_BLOCKS, PATH_X1, PATH_BANDS, PATH_H_LOGICAL, FLOOR_P, FAR_P, LAMP_TARGET, TREE_TARGET, DECOR_SHEETS, DECOR_AREA, DECOR_MAX, isBgExact, loadAlpha, resampleRect, SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+if (IS_MAIN) await main()

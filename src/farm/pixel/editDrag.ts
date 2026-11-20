@@ -1,6 +1,6 @@
 import { layoutItemDef } from '../config/layoutItems'
 import type { Layout } from './layout'
-import { PLACE_ORDER, envCovers, envelopeOf, type Placement } from './placement'
+import { envCovers, envelopeOf, type Placement } from './placement'
 import { PLACE_REASON_TEXT, canPlace, canStore } from './placeRules'
 
 /**
@@ -17,10 +17,10 @@ export const CLICK_SLOP_CSS = 4
 
 export const isDragMove = (dxCss: number, dyCss: number): boolean => Math.hypot(dxCss, dyCss) > CLICK_SLOP_CSS
 
-/** 畫的前後順序（後畫的在上層）：腳底 y 大的在前；一樣時依 PLACE_ORDER（排在後面的後畫） */
+/** 畫的前後順序（後畫的在上層）：腳底 y 大的在前；一樣時依物件順序 P.order（PLACE_ORDER＋商店實例，排在後面的後畫） */
 function drawRank(P: Placement): string[] {
   return [...P.placed.values()]
-    .sort((a, b) => a.y - b.y || PLACE_ORDER.indexOf(a.id) - PLACE_ORDER.indexOf(b.id))
+    .sort((a, b) => a.y - b.y || P.order.indexOf(a.id) - P.order.indexOf(b.id))
     .map((it) => it.id)
 }
 

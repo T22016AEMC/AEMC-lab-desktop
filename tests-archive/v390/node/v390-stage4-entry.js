@@ -240,7 +240,7 @@ const SIX = [pet('d1', 'dog', 'shiba', { satiety: 20 }), pet('d2', 'dog', 'golde
   eq(crowdedMat, null, 'E 擁擠草地：放不下野餐墊')
   const ce = mkEngine(PL.placementToLayout(T.placement), [pet('d1', 'dog', 'shiba')])
   eq(ce.e.picnicMatFits(), false, 'E 擁擠草地：引擎判斷放不下（按野餐按鈕會提示 PICNIC_TEXT.noRoom）')
-  ok(PICNIC_TEXT.noRoom.includes('草地太擠') && PICNIC_TEXT.endResize.includes('草地太擠'), 'E 野餐的「放不下」提示改成「草地太擠」')
+  ok(PICNIC_TEXT.noRoom.includes('擺設太多') && PICNIC_TEXT.endResize.includes('擺設太多'), 'E 野餐的「放不下」提示改成「草地太擠」（v4.0：「擺設太多」）')
   globalThis.__crowdedLayout = PL.placementToLayout(T.placement)
   globalThis.__crowdedMat = crowdedMat
 }
@@ -250,7 +250,7 @@ const SIX = [pet('d1', 'dog', 'shiba', { satiety: 20 }), pet('d2', 'dog', 'golde
   const s = baseSave()
   const mk = (k) => Array.from({ length: k }, (_, i) => ({ id: 'f' + i, kind: 'mound', by: 'dog', fx: (i + 0.5) / k, fy: 0.5, at: T0 }))
   eq(findsBlock({ ...s, finds: [] }, 0), TOO_SMALL_MESSAGE, 'F 上限 0 → 「草地太擠，放不下寶物」')
-  ok(TOO_SMALL_MESSAGE.includes('草地太擠') && !TOO_SMALL_MESSAGE.includes('視窗'), 'F 提示不再說「視窗」')
+  ok(TOO_SMALL_MESSAGE.includes('擺設太多') && !TOO_SMALL_MESSAGE.includes('視窗'), 'F 提示不再說「視窗」（v4.0：「擺設太多」）')
   eq(findsBlock({ ...s, finds: mk(3) }, 3), crowdedFullMessage(3), 'F 擠到上限 3、已有 3 個 → 「草地太擠，寶物最多放 3 個，先點開土堆」')
   eq(findsBlock({ ...s, finds: mk(8) }, 3), crowdedFullMessage(3), 'F 已有 8 個、上限變 3 → 不能再挖（提示上限）')
   eq(findsBlock({ ...s, finds: mk(8) }, 8), FULL_MESSAGE, 'F 不擠時滿了 → 原本的「先點開土堆」')
@@ -281,7 +281,7 @@ const SIX = [pet('d1', 'dog', 'shiba', { satiety: 20 }), pet('d2', 'dog', 'golde
   e.setFinds(mk(8))
   for (let i = 0; i < 80 && e.actors.get('d1').play; i++) m.step(0.5)
   const msg = m.log.notify.join('｜')
-  ok(m.log.notify.some((t) => t.includes('草地太擠')), 'F 玩耍中草地變擠：有提示「' + msg + '」')
+  ok(m.log.notify.some((t) => t.includes('擺設太多')), 'F 玩耍中草地變擠：有提示「' + msg + '」（v4.0：「擺設太多」）')
   // 直接造一個找不到位置的情況：上限還有、但草地沒有合格位置 → NO_SPOT_MESSAGE
   const m2 = mkEngine(globalThis.__crowdedLayout, [pet('d1', 'dog', 'shiba', { satiety: 90, mood: 90 })], { hour: 12 })
   m2.e.setFinds([])
@@ -291,7 +291,7 @@ const SIX = [pet('d1', 'dog', 'shiba', { satiety: 20 }), pet('d2', 'dog', 'golde
   m2.e.setFinds(mk(Math.max(0, realCap - 1)))
   for (let i = 0; i < 120 && m2.e.actors.get('d1').play; i++) m2.step(0.5)
   report.push(`F 擁擠配置（上限 ${realCap}）挖寶提示：${m2.log.notify.join('｜') || '（沒有）'}`)
-  ok(NO_SPOT_MESSAGE.includes('草地太擠'), 'F 找不到地方埋的提示文字')
+  ok(NO_SPOT_MESSAGE.includes('擺設太多'), 'F 找不到地方埋的提示文字（v4.0：「擺設太多」）')
 }
 
 console.log(report.join('\n'))

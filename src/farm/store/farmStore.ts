@@ -5,14 +5,16 @@ import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, 
 import { LocalStorageAdapter, setNewerDataHandler, setOtherTabHandler } from '../save/storage'
 import type { FarmLayout, Find, SaveData, SaveStorage } from '../save/types'
 import { layoutItemDef } from '../config/layoutItems'
+import { LEGEND_STAND_VIEW_FLAG, legendStandView } from '../config/legendStand'
 import { withoutRecord } from '../pixel/placement'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
 import { claimProgram, earningToday } from '../sim/earning'
 import { CHECKIN_TEXT, checkIn, collectGift, giftCandidates, isCheckedIn, newSave, registerGift, todayKey } from '../sim/points'
-import { addFind, digCoinsToday, makeFindId, resultText, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
+import { addFind, digCoinsToday, makeFindId, resultText, retroEvents, revealDue, revealFind, type EventNotice, type RevealOutcome } from '../sim/dig'
 import { advanceSave } from '../sim/stats'
 import { rehomePet } from '../sim/rehome'
+import { SHOP_TEXT, equipSkin, purchase as purchaseItem, type PurchaseOptions } from '../sim/shop'
 import { useUIStore } from '../../store/uiStore'
 import { addNote, deleteNote, updateNote } from '../../tools/notes'
 import { TOOLS, type NoteColor } from '../../config/tools'
@@ -30,6 +32,8 @@ const NO_PETS: ReadonlySet<string> = new Set()
 export function getSaveStorage(): SaveStorage {
   return storage
 }
+
+export type ShopPurchaseResult = { ok: true; instanceId?: string } | { ok: false; error: string }
 
 interface FarmState {
   status: 'loading' | 'ready'
@@ -85,6 +89,17 @@ interface FarmState {
    * 扣金幣、加進 ownedBuildings、寫入擺放紀錄在同一次存檔完成。
    */
   buyBuilding: (id: string, storeIt?: boolean) => string | null
+  /**
+   * v4.0 商店購買（裝飾、建築、外觀）：先確認這個分頁還有寫入權，再用「當下的存檔」重新算一次（連點、兩個分頁都不會重複扣或重複給），
+   * 扣金幣與得到的東西在同一份存檔裡、立刻寫入。回傳成功與否、錯誤原因、新的實例 id。
+   */
+  purchase: (itemId: string, opts?: PurchaseOptions) => Promise<ShopPurchaseResult>
+  /** v4.0 切換外觀（環境主題等）：skinId = null 或預設主題 → 換回預設；沒擁有的不能穿。有變才寫入 */
+  equipSkin: (slot: string, skinId: string | null) => void
+  /** 4.0-C 傳說展示台：兩對傳說都集齊時，切換台面顯示的那一對（存在 events.legendStandView）；回傳切換後顯示的那一對，不能切換 = null */
+  toggleLegendStandView: () => 'dog' | 'cat' | null
+  /** v4.0 從商店領養（不是第一隻）：先確認寫入權，再走 adoptPet，立刻寫入。回傳錯誤訊息或 null */
+  shopAdopt: (req: Omit<AdoptRequest, 'free'>) => Promise<string | null>
   /** v3.9.0 擺設模式：寫入農場擺放（只記和預設不同的；全部預設 = 拿掉欄位），立刻存檔。不動 ownedBuildings */
   setFarmLayout: (layout: FarmLayout | undefined) => void
   /** v3.9.0 還原預設：有預設位置的物件全部回到預設位置；花槽、珊瑚、灌木、高草叢（沒有預設位置）收進庫存。已購買的建築不變 */
@@ -184,10 +199,13 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     // 離線期間到期的寶物一次揭曉（揭曉後從清單拿掉，所以同一天載入多次不會重複結算）
     const due = revealDue(save, now, Math.random)
     save = due.save
-    set({ status: 'ready', save, pendingEvents: due.notices })
+    // v4.0：收藏集齊獎勵補發（老玩家已經達成的；事件旗標保證只發一次）。揭曉觸發的事件排在前面
+    const retro = retroEvents(save, now)
+    save = retro.save
+    set({ status: 'ready', save, pendingEvents: [...due.notices, ...retro.notices] })
     if (due.revealed.length) announceAuto(due.revealed, save, now)
     if (refund) set({ legacyRefund: refund })
-    if (hadPicnic) flushSave()
+    if (hadPicnic || retro.notices.length > 0) flushSave()
   },
 
   adoptPet: (req) => {
@@ -292,7 +310,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
     if (next !== save) set({ save: next })
     // v3.8.0：野餐時間到、下雨、天黑 → 結束（主迴圈每個影格也會檢查；這裡是分頁被蓋住或在背景時的備援）
-    const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) })
+    const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now, next) })
     if (due) get().endPicnic(due)
     // 到期（10 分鐘）的寶物自動揭曉
     get().revealDueNow()
@@ -302,7 +320,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const save = get().save
     if (!save) return PICNIC_TEXT.noSave
     const now = gameNow()
-    const r = startPicnic(save, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) }, participants, decor)
+    const r = startPicnic(save, { nowMs: now, hour: worldHour(now), weather: worldWeather(now, save) }, participants, decor)
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
     flushSave()
@@ -347,6 +365,75 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     }
     set({ save: next })
     flushSave()
+    return null
+  },
+
+  purchase: async (itemId, opts) => {
+    const st = get()
+    if (st.otherTab) return { ok: false, error: SHOP_TEXT.otherTab }
+    if (st.newerData) return { ok: false, error: SHOP_TEXT.newer }
+    if (!st.save) return { ok: false, error: SHOP_TEXT.noSave }
+    // 先用目前的存檔檢查一次（不能買就不必去問寫入權）
+    const pre = purchaseItem(st.save, itemId, opts)
+    if (!pre.ok) return { ok: false, error: pre.error }
+    if (!(await storage.isOwner())) {
+      markOtherTab()
+      return { ok: false, error: SHOP_TEXT.otherTab }
+    }
+    // await 之後重新讀存檔再算一次：中間可能已經買過（連點）或金幣變了
+    const cur = get().save
+    if (!cur || get().otherTab) return { ok: false, error: SHOP_TEXT.otherTab }
+    const r = purchaseItem(cur, itemId, opts)
+    if (!r.ok) return { ok: false, error: r.error }
+    set({ save: r.save })
+    // 金幣與購買的東西：立刻寫入並等寫完。寫入前一刻被別的分頁接手（storage.save 拒寫、畫面鎖定）→ 記憶體回到購買前，不留「已購買」的假象
+    await flushSaveNow()
+    if (get().otherTab || get().newerData) {
+      set({ save: cur })
+      return { ok: false, error: get().otherTab ? SHOP_TEXT.otherTab : SHOP_TEXT.newer }
+    }
+    return r.instanceId ? { ok: true, instanceId: r.instanceId } : { ok: true }
+  },
+
+  equipSkin: (slot, skinId) => {
+    const save = get().save
+    if (!save || get().otherTab || get().newerData) return
+    const next = equipSkin(save, slot, skinId)
+    if (next === save) return
+    set({ save: next })
+    flushSave()
+  },
+
+  toggleLegendStandView: () => {
+    const save = get().save
+    if (!save || get().otherTab || get().newerData) return null
+    if (!legendStandView(save).canToggle) return null
+    const alt = save.events[LEGEND_STAND_VIEW_FLAG] === 1
+    set({ save: { ...save, events: { ...save.events, [LEGEND_STAND_VIEW_FLAG]: alt ? 0 : 1 } } })
+    flushSave()
+    const cur = get().save
+    return cur ? legendStandView(cur).pair : null
+  },
+
+  shopAdopt: async (req) => {
+    const st = get()
+    if (st.otherTab) return SHOP_TEXT.otherTab
+    if (st.newerData) return SHOP_TEXT.newer
+    if (!st.save || st.save.pets.length === 0) return SHOP_TEXT.noSave
+    if (!(await storage.isOwner())) {
+      markOtherTab()
+      return SHOP_TEXT.otherTab
+    }
+    const before = get().save
+    if (!before || get().otherTab) return SHOP_TEXT.otherTab
+    const err = get().adoptPet(req)
+    if (err) return err
+    // 和購買一樣：寫入前一刻被接手 → 回到領養前
+    await flushSaveNow()
+    if (get().otherTab || get().newerData) {
+      set({ save: before })
+      return get().otherTab ? SHOP_TEXT.otherTab : SHOP_TEXT.newer
+    }
     return null
   },
 
@@ -484,15 +571,23 @@ export function flushSave(): void {
   flush()
 }
 
-function flush(): void {
-  if (savesSuspended) return
+/**
+ * 立刻寫入，並等寫入真的完成（v4.0 購買用）：寫完之後才知道有沒有被別的分頁搶先接手（storage.save 拒寫 → otherTab）。
+ */
+export function flushSaveNow(): Promise<void> {
+  return flush()
+}
+
+function flush(): Promise<void> {
+  if (savesSuspended) return Promise.resolve()
   window.clearTimeout(saveTimer)
   saveTimer = undefined
   const s = useFarmStore.getState().save
   if (s && s !== lastSaved) {
     lastSaved = s
-    void storage.save(s)
+    return storage.save(s).catch(() => {})
   }
+  return Promise.resolve()
 }
 useFarmStore.subscribe((state, prev) => {
   if (state.save === prev.save) return

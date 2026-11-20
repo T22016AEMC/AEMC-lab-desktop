@@ -6,8 +6,10 @@ const URL0 = process.env.NEW_URL ?? 'http://localhost:5181/'
 const KEY = 'aemc-desktop:farm-save'
 const SHOTS = fileURLToPath(new URL('./shots/', import.meta.url))
 fs.mkdirSync(SHOTS, { recursive: true })
-const T0 = new Date(2026, 10, 19, 10, 0, 0).getTime()
-const today = '2026-11-19'
+// 4.0-B2：存檔日期與瀏覽器時間都由假時鐘決定：頁面時鐘固定在 CLOCK（2026-11-19 10:00，白天），存檔日期用同一個時間算相對日期（不寫死日期、不依賴執行當下的時間與離線衰減；以前寫死 11/19 又沒有假時鐘，隔天跑會離線衰減到心情 29 < 野餐 minMood 30）
+const CLOCK = new Date(2026, 10, 19, 10, 0, 0)
+const T0 = CLOCK.getTime()
+const today = ((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date(T0))
 const pet = (id, species, variant) => ({ id, species, variant, name: id, adoptedAt: T0 - 5e8, heightFactor: 1, weight: 50, satiety: 90, mood: 90, cleanliness: 90, personality: 'calm', lastInteract: T0 })
 const save = (extra = {}) => ({
   schemaVersion: 5, dataRev: 4, points: 80, lastSeen: T0, lastDailyClaim: today, gifts: { date: today, count: 9 }, nextPetId: 4, createdAt: T0 - 9e8,
@@ -26,6 +28,7 @@ async function open(s, { w = 1920, h = 988, dpr = 1 } = {}) {
   page.setDefaultTimeout(60000)
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
+  await page.clock.install({ time: CLOCK }) // 4.0-B2：假時鐘（時間照常流動，起點固定）
   await page.goto(URL0)
   const bt = page.getByRole('button', { name: '點擊以開始' })
   await bt.click(); await bt.waitFor({ state: 'detached' })
@@ -247,7 +250,7 @@ let chosen = null
   const CROWD = { items: [['coral', 165], ['planter', 260], ['stump', 355], ['rocks', 450], ['bush', 545], ['tall_grass', 608]].map(([id, x]) => ({ id, kind: id, state: 'placed', x, y: 200 })) }
   const { ctx, page } = await open(save({ farmLayout: CROWD }))
   await page.getByTestId('picnic-button').click()
-  ok((await toast(page, '草地太擠')) && !(await picking(page)), '9 草地太擠：提示「草地太擠…」、不進入選位置')
+  ok((await toast(page, '擺設太多')) && !(await picking(page)), '9 草地太擠：提示「草地太擠…」、不進入選位置（v4.0：「擺設太多…」）')
   await ctx.close()
 }
 
