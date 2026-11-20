@@ -71,7 +71,28 @@ const SPECS = [
   ...CATS.map((c) => ({ id: 'cat_' + c, mode: 'shared', must: ['stand'], parts: [{ file: `cat_${c}_core_hd.png`, cols: 4, rows: 2, names: CAT_CORE, keyPrefix: `cat_${c}_`, skip: c === 'orange' ? ['sleep', 'eat', 'groom'] : [] }] })),
   ...CATS.map((c) => ({ id: 'catx_' + c, mode: 'shared', parts: [{ file: c === 'orange' ? 'cat_orange_extra_hd.png' : `cat_${c}_extra_hd.png`, cols: 2, rows: 2, names: CAT_EXTRA, keyPrefix: `cat_${c}_`, skip: c === 'orange' ? ['swat'] : [] }] })),
   { id: 'catx_orange_swat', mode: 'shared', parts: [{ file: 'cat_orange_extra.png', cols: 2, rows: 2, names: [null, null, 'swat', null], keyPrefix: 'cat_orange_' }] },
+  // —— 4.0-B1 主題外殼：逐格、輸出要「填滿畫布但不可超過」（canvas）、nearBg＋去暗紫邊（和管線第 10 段相同）——
+  ...skinSpecs(),
 ]
+
+/** B1 外殼的調參項目：id = skin_<組>；畫布 = 該部位預設圖的大小（食盆 57×31）；range = 掃描的 p 範圍 */
+function skinSpecs() {
+  const TH = ['atlantis', 'cleanroom', 'forest', 'magic', 'punk', 'plaid']
+  const POND = ['plaid', 'atlantis', 'forest', 'magic', 'punk', 'cleanroom']
+  const trim = (sp) => pa.trimMagentaFringe(sp).spr
+  const cv = (w, h) => ({ w, h, canvas: true })
+  const one = (file, name, c, grid) => ({ file, cols: 1, rows: 1, names: [name], opts: { nearBg: true }, post: trim, keys: { [name]: c } })
+  const out = []
+  out.push({ id: 'skin_house', mode: 'perFrame', range: [3.2, 3.8], parts: TH.map((t) => ({ file: `house_${t}.png`, cols: 3, rows: 1, names: ['closed', 'open', 'night'].map((n) => `house_${t}_${n}`), opts: { nearBg: true, grid: 'even' }, post: trim, keys: Object.fromEntries(['closed', 'open', 'night'].map((n) => [`house_${t}_${n}`, cv(139, 134)])) })) })
+  out.push({ id: 'skin_tower', mode: 'perFrame', range: [3.4, 3.8], parts: TH.flatMap((t) => [one(`tower_${t}.png`, `tower_${t}`, cv(123, 160)), one(`tower_${t}_open.png`, `tower_${t}_open`, cv(123, 160))]) })
+  const sheet6 = (id, file, order, prefix, c, range) => ({ id, mode: 'perFrame', range, parts: [{ file, cols: 3, rows: 2, names: order.map((t) => prefix + t), opts: { nearBg: true, grid: 'even' }, post: trim, keys: Object.fromEntries(order.map((t) => [prefix + t, c])) }] })
+  out.push(sheet6('skin_pond', 'pond_themes.png', POND, 'pond_', cv(110, 79), [3.6, 4.4]))
+  out.push(sheet6('skin_board', 'board_themes.png', TH, 'board_', cv(64, 50), [6.5, 7.6]))
+  out.push(sheet6('skin_doghouse', 'doghouse_themes_v2.png', TH, 'doghouse_', cv(99, 83), [4.6, 5.3]))
+  out.push(sheet6('skin_cattree', 'cattree_themes_v2.png', TH, 'cat_tree_', cv(72, 90), [4.6, 5.4]))
+  out.push(sheet6('skin_bowls', 'bowl_themes_v2.png', TH, 'bowls_', cv(57, 31), [7.6, 9.0]))
+  return out
+}
 
 const want = new Set(process.argv.slice(2))
 const results = {}
@@ -88,12 +109,15 @@ for (const spec of SPECS) {
       if (!tgt) { console.log('沒有基準：' + spec.id + ' ' + n); return }
       const cell = pr.cells[i]
       if (!cell?.length) { console.log('找不到格子：' + spec.id + ' ' + n); return }
-      items.push({ name: n, key: typeof kRaw === 'string' ? kRaw : n, w: tgt.w, h: tgt.h, wMax: !!tgt.wMax, render: (p) => { let s = pr.render(cell, p / (part.scale?.[n] ?? 1)); if (s && part.post) s = part.post(s, n); return s } })
+      items.push({ name: n, key: typeof kRaw === 'string' ? kRaw : n, w: tgt.w, h: tgt.h, wMax: !!tgt.wMax, canvas: !!tgt.canvas, render: (p) => { let s = pr.render(cell, p / (part.scale?.[n] ?? 1)); if (s && part.post) s = part.post(s, n); return s } })
     })
   }
   const grid = []
-  for (let p = 2; p <= 48; p *= 1.0015) grid.push(p)
-  const score = (s, it) => (s ? (it.wMax ? Math.abs(Math.max(0, s.w - it.w)) + Math.abs(s.h - it.h) : Math.abs(s.w - it.w) + Math.abs(s.h - it.h)) : 999)
+  // spec.range：只在這個範圍內細掃（步長 0.05%）；沒有就全範圍 0.15%
+  if (spec.range) for (let p = spec.range[0]; p <= spec.range[1]; p *= 1.0005) grid.push(p)
+  else for (let p = 2; p <= 48; p *= 1.0015) grid.push(p)
+  // canvas：要貼進這個大小的畫布：比畫布大就是不行（+1000），小於畫布算差距（越接近越好）
+  const score = (s, it) => (s ? (it.canvas ? Math.abs(s.w - it.w) + Math.abs(s.h - it.h) + 1000 * ((s.w > it.w) + (s.h > it.h)) : it.wMax ? Math.abs(Math.max(0, s.w - it.w)) + Math.abs(s.h - it.h) : Math.abs(s.w - it.w) + Math.abs(s.h - it.h)) : 999)
   const pick = (vals) => {
     // vals[i] = { ok: 完全相同的個數, err: 總誤差 }：先比 ok（多者勝）再比 err；取最佳值的最長連續區間的中點
     let best = null
@@ -108,7 +132,7 @@ for (const spec of SPECS) {
   }
   if (spec.mode === 'shared') {
     // 粗掃（每 4 步）找大致位置，再在附近細掃
-    //     // must：這幾格的「高度」一定要相同（動物的站姿高 = STAND_HEIGHT 的基準；寬度不限），不同就當成最差
+    // must：這幾格的「高度」一定要相同（動物的站姿高 = STAND_HEIGHT 的基準；寬度不限），不同就當成最差
     const evalAt = (p) => { let ok = 0, err = 0, bad = false; for (const it of items) { const s = it.render(p); const e = score(s, it); err += e; if (e === 0) ok++; if ((spec.must ?? []).includes(it.name) && (!s || s.h !== it.h)) bad = true } return bad ? { ok: -1, err: 1e9 } : { ok, err } }
     const coarse = grid.filter((_, i) => i % 4 === 0).map((p) => ({ p, ...evalAt(p) }))
     let cb = coarse[0]

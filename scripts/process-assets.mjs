@@ -74,7 +74,7 @@ const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b)
  * 回傳 { spr: 重新裁切後的素材, n: 移除的像素數 }
  */
 const fringeMagenta = (r, g, b) => Math.min(r, b) >= 60 && g < Math.min(r, b) * 0.45 && Math.abs(r - b) <= 50
-function trimMagentaFringe(spr, passes = 2) {
+function trimMagentaFringe(spr, passes = 2, bg = isBgNear) {
   const { w, h, rgba } = spr
   let n = 0
   for (let k = 0; k < passes; k++) {
@@ -90,7 +90,7 @@ function trimMagentaFringe(spr, passes = 2) {
     n += hit.length
     if (!hit.length) break
   }
-  return { spr: cleanSprite(spr, isBgNear), n }
+  return { spr: cleanSprite(spr, bg), n }
 }
 
 /**
@@ -280,6 +280,25 @@ function spectrum(g, pMin, pMax) {
     out.push({ p, amp: total ? Math.hypot(re, im) / total : 0 })
   }
   return out
+}
+
+/** 永遠不是背景（keepEnclosed 時 cleanSprite 不再清掉內部的洋紅色畫作） */
+const NEVER_BG = () => false
+/** 遮罩裡沒連到圖片邊緣的背景（0）改成前景（1）：從四邊沿著背景做 flood fill，走不到的背景就是被物件圍住的 */
+function keepEnclosedPixels(mask, W, H) {
+  const out = new Uint8Array(W * H)
+  const st = []
+  const seed = (i) => { if (!mask[i] && !out[i]) { out[i] = 1; st.push(i) } }
+  for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x) }
+  for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1) }
+  while (st.length) {
+    const p = st.pop(), x = p % W, y = (p / W) | 0
+    if (x > 0) seed(p - 1)
+    if (x < W - 1) seed(p + 1)
+    if (y > 0) seed(p - W)
+    if (y < H - 1) seed(p + W)
+  }
+  for (let i = 0; i < W * H; i++) if (!mask[i] && !out[i]) mask[i] = 1
 }
 
 /** estimateP 的預設搜尋範圍 */
@@ -701,7 +720,7 @@ const P_FIXED = {
   orangeFix: 15.543,
   front: 5.362,
   tree: 5.517,
-  tower: { clocktower: 3.6044, clocktower_open: 4.404, clocktower_gold: 4.4039, clocktower_open_gold: 4.4039 },
+  tower: { clocktower: 3.6044, clocktower_open: 4.404 },
   small: { doghouse: 4.9714, cat_tree: 4.997, bowls: 8.146, lamp: 5.702, planter: 8.098, coral: 8.098 },
   buildingsNew: 4.003,
   decor: { bush: 8.676, rocks: 8.547, flowers: 10.339, tall_grass: 9.323, mushroom: 9.102, stump: 8.547 },
@@ -723,13 +742,170 @@ const P_FIXED = {
   camera: 47.336,
   food: 35.766,
   polaroid: 7.73,
+  /**
+   * 4.0-B1 主題外殼（含亞特蘭提斯房屋／鐘樓）：逐格的 p，輸出要填滿該部位的畫布但不可超過（tests-archive/v400r/tune-p.mjs 的 skin_* 項目；
+   * 掃描時已包含 nearBg 去背與 trimMagentaFringe）。鍵 = 輸出素材鍵名
+   */
+  skins: {
+    house_atlantis_closed: 3.461, house_atlantis_open: 3.456, house_atlantis_night: 3.468, house_cleanroom_closed: 3.493,
+    house_cleanroom_open: 3.494, house_cleanroom_night: 3.494, house_forest_closed: 3.461, house_forest_open: 3.473,
+    house_forest_night: 3.486, house_magic_closed: 3.486, house_magic_open: 3.486, house_magic_night: 3.487,
+    house_punk_closed: 3.494, house_punk_open: 3.498, house_punk_night: 3.494, house_plaid_closed: 3.479,
+    house_plaid_open: 3.479, house_plaid_night: 3.46, tower_atlantis: 3.596, tower_atlantis_open: 3.598,
+    tower_cleanroom: 3.581, tower_cleanroom_open: 3.581, tower_forest: 3.603, tower_forest_open: 3.601,
+    tower_magic: 3.59, tower_magic_open: 3.59, tower_punk: 3.607, tower_punk_open: 3.608,
+    tower_plaid: 3.585, tower_plaid_open: 3.585, pond_plaid: 3.908, pond_atlantis: 3.917,
+    pond_forest: 3.915, pond_magic: 3.917, pond_punk: 3.925, pond_cleanroom: 3.917,
+    board_atlantis: 7.091, board_cleanroom: 7.062, board_forest: 7.066, board_magic: 7.073,
+    board_punk: 7.094, board_plaid: 7.066, doghouse_atlantis: 4.926, doghouse_cleanroom: 4.916,
+    doghouse_forest: 4.931, doghouse_magic: 4.921, doghouse_punk: 4.929, doghouse_plaid: 4.911,
+    cat_tree_atlantis: 4.978, cat_tree_cleanroom: 4.973, cat_tree_forest: 4.981, cat_tree_magic: 4.961,
+    cat_tree_punk: 4.956, cat_tree_plaid: 4.981, bowls_atlantis: 8.307, bowls_cleanroom: 8.188,
+    bowls_forest: 8.22, bowls_magic: 8.212, bowls_punk: 8.196, bowls_plaid: 8.212,
+  },
 }
+/**
+ * 4.0-B1：主題外殼。六個主題 id（原圖檔名的主題字）；池塘那張原圖的格子順序不同。
+ * 每組進自己的延後載入圖集（穿上或商店預覽才載入），畫布 = 該部位預設圖的大小（食盆 57×31：新圖比例較高，寬對齊 57）。
+ */
+const THEMES = ['atlantis', 'cleanroom', 'forest', 'magic', 'punk', 'plaid']
+const POND_ORDER = ['plaid', 'atlantis', 'forest', 'magic', 'punk', 'cleanroom']
+const SKIN_CANVAS = { house: [139, 134], tower: [123, 160], pond: [110, 79], board: [64, 50], doghouse: [99, 83], cat_tree: [72, 90], bowls: [57, 31] }
+const skinLog = []
+/**
+ * 外殼原圖的共同處理：底色是純洋紅（#FF00FF），魔法主題的紫色、龐克與亞特蘭提斯的紅紫色接近洋紅，一般的 isBg 會把物件內部吃掉，
+ * 所以一律用 isBgNear 去背（只認接近純洋紅）＋ trimMagentaFringe 去掉貼著透明處的暗紫邊，最後 addFrame 時再做通用去邊。
+ * 每格的 p 一律來自 P_FIXED.skins（缺了 → 走估算 → guardEstimate 報錯）。
+ */
+/**
+ * 被物件圍住的純洋紅（原圖）：是畫作本身的顏色（保留）還是真的空洞（透明）。逐格看過原圖決定（tests-archive/v400b1 的 enclosed 檢查圖）：
+ * 保留 = 魔法住家與鐘樓的洋紅屋瓦、魔法池塘的星雲、魔法食盆的水、龐克住家與鐘樓的霓虹、亞特蘭提斯鐘樓的珊瑚；
+ * 透明（不列在這裡）= 龐克池塘欄杆的空隙、魔法與龐克貓跳台的柱子之間。
+ */
+/** 貼著透明處的純洋紅（isBgNear）改成透明，最多 2 輪；回傳拿掉的像素數 */
+function dropEdgeNear(spr) {
+  const { w, h, rgba } = spr
+  let n = 0
+  for (let k = 0; k < 2; k++) {
+    const hit = []
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (rgba[i + 3] && isBgNear(rgba[i], rgba[i + 1], rgba[i + 2]) && isEdge(rgba, w, h, x, y)) hit.push(i) }
+    for (const i of hit) rgba[i + 3] = 0
+    n += hit.length
+    if (!hit.length) break
+  }
+  return n
+}
+const SKIN_KEEP_ENCLOSED = new Set([
+  'house_magic_closed', 'house_magic_open', 'house_magic_night', 'house_punk_closed', 'house_punk_open', 'house_punk_night',
+  'tower_magic', 'tower_magic_open', 'tower_punk', 'tower_punk_open', 'tower_atlantis', 'tower_atlantis_open', 'pond_magic', 'bowls_magic',
+])
+async function skinSheet(file, cols, rows, names) {
+  const out = {}
+  // 保留內部洋紅的格子與其他格子分兩次切（同一張原圖、同樣的格子與 p）
+  for (const keepEnclosed of [false, true]) {
+    const part = names.map((n) => (n && SKIN_KEEP_ENCLOSED.has(n) === keepEnclosed ? n : null))
+    if (!part.some(Boolean)) continue
+    const pFrames = {}
+    for (const n of part) if (n && P_FIXED.skins[n] != null) pFrames[n] = P_FIXED.skins[n]
+    const r = await sheet({ file, cols, rows, names: part, nearBg: true, keepEnclosed, pFrames, ...(cols * rows > 1 ? { grid: 'even' } : {}) })
+    for (const f of r.frames) {
+      const t = trimMagentaFringe(f.spr, 2, keepEnclosed ? NEVER_BG : isBgNear)
+      // keepEnclosed：內部的洋紅保留，但貼著透明處（外緣）的純洋紅仍是背景殘留 → 最多 2 輪拿掉
+      if (keepEnclosed) t.n += dropEdgeNear(t.spr)
+      out[f.name] = { spr: keepEnclosed ? cleanSprite(t.spr, NEVER_BG) : t.spr, trimmed: t.n, p: f.p, keepEnclosed }
+    }
+  }
+  return out
+}
+function skinFit(name, cell, canvas, ox) {
+  const [W, H] = canvas
+  if (cell.spr.w > W || cell.spr.h > H) warn(`${name}：${cell.spr.w}×${cell.spr.h} 比畫布 ${W}×${H} 大（會被裁）`)
+  skinLog.push([name, cell.spr.w, cell.spr.h, W, H, cell.p, cell.trimmed])
+  return ox == null ? padBottomCenter(cell.spr, W, H) : padBottomAt(cell.spr, W, H, ox)
+}
+/** 貼到 W×H 畫布、底邊對齊、左邊留 ox 欄（padBottomCenter 的 ox 由寬度決定；鐘樓關門／開門寬度差 1 時用來對齊鐘面） */
+function padBottomAt(spr, W, H, ox) {
+  const out = Buffer.alloc(W * H * 4)
+  const oy = H - spr.h
+  for (let y = 0; y < spr.h; y++)
+    for (let x = 0; x < spr.w; x++) {
+      const tx = x + ox, ty = y + oy
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue
+      spr.rgba.copy(out, (ty * W + tx) * 4, (y * spr.w + x) * 4, (y * spr.w + x + 1) * 4)
+    }
+  return { w: W, h: H, rgba: out }
+}
+/** 外殼的鐘面：關門版偵測、取整數，同主題的開門版共用（和預設鐘樓 sharedClock 同一規則） */
+function themeClock(name, closed, open) {
+  const c = detectClockFace(closed)
+  if (!c) throw new Error(name + '：偵測不到鐘面')
+  const face = { cx: Math.round(c.cx), cy: Math.round(c.cy), r: Math.round(c.r) }
+  const o = detectClockFace(open)
+  if (!o || Math.abs(o.cx - face.cx) > 1 || Math.abs(o.cy - face.cy) > 1 || Math.abs(o.r - face.r) > 1)
+    warn(`${name}：開門版鐘面 ${o ? `(${o.cx},${o.cy}) r=${o.r}` : '無'} 和關門版共用值 (${face.cx},${face.cy}) r=${face.r} 差超過 1 像素`)
+  info(`${name}：鐘面偵測 關門 (${c.cx},${c.cy}) r=${c.r}、開門 ${o ? `(${o.cx},${o.cy}) r=${o.r}` : '無'} → 共用 (${face.cx},${face.cy}) r=${face.r}`)
+  return face
+}
+/**
+ * 全部外殼 → 圖集 skins_house、skins_tower、skins_pond、skins_board、skins_small。鍵名：
+ * house_<主題>_closed/open/night、tower_<主題>、tower_<主題>_open、pond_<主題>、board_<主題>、doghouse_<主題>、cat_tree_<主題>、bowls_<主題>。
+ * 亞特蘭提斯房屋／鐘樓（傳說獎勵，外觀 id house.gold／tower.gold）就是 house_atlantis_*、tower_atlantis*。回傳住家與鐘樓（剪影、對位檢查用）
+ */
+async function buildSkins() {
+  const house = {}, tower = {}
+  for (const t of THEMES) {
+    const names = ['closed', 'open', 'night'].map((n) => `house_${t}_${n}`)
+    const cells = await skinSheet(`house_${t}.png`, 3, 1, names)
+    house[t] = {}
+    for (const n of names) {
+      const spr = skinFit(n, cells[n], SKIN_CANVAS.house)
+      house[t][n.split('_').pop()] = spr
+      addFrame('skins_house', n, spr, { nearBg: true, keepEnclosed: cells[n].keepEnclosed })
+    }
+  }
+  for (const t of THEMES) {
+    const c = (await skinSheet(`tower_${t}.png`, 1, 1, [`tower_${t}`]))[`tower_${t}`]
+    const o = (await skinSheet(`tower_${t}_open.png`, 1, 1, [`tower_${t}_open`]))[`tower_${t}_open`]
+    // 關門與開門寬度差 1（122／123）時，置中會差半格、鐘面跟著偏：兩張各試「左邊留 floor／ceil」，取兩張鐘面中心最接近的組合
+    // （同樣接近時用置中），換開門版時鐘面不跳
+    const [W] = SKIN_CANVAS.tower
+    const oxs = (w) => [...new Set([Math.floor((W - w) / 2), Math.ceil((W - w) / 2)])]
+    let best = null
+    for (const a of oxs(c.spr.w))
+      for (const b of oxs(o.spr.w)) {
+        const fc = detectClockFace(padBottomAt(c.spr, W, SKIN_CANVAS.tower[1], a)), fo = detectClockFace(padBottomAt(o.spr, W, SKIN_CANVAS.tower[1], b))
+        const d = fc && fo ? Math.abs(fc.cx - fo.cx) + Math.abs(fc.cy - fo.cy) : 99
+        const centered = a === Math.round((W - c.spr.w) / 2) && b === Math.round((W - o.spr.w) / 2)
+        if (!best || d < best.d || (d === best.d && centered)) best = { d, a, b }
+      }
+    const closed = skinFit(`tower_${t}`, c, SKIN_CANVAS.tower, best.a), open = skinFit(`tower_${t}_open`, o, SKIN_CANVAS.tower, best.b)
+    const clock = themeClock(`tower_${t}`, closed, open)
+    tower[t] = { closed, open }
+    addFrame('skins_tower', `tower_${t}`, closed, { nearBg: true, keepEnclosed: c.keepEnclosed, meta: { clock: { ...clock } } })
+    addFrame('skins_tower', `tower_${t}_open`, open, { nearBg: true, keepEnclosed: o.keepEnclosed, meta: { clock: { ...clock } } })
+  }
+  const six = async (file, order, prefix, canvas, atlas) => {
+    const names = order.map((t) => prefix + t)
+    const cells = await skinSheet(file, 3, 2, names)
+    for (const n of names) addFrame(atlas, n, skinFit(n, cells[n], canvas), { nearBg: true, keepEnclosed: cells[n].keepEnclosed })
+  }
+  await six('pond_themes.png', POND_ORDER, 'pond_', SKIN_CANVAS.pond, 'skins_pond')
+  await six('board_themes.png', THEMES, 'board_', SKIN_CANVAS.board, 'skins_board')
+  await six('doghouse_themes_v2.png', THEMES, 'doghouse_', SKIN_CANVAS.doghouse, 'skins_small')
+  await six('cattree_themes_v2.png', THEMES, 'cat_tree_', SKIN_CANVAS.cat_tree, 'skins_small')
+  await six('bowl_themes_v2.png', THEMES, 'bowls_', SKIN_CANVAS.bowls, 'skins_small')
+  info('')
+  info('===== 4.0-B1 主題外殼（素材、輸出內容尺寸、畫布、p、去暗紫邊像素） =====')
+  for (const [n, w, h, W, H, pp, tr] of skinLog) info(`  ${n}：${w}×${h} → 畫布 ${W}×${H}（p=${pp.toFixed(3)}，去暗紫邊 ${tr}）`)
+  return { house, tower }
+}
+
 /** 小建築逐格的 p（BUILDING_SCALES 被環境變數改過時依比例換算） */
 const smallP = (name) => P_FIXED.small[name] * ((BUILDING_SCALES_DEFAULT[name] ?? 1) / (BUILDING_SCALES[name] ?? 1))
 
 let clockClosedSpr = null
 /**
- * 4.0-R：四張鐘樓（關門、開門、黃金關門、黃金開門）共用同一個鐘面（中心、半徑）：關門鐘樓偵測到的值取整數。
+ * 4.0-R：預設鐘樓的關門、開門共用同一個鐘面（中心、半徑）：關門鐘樓偵測到的值取整數。4.0-B1 起外殼鐘樓各主題自己共用（themeClock）。
  * 各張各自偵測會差半格到 1 格，滑鼠移上去換開門版時程式畫的鐘面會跳；偵測值和共用值差超過 1 像素就警告（素材可能真的不同）。
  */
 let towerClock = null
@@ -755,10 +931,12 @@ const POND_W = 110
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
 async function sheet(opts) {
-  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe } = opts
+  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe, keepEnclosed = false } = opts
   const img = await load(file)
   const bgFn = nearBg ? isBgNear : strictBg ? isBgStrict : isBg
   const mask = fgMask(img, bgFn)
+  // 4.0-B1 keepEnclosed：只有「連到圖片邊緣」的洋紅才是背景；被物件圍住的洋紅是畫作本身的顏色（魔法主題的星雲、洋紅屋瓦、龐克的霓虹），保留
+  if (keepEnclosed) keepEnclosedPixels(mask, img.W, img.H)
   let lab, all, comps, cells
   if (grid === 'even') {
     // 4.0-R：固定欄×列切格（相鄰的格子像素連在一起也會切開），見 evenCells
@@ -782,7 +960,7 @@ async function sheet(opts) {
     // 相位：每格各自估算（避開 AI 圖的整體漂移）
     const clip = [Math.max(0, box[0] - 4), Math.max(0, box[1] - 4), Math.min(img.W - 2, box[2] + 4), Math.min(img.H - 2, box[3] + 4)]
     const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
-    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), bgFn)
+    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), keepEnclosed ? NEVER_BG : bgFn)
   }
   // 只給調參工具用（tests-archive/v400r/tune-p.mjs）：回傳切好的格子與取樣函式，不輸出任何東西
   if (probe) return { render, cells, names, e }
@@ -1279,7 +1457,7 @@ async function main() {
     }
   }
 
-  // 7) v3.6.0：收藏品圖示、錢幣、完整紙張（圖集 items，必載）；金色住家與黃金鐘樓（圖集 skins，解鎖才載）
+  // 7) v3.6.0：收藏品圖示、錢幣、完整紙張（圖集 items，必載）；4.0-B1：主題外殼與亞特蘭提斯房屋／鐘樓（圖集 skins_*，穿上或商店預覽才載）
   {
     const built = await buildItemIcons(ITEM_BOX)
     for (const [k, s] of Object.entries(built.icons)) addFrame('items', k, s, { ax: ITEM_BOX / 2, ay: ITEM_BOX })
@@ -1296,53 +1474,44 @@ async function main() {
     const papers = await sheet({ file: 'items_complete.png', cols: 2, rows: 1, names: ['paper_dog', 'paper_cat'], pFixed: P_FIXED.papers })
     for (const f of papers.frames) { const n = defringePink(f.spr, true); info(f.name + '：移除偏粉紅殘邊 ' + n + ' 個像素'); addFrame('items', f.name, f.spr) }
 
-    // 金色住家：和原住家用同一個 p 規則、貼到同樣大小的畫布
+    // 4.0-B1：主題外殼（延後載入圖集 skins_*）。亞特蘭提斯房屋／鐘樓（傳說獎勵）取代原本的全黃金住家與鐘樓，
+    // 畫布 = 預設住家 139×134、預設鐘樓 123×160（底部中心對齊，錨點和預設圖相同）
     const hc = atlases.scene.find((f) => f.key === 'house_closed')
-    const hg = await sheet({ file: 'house_gold.png', cols: 3, rows: 1, names: ['house_gold_closed', 'house_gold_open', 'house_gold_night'], targets: { house_gold_closed: 134 }, solveFrom: 'house_gold_closed' })
-    const goldHouse = {}
-    for (const f of hg.frames) {
-      goldHouse[f.name] = padBottomCenter(f.spr, hc.w, hc.h)
-      addFrame('skins', f.name, goldHouse[f.name])
-    }
-    // 黃金鐘樓：關門、開門都用高度 160，貼到 123×160（和現有開門鐘樓同一做法）
     const tcl = atlases.scene.find((f) => f.key === 'clocktower')
     const top = atlases.scene.find((f) => f.key === 'clocktower_open')
-    // 4.0-R：明確的像素格（原本是「目標高度 160」求解）；畫布 = 原版鐘樓的大小，金色版比較大時不裁切（畫布放大並警告，原版與金色版會不同大小）
-    const tg1 = await sheet({ file: 'scene_clocktower_gold.png', cols: 1, rows: 1, names: ['clocktower_gold'], pFrames: { clocktower_gold: P_FIXED.tower.clocktower_gold } })
-    const tg2 = await sheet({ file: 'scene_clocktower_open_gold.png', cols: 1, rows: 1, names: ['clocktower_open_gold'], pFrames: { clocktower_open_gold: P_FIXED.tower.clocktower_open_gold } })
-    const gW = Math.max(tcl.w, tg1.frames[0].spr.w, tg2.frames[0].spr.w), gH = Math.max(tcl.h, tg1.frames[0].spr.h, tg2.frames[0].spr.h)
-    if (gW !== tcl.w || gH !== tcl.h) warn(`黃金鐘樓比原版鐘樓大（${tg1.frames[0].spr.w}×${tg1.frames[0].spr.h}、${tg2.frames[0].spr.w}×${tg2.frames[0].spr.h}，原版 ${tcl.w}×${tcl.h}）：畫布放大到 ${gW}×${gH}`)
-    const gClosed = padBottomCenter(tg1.frames[0].spr, gW, gH)
-    const gOpen = padBottomCenter(tg2.frames[0].spr, gW, gH)
+    if (hc.w !== SKIN_CANVAS.house[0] || hc.h !== SKIN_CANVAS.house[1] || tcl.w !== SKIN_CANVAS.tower[0] || tcl.h !== SKIN_CANVAS.tower[1])
+      throw new Error(`外殼畫布和預設圖大小不同：住家 ${hc.w}×${hc.h}、鐘樓 ${tcl.w}×${tcl.h}`)
+    const sk = await buildSkins()
+    const goldHouse = { house_atlantis_closed: sk.house.atlantis.closed, house_atlantis_open: sk.house.atlantis.open, house_atlantis_night: sk.house.atlantis.night }
+    const gClosed = sk.tower.atlantis.closed
+    const gOpen = sk.tower.atlantis.open
     const clockOf = (s) => detectClockFace(s)
-    addFrame('skins', 'clocktower_gold', gClosed, { meta: { clock: sharedClock('clocktower_gold', gClosed) } })
-    addFrame('skins', 'clocktower_open_gold', gOpen, { meta: { clock: sharedClock('clocktower_open_gold', gOpen) } })
-    // 收藏冊的「獎勵剪影」預先烘好放進 items（skins 沒載入時收藏冊也能顯示）
-    addFrame('items', 'sil_house_gold', padCenter(shrinkSilhouette(goldHouse.house_gold_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
-    addFrame('items', 'sil_tower_gold', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    // 收藏冊的「獎勵剪影」預先烘好放進 items（外殼圖集沒載入時收藏冊也能顯示）：由亞特蘭提斯房屋／鐘樓的關門圖產生
+    addFrame('items', 'sil_house_atlantis', padCenter(shrinkSilhouette(goldHouse.house_atlantis_closed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
+    addFrame('items', 'sil_tower_atlantis', padCenter(shrinkSilhouette(gClosed, ITEM_BOX), ITEM_BOX), { ax: ITEM_BOX / 2, ay: ITEM_BOX })
 
-    // ---- 檢查：金色版與原版的鐘面、門、窗、輪廓 ----
+    // ---- 檢查：亞特蘭提斯版與原版的鐘面、門、窗、輪廓（4.0-B1 起；原本是金色版） ----
     info('')
-    info('===== v3.6.0 金色外觀對位檢查 =====')
+    info('===== 亞特蘭提斯外觀對位檢查 =====')
     for (const [name, orig, gold] of [['關門鐘樓', tcl, gClosed], ['開門鐘樓', top, gOpen]]) {
       const co = clockOf(orig), cg = clockOf(gold)
       const dx = cg.cx - co.cx, dy = cg.cy - co.cy, dr = cg.r - co.r
-      const line = `${name}：鐘面 原 (${co.cx},${co.cy}) r=${co.r} → 金 (${cg.cx},${cg.cy}) r=${cg.r}；差 dx=${dx} dy=${dy} dr=${dr}`
+      const line = `${name}：鐘面 原 (${co.cx},${co.cy}) r=${co.r} → 亞特蘭提斯 (${cg.cx},${cg.cy}) r=${cg.r}；差 dx=${dx} dy=${dy} dr=${dr}`
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2 || Math.abs(dr) > 2) warn(line + '（超過 2px）')
       else info(line)
       const db1 = doorBox(orig), db2 = doorBox(gold)
-      info(`${name}：門（木色像素外框，相對素材）原 ${JSON.stringify(db1)} → 金 ${JSON.stringify(db2)}`)
+      info(`${name}：門（木色像素外框，相對素材）原 ${JSON.stringify(db1)} → 亞特蘭提斯 ${JSON.stringify(db2)}`)
       const w1 = windowCenters(orig), w2 = windowCenters(gold)
-      info(`${name}：窗（藍灰玻璃塊）原 ${w1.length} 個、金 ${w2.length} 個`)
+      info(`${name}：窗（藍灰玻璃塊）原 ${w1.length} 個、亞特蘭提斯 ${w2.length} 個`)
       let worst = 0
-      for (const a of w1) { const d = Math.min(...w2.map((b) => Math.hypot(a.x - b.x, a.y - b.y))); if (d > worst) worst = d }
-      info(`${name}：每個原版窗到金版最近窗的距離，最大 ${worst.toFixed(1)} px`)
+      if (w2.length) for (const a of w1) { const d = Math.min(...w2.map((b) => Math.hypot(a.x - b.x, a.y - b.y))); if (d > worst) worst = d }
+      info(`${name}：每個原版窗到亞特蘭提斯版最近窗的距離，最大 ${w2.length ? worst.toFixed(1) : '—'} px`)
       const x = alphaXor(orig, gold)
       info(`${name}：輪廓差異（XOR）${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%（原版不透明 ${x.tot}）`)
     }
-    for (const [n, o, g] of [['住家 關門', 'house_closed', 'house_gold_closed'], ['住家 開門', 'house_open', 'house_gold_open'], ['住家 夜晚', 'house_night', 'house_gold_night']]) {
+    for (const [n, o, g] of [['住家 關門', 'house_closed', 'house_atlantis_closed'], ['住家 開門', 'house_open', 'house_atlantis_open'], ['住家 夜晚', 'house_night', 'house_atlantis_night']]) {
       const x = alphaXor(atlases.scene.find((f) => f.key === o), goldHouse[g])
-      info(`${n}：金色版 ${goldHouse[g].w}×${goldHouse[g].h}，與原版輪廓差異 ${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%`)
+      info(`${n}：亞特蘭提斯版 ${goldHouse[g].w}×${goldHouse[g].h}，與原版輪廓差異 ${x.xor} 像素 = ${((x.xor / x.tot) * 100).toFixed(1)}%`)
     }
 
     // ---- 預覽圖 ----
@@ -1360,8 +1529,8 @@ async function main() {
     const other = [...db.frames, ...papers.frames].map((f) => ({ spr: f.spr, label: f.name + ` ${f.spr.w}x${f.spr.h}`, scale: f.name.startsWith('paper') ? 2 : 4 }))
     other.push({ spr: moundSpr, label: `mound_s ${moundSpr.w}x${moundSpr.h}`, scale: 4 })
     other.push({ spr: atlases.toys.find((f) => f.key === 'toy_dirt_mound'), label: 'toy_dirt_mound (old)', scale: 2 })
-    other.push({ spr: atlases.items.find((f) => f.key === 'sil_house_gold'), label: 'sil_house_gold', scale: 4 })
-    other.push({ spr: atlases.items.find((f) => f.key === 'sil_tower_gold'), label: 'sil_tower_gold', scale: 4 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_house_atlantis'), label: 'sil_house_atlantis', scale: 4 })
+    other.push({ spr: atlases.items.find((f) => f.key === 'sil_tower_atlantis'), label: 'sil_tower_atlantis', scale: 4 })
     await composePreview('v360-coins-reveal-mound-silhouettes.png', other, { cols: 5, cellW: 210, cellH: 210, scale: 3, bg: bgPrev })
 
     // 去粉紅殘邊處理後的檢查圖：容易有粉紅光暈的 6 個圖示，放在草地綠底上（48 版，×4）
@@ -1395,7 +1564,7 @@ async function main() {
     })
     await composePreview('v360-shard-F-vs-A-E.png', shards, { cols: 6, cellW: ITEM_BOX * 6 + 8, cellH: ITEM_BOX * 6 + 20, scale: 6, bg: bgPrev })
 
-    // 黃金鐘樓與現有鐘樓：原版、金色版、疊圖（紅 = 只有原版有；藍 = 只有金色版有；灰 = 兩者都有）
+    // 亞特蘭提斯鐘樓與現有鐘樓：原版、亞特蘭提斯版、疊圖（紅 = 只有原版有；藍 = 只有亞特蘭提斯版有；灰 = 兩者都有）
     const overlay = (a, b) => {
       const out = Buffer.alloc(a.w * a.h * 4)
       for (let i = 0; i < a.w * a.h; i++) {
@@ -1412,21 +1581,21 @@ async function main() {
       if (m) for (let d = -3; d <= 3; d++) for (const [x, y] of [[m[0] + d, m[1]], [m[0], m[1] + d]]) { const o = (y * s.w + x) * 4; out[o] = 255; out[o + 1] = 0; out[o + 2] = 0; out[o + 3] = 255 }
       return { w: s.w, h: s.h, rgba: out }
     }
-    await composePreview('v360-tower-gold-vs-orig.png', [
+    await composePreview('b1-tower-atlantis-vs-orig.png', [
       { spr: ring(tcl, clockOf(tcl)), label: 'clocktower (orig)', scale: 4 },
-      { spr: ring(gClosed, clockOf(gClosed)), label: 'clocktower_gold', scale: 4 },
-      { spr: overlay(tcl, gClosed), label: 'overlay red=orig only blue=gold only', scale: 4 },
+      { spr: ring(gClosed, clockOf(gClosed)), label: 'tower_atlantis', scale: 4 },
+      { spr: overlay(tcl, gClosed), label: 'overlay red=orig only blue=atlantis only', scale: 4 },
       { spr: ring(top, clockOf(top)), label: 'clocktower_open (orig)', scale: 4 },
-      { spr: ring(gOpen, clockOf(gOpen)), label: 'clocktower_open_gold', scale: 4 },
+      { spr: ring(gOpen, clockOf(gOpen)), label: 'tower_atlantis_open', scale: 4 },
       { spr: overlay(top, gOpen), label: 'overlay', scale: 4 },
     ], { cols: 3, cellW: 123 * 4 + 8, cellH: 160 * 4 + 20, scale: 4, bg: bgPrev })
-    await composePreview('v360-house-gold-vs-orig.png', [
+    await composePreview('b1-house-atlantis-vs-orig.png', [
       { spr: atlases.scene.find((f) => f.key === 'house_closed'), label: 'house_closed (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_closed, label: 'house_gold_closed', scale: 3 },
+      { spr: goldHouse.house_atlantis_closed, label: 'house_atlantis_closed', scale: 3 },
       { spr: atlases.scene.find((f) => f.key === 'house_open'), label: 'house_open (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_open, label: 'house_gold_open', scale: 3 },
+      { spr: goldHouse.house_atlantis_open, label: 'house_atlantis_open', scale: 3 },
       { spr: atlases.scene.find((f) => f.key === 'house_night'), label: 'house_night (orig)', scale: 3 },
-      { spr: goldHouse.house_gold_night, label: 'house_gold_night', scale: 3 },
+      { spr: goldHouse.house_atlantis_night, label: 'house_atlantis_night', scale: 3 },
     ], { cols: 2, cellW: 139 * 3 + 8, cellH: 134 * 3 + 20, scale: 3, bg: bgPrev })
   }
 
@@ -1680,7 +1849,8 @@ async function writeOutputs() {
     for (const f of frames) {
       let magenta = 0
       const bgFn = f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
-      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2])) magenta++
+      // 4.0-B1：保留內部洋紅畫作的外殼（keepEnclosed）只算貼著透明處的殘留
+      for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2]) && (!f.keepEnclosed || isEdge(f.rgba, f.w, f.h, i % f.w, (i / f.w) | 0))) magenta++
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
       // v3.8.0 新素材：逐張列出洋紅殘留（嚴格判斷＝純洋紅；一般判斷＝含玫瑰紅陰影，粉色墊的滾邊本來就是粉紅色，所以墊子只看嚴格判斷）
       if (/^(pers_|picnic_|polaroid_)/.test(f.key)) {
@@ -1767,5 +1937,5 @@ async function overview(tag, bg) {
 }
 
 // 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
-export { sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+export { SKIN_KEEP_ENCLOSED, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
 if (IS_MAIN) await main()

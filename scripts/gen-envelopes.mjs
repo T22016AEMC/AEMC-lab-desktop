@@ -1,7 +1,7 @@
 // v3.9.0：從圖集量出可擺放物件素材的「逐列不透明輪廓」，產生 src/farm/pixel/envelopes.ts（不要手改）。
 // 用法：node scripts/gen-envelopes.mjs（讀 public/assets 目前的 manifest 與圖集）。改了這些素材後要重跑；邏輯測試會用圖集重新量一次比對。
 // 每個物件：w、h、ax、ay（錨點＝腳底中心）與 rows[i] = 第 i 列（由素材頂端算起）的不透明區段 [[lo, hi), …]，相對錨點 x；整列透明 = []。
-// 同一個物件有好幾張圖（住家的關門／開門／夜晚／金色、鐘樓的關門／開門／黃金）時取聯集。
+// 同一個物件有好幾張圖（住家的關門／開門／夜晚／亞特蘭提斯、鐘樓的關門／開門／亞特蘭提斯）時取聯集（4.0-B1 階段 3 再加入全部主題外殼）。
 import sharp from 'sharp'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -13,8 +13,8 @@ const manifest = JSON.parse(readFileSync(join(dir, readdirSync(dir).find((f) => 
 
 /** 物件 → 素材鍵（第一個是主要的，尺寸與錨點以它為準） */
 const GROUPS = {
-  house: ['house_closed', 'house_open', 'house_night', 'house_gold_closed', 'house_gold_open', 'house_gold_night'],
-  clocktower: ['clocktower', 'clocktower_open', 'clocktower_gold', 'clocktower_open_gold'],
+  house: ['house_closed', 'house_open', 'house_night', 'house_atlantis_closed', 'house_atlantis_open', 'house_atlantis_night'],
+  clocktower: ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open'],
   pond: ['pond'],
   board: ['board'],
   lamp: ['lamp'],
