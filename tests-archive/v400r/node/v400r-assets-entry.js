@@ -128,7 +128,7 @@ for (const k of Object.keys(man.frames)) {
   const f = F(k)
   // 4.0-B1：外殼（skins_* 圖集）一律用 nearBg 去背，殘留也用同一個判斷
   // 4.0-B2：env_*／decor_themes 的素材用「恰好 #FF00FF」去背（exactBg），殘留也用同一個判斷（畫作裡的紫、粉紅、霓虹不是這個值；逐格的 0 殘留、0 誤吃見 tests-archive/v400b2）
-  const bg = f.atlas.startsWith('env_') || f.atlas === 'decor_themes' ? pa.isBgExact : k === 'planter' || k === 'coral' || f.atlas.startsWith('skins_') ? pa.isBgNear : /^picnic_mat_/.test(k) ? pa.isBgStrict : pa.isBg
+  const bg = f.atlas.startsWith('env_') || f.atlas === 'decor_themes' || f.atlas === 'acc' ? pa.isBgExact : k === 'planter' || k === 'coral' || f.atlas.startsWith('skins_') ? pa.isBgNear : /^picnic_mat_/.test(k) ? pa.isBgStrict : pa.isBg
   let mag = 0, half = 0
   // 4.0-B1：保留內部洋紅畫作的外殼（SKIN_KEEP_ENCLOSED）只算貼著透明處的殘留
   const edgeOnly = pa.SKIN_KEEP_ENCLOSED.has(k)

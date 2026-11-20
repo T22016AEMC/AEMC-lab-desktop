@@ -35,7 +35,7 @@ export const SHOP_TEXT = {
 export const BOUGHT_TO_INVENTORY = (name: string): string => `${name}的預設位置被其他擺設佔住，已放進倉庫。請到編輯農場，從倉庫拿出來擺`
 
 /** 購買的裝飾實例合計幾個 */
-export const decorTotal = (save: SaveData): number => save.shop?.decor.length ?? 0
+export const decorTotal = (save: SaveData): number => (save.shop?.decor ?? []).filter((d) => d.kind !== 'legend_stand').length // 4.0-C：送的傳說展示台不算購買上限
 
 /** 某種裝飾買了幾個（只算購買的實例；原本免費的內建擺設不算） */
 export const decorOfKind = (save: SaveData, kind: string): number => (save.shop?.decor ?? []).filter((d) => d.kind === kind).length

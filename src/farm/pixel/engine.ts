@@ -7,6 +7,8 @@ import type { FarmEffect } from '../sim/commands'
 import { SKIN_PARTS, equippedSkinDef, type SkinPart, type ThemeId } from '../config/skins'
 import { ENV_WINDOW_THEMES, GLOW, LAMP_GLOW_DEFAULT, envKeys, envThemeOf, type GlowDef } from '../config/envThemes'
 import { ENV_SLOT } from '../config/shop'
+import { ACC_MOUNT, ACC_SLOTS, accDef, type AccPart } from '../config/accessories'
+import { PAIR_ITEMS, type LegendPair } from '../config/legendStand'
 import type { RevealResult } from '../sim/dig'
 import { BALANCE } from '../config/balance'
 import { buildingDef } from '../config/buildings'
@@ -45,7 +47,7 @@ export interface FrameInfo {
   gifts: string[]
 }
 
-export type Hit = { kind: 'pet' | 'gift' | 'find'; id: string } | { kind: 'door' }
+export type Hit = { kind: 'pet' | 'gift' | 'find' | 'stand'; id: string } | { kind: 'door' }
 
 /** 引擎對外的連接點：扣點洗澡、叫醒、提示訊息（由畫面層接到 store 與 toast） */
 export interface EngineHooks {
@@ -131,6 +133,9 @@ import type { LayoutKind } from '../config/layoutItems'
 import type { DecorInstance, FarmLayout } from '../save/types'
 
 /** 場景引擎：不依賴 React，負責寵物行為更新與像素繪製（邏輯像素座標，整數倍放大） */
+/** 傳說展示台素材（71×30）台面中央的列：台面上的道具腳底落在這一列 */
+const STAND_TOP = 11
+
 export class PixelEngine {
   layout: Layout = computeLayout(1280, 692, 1)
   actors = new Map<string, Actor>()
@@ -139,6 +144,9 @@ export class PixelEngine {
   doorHover = false
   /** 滑鼠在鐘樓的門上 */
   towerHover = false
+  /** 4.0-C 傳說展示台：台面顯示哪一對傳說道具（null = 一對都沒集齊，台面空的）、兩對都集齊時點展示台可以切換（畫面層依存檔設定） */
+  standPair: LegendPair | null = null
+  standToggle = false
   /**
    * 滑鼠互動（v3.8.1，hover.ts）：停下來看你、黏人靠近、膽小閃開、摸頭、小名字標籤、貓拍狗吠。
    * enabled 由畫面層依「這個裝置有沒有 hover 能力（桌面滑鼠）」設定；預設關閉（Node 測試與觸控裝置不受影響）。
@@ -513,7 +521,10 @@ export class PixelEngine {
       y: L.house.baseY,
       draw: () => {
         const s = this.houseSprite(night)
-        if (s) drawSprite(ctx, s, L.house.x0 + s.ax, L.house.baseY)
+        if (s) {
+          drawSprite(ctx, s, L.house.x0 + s.ax, L.house.baseY)
+          this.drawAcc(ctx, 'house', L.house.x0, L.house.baseY - s.ay)
+        }
       },
     })
     const pond = pondPos(L)
@@ -536,6 +547,8 @@ export class PixelEngine {
         y: o.y,
         draw: () => {
           drawSprite(ctx, s, o.x, o.y)
+          if (o.kind === 'tower') this.drawAcc(ctx, 'tower', Math.round(o.x) - s.ax, Math.round(o.y) - s.ay)
+          else if (o.kind === 'legend_stand') this.drawStandItems(ctx, Math.round(o.x) - s.ax, Math.round(o.y) - s.ay)
         },
       })
     }
@@ -1085,6 +1098,8 @@ export class PixelEngine {
     }
     const a = this.petAt(x, y)
     if (a) return { kind: 'pet', id: a.id }
+    const st = this.standHit(x, y)
+    if (st) return { kind: 'stand', id: st }
     // 寶物（土堆、布包，連同上方的「可揭曉」星星）：腳底往上約 2 倍半徑、往下半個半徑；y 大的在前面先判斷
     const R = this.findReach()
     const pts = this.findPoints()
@@ -1555,6 +1570,47 @@ export class PixelEngine {
     }
     const key = KIND_GEOM[kind].sprite
     return key ? assets.get(key) : null
+  }
+
+  /**
+   * 4.0-C 傳說展示台：台面（素材左上角 tlx、tly；台面上緣約在素材第 STAND_TOP 列）放最先集齊那一對的兩件傳說道具（收藏冊圖示 48×48 縮成一半 24×24，剛好 2 倍整數縮放），並排站在台面中央。
+   * 道具往上超出展示台的素材外框（站在台面上），不影響擺放判斷（輪廓只算展示台本身）。
+   */
+  private drawStandItems(ctx: CanvasRenderingContext2D, tlx: number, tly: number): void {
+    if (!this.standPair) return
+    const stand = assets.get('legend_stand')
+    if (!stand) return
+    PAIR_ITEMS[this.standPair].forEach((key, i) => {
+      const s = assets.get(key)
+      if (!s) return
+      const w = Math.round(s.w / 2), h = Math.round(s.h / 2)
+      const cx = tlx + stand.ax + (i === 0 ? -13 : 13)
+      ctx.drawImage(s.img, s.x, s.y, s.w, s.h, cx - Math.floor(w / 2), tly + STAND_TOP - h, w, h)
+    })
+  }
+
+  /** 展示台上的道具與台面的點擊範圍（兩對都集齊時點一下切換）：展示台素材外框，再往上加道具的高度 */
+  private standHit(x: number, y: number): string | null {
+    if (!this.standToggle) return null
+    for (const p of this.layout.placement.placed.values()) {
+      if (p.kind !== 'legend_stand') continue
+      const b = spriteBoxAt('legend_stand', p.x, p.y)
+      if (x >= b.x0 && x < b.x1 && y >= b.y0 - 24 && y < b.y1) return p.id
+    }
+    return null
+  }
+
+  /**
+   * 4.0-C 房屋與鐘樓配件：畫在目前的房屋／鐘樓圖上（tlx、tly = 素材左上角）。掛點是相對素材左上角的固定座標（config/accessories.ts 的 ACC_MOUNT），
+   * 所有房屋／鐘樓外觀的畫布大小相同，所以每個外觀都用同一組座標；圖集 acc 還沒載入 = 不畫。
+   */
+  private drawAcc(ctx: CanvasRenderingContext2D, part: AccPart, tlx: number, tly: number): void {
+    for (const slot of ACC_SLOTS) {
+      const d = accDef(this.skins[slot])
+      if (!d || d.part !== part || d.slot !== slot) continue
+      const s = assets.get(d.frame)
+      if (s) drawSprite(ctx, s, tlx + ACC_MOUNT[slot].x, tly + ACC_MOUNT[slot].y)
+    }
   }
 
   /** 4.0-B2：目前生效的環境主題（穿著、而且 env_<主題> 圖集已載入）；沒穿或還沒載入 = null = 預設草地 */

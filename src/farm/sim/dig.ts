@@ -2,6 +2,7 @@ import { BALANCE } from '../config/balance'
 import { EVENTS, RETRO_EVENT_IDS, type EventDef, type EventId } from '../config/events'
 import { isCollected, itemDef, itemsFor, shardKey, shardsHave, type ItemDef, type Rarity } from '../config/items'
 import { skinDef } from '../config/skins'
+import { instanceId } from '../config/layoutItems'
 import type { SpeciesId } from '../config/species'
 import type { Find, SaveData } from '../save/types'
 import { rollEarning } from './earning'
@@ -153,7 +154,13 @@ function applyEvent(save: SaveData, ev: EventDef, nowMs: number, notices: EventN
       equipped: { ...skins.equipped, [def.part]: ev.skin },
     }
   }
-  return { ...save, points: save.points + coins, events, skins }
+  // 4.0-C 擺設獎勵（傳說展示台）：新的實例「種類#編號」加進 shop.decor（沒有擺放紀錄 = 放進倉庫）
+  let shop = save.shop
+  if (ev.decor) {
+    const cur = save.shop ?? { decor: [], nextDecorId: 1 }
+    shop = { decor: [...cur.decor, { id: instanceId(ev.decor, cur.nextDecorId), kind: ev.decor }], nextDecorId: cur.nextDecorId + 1 }
+  }
+  return { ...save, points: save.points + coins, events, skins, ...(shop ? { shop } : {}) }
 }
 
 /**

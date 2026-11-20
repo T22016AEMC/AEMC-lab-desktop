@@ -28,7 +28,7 @@ export type BaseLayoutKind =
   | 'coral'
 
 /** 4.0-B2：主題裝飾（48 種，themeDecor.ts）也是可擺放的擺設種類（只能從商店買實例，沒有內建的固定位置） */
-export type LayoutKind = BaseLayoutKind | ThemeDecorKind
+export type LayoutKind = BaseLayoutKind | ThemeDecorKind | 'legend_stand'
 
 export interface LayoutItemDef {
   id: string
@@ -61,7 +61,7 @@ export const LAYOUT_ITEMS: readonly LayoutItemDef[] = [
 ]
 
 const BY_ID: ReadonlyMap<string, LayoutItemDef> = new Map(LAYOUT_ITEMS.map((d) => [d.id, d]))
-const KINDS: ReadonlySet<string> = new Set<string>([...LAYOUT_ITEMS.map((d) => d.kind), ...THEME_DECOR_KINDS])
+const KINDS: ReadonlySet<string> = new Set<string>([...LAYOUT_ITEMS.map((d) => d.kind), ...THEME_DECOR_KINDS, 'legend_stand'])
 
 /**
  * v4.0：可以從商店買來「再多一個」的擺設種類（實例 id「種類#編號」，例如 rocks#3；存檔 shop.decor）。
@@ -69,7 +69,7 @@ const KINDS: ReadonlySet<string> = new Set<string>([...LAYOUT_ITEMS.map((d) => d
  * 存檔驗證（migrate.ts 的 cleanShop、cleanFarmLayout）只看這張表，不看商品表。
  * 路燈（有燈光）、樹（樹根有特別處理、很大）、住家等有特殊機制的不在表裡。
  */
-export const INSTANCE_KINDS: readonly LayoutKind[] = ['mushroom', 'flowers', 'rocks', 'bush', 'planter', 'coral', 'stump', 'tall_grass', ...THEME_DECOR_KINDS]
+export const INSTANCE_KINDS: readonly LayoutKind[] = ['mushroom', 'flowers', 'rocks', 'bush', 'planter', 'coral', 'stump', 'tall_grass', ...THEME_DECOR_KINDS, 'legend_stand']
 const INSTANCE_KIND_SET: ReadonlySet<string> = new Set(INSTANCE_KINDS)
 export const isInstanceKind = (v: unknown): v is LayoutKind => typeof v === 'string' && INSTANCE_KIND_SET.has(v)
 
@@ -93,7 +93,7 @@ function instanceDef(id: string): LayoutItemDef | undefined {
   const p = parseInstanceId(id)
   if (!p) return undefined
   const base = LAYOUT_ITEMS.find((d) => d.kind === p.kind)
-  const def: LayoutItemDef = { id, kind: p.kind, name: base?.name ?? themeDecorDef(p.kind)?.name ?? p.kind, storable: true, hasDefault: false }
+  const def: LayoutItemDef = { id, kind: p.kind, name: base?.name ?? themeDecorDef(p.kind)?.name ?? (p.kind === 'legend_stand' ? '傳說展示台' : p.kind), storable: true, hasDefault: false }
   if (instanceCache.size < 4096) instanceCache.set(id, def)
   return def
 }

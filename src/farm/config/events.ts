@@ -6,7 +6,7 @@ import { ITEMS, isCollected, itemDef, type Collection, type Rarity } from './ite
  * 玩家事先不會被提示（收藏冊、說明文字都不能出現罰款的字樣），所以這個檔案的文字只給事件對話框用。
  * 罰款與違約金一次性、不扣到負數（實際扣的 = min(金幣, 罰款)）。
  */
-export type EventId = 'dogLeak' | 'catContract' | 'dogVault' | 'catAtlantis' | 'colCommon' | 'colUncommon' | 'colRare' | 'colLegend' | 'colAll'
+export type EventId = 'dogLeak' | 'catContract' | 'dogVault' | 'catAtlantis' | 'legendStand' | 'colCommon' | 'colUncommon' | 'colRare' | 'colLegend' | 'colAll'
 
 export interface EventDef {
   id: EventId
@@ -24,6 +24,8 @@ export interface EventDef {
   retro?: true
   /** 外觀獎勵（reward 才有）：加進 skins.owned 並自動穿上 */
   skin?: string
+  /** 4.0-C 擺設獎勵（reward 才有）：送一個這種擺設放進倉庫（shop.decor 的實例，沒有擺放紀錄 = 在倉庫） */
+  decor?: 'legend_stand'
   /** 條件：收藏是否達成 */
   met: (col: Collection) => boolean
 }
@@ -69,6 +71,12 @@ export const EVENTS: readonly EventDef[] = [
     id: 'catAtlantis', species: 'cat', kind: 'reward', title: '亞特蘭提斯的力量',
     body: (coins) => `雷射與山銅合而為一，鐘樓變成亞特蘭提斯鐘樓了。獲得 ${coins} 金幣。`, images: ['item_L003', 'item_L004'], skin: 'tower.gold',
     met: (c) => have(c, 'L003') && have(c, 'L004'),
+  },
+  {
+    // 4.0-C：任一對傳說集齊就送一個傳說展示台（放進倉庫、只送一次；載入時補送已集齊的舊存檔）。不給金幣
+    id: 'legendStand', kind: 'reward', title: '獲得傳說展示台！', coins: 0, retro: true, decor: 'legend_stand', images: [],
+    body: () => '一對傳說寶物到齊了，送你一個傳說展示台，已放進倉庫，到編輯農場擺放。',
+    met: (c) => (have(c, 'L001') && have(c, 'L002')) || (have(c, 'L003') && have(c, 'L004')),
   },
   setReward('colLegend', '傳說寶物全數到齊！', R.legendary, '保險箱鑰匙、保險箱、亞特蘭提斯雷射、山銅都收進收藏冊了，', (c) => allOf(c, 'legendary')),
   setReward('colAll', '收藏冊全部完成！', R.all, '28 種寶物全部收集完成，你是真正的寶物獵人。', (c) => allOf(c)),

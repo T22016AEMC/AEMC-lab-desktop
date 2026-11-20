@@ -36,7 +36,7 @@ export interface SkinCardModel {
  * 第一張是「原樣」（免費、永遠擁有；沒穿任何外觀時是使用中），接著是已擁有的傳說獎勵外觀（只有拿到了才出現），再來是商店外觀。
  * 換上、換回原樣立刻生效、立刻存檔（farmStore.equipSkin）；沒擁有的走商店的購買確認（onBuy），買了立刻換上。
  */
-export function SkinRow({ slot, title, cards, save, busy, onBuy, wide = false }: { slot: string; title: string; cards: SkinCardModel[]; save: SaveData; busy: boolean; onBuy: (item: ShopItem) => void; wide?: boolean }) {
+export function SkinRow({ slot, title, cards, save, busy, onBuy, wide = false, removeText }: { slot: string; title: string; cards: SkinCardModel[]; save: SaveData; busy: boolean; onBuy: (item: ShopItem) => void; wide?: boolean; removeText?: string }) {
   const worn = save.skins.equipped[slot] ?? null
   return (
     <section className="mt-3" data-testid={`skin-row-${slot}`}>
@@ -75,10 +75,10 @@ export function SkinRow({ slot, title, cards, save, busy, onBuy, wide = false }:
                   className="px-btn mt-1 w-full py-px text-xs"
                   onClick={() => {
                     useFarmStore.getState().equipSkin(slot, c.skinId)
-                    useUIStore.getState().showToast(c.skinId === null ? SKIN_TEXT.wornOriginal(title.replace(/外(裝|殼)$/, '')) : SKIN_TEXT.worn(c.name))
+                    useUIStore.getState().showToast(c.skinId === null ? (removeText ? `${title}已取下` : SKIN_TEXT.wornOriginal(title.replace(/外(裝|殼)$/, ''))) : SKIN_TEXT.worn(c.name))
                   }}
                 >
-                  {c.skinId === null ? SKIN_TEXT.backToOriginal : SKIN_TEXT.wear}
+                  {c.skinId === null ? (removeText ?? SKIN_TEXT.backToOriginal) : SKIN_TEXT.wear}
                 </button>
               ) : (
                 <button

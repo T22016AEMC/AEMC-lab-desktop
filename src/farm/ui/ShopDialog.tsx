@@ -7,6 +7,7 @@ import { ENV_GROUP, ENV_SLOT, SHOP_CATEGORIES, SHOP_CATEGORY_LABEL, SHOP_COMING_
 import { PART_DEFAULT_FRAME, SKINS, SKIN_ATLAS, SKIN_PARTS, SKIN_PART_GROUP, skinDef } from '../config/skins'
 import { ENV_THUMB_ATLAS, envThumb } from '../config/envThemes'
 import { DECOR_ATLAS } from '../config/themeDecor'
+import { ACC_ATLAS, ACC_DEFAULT_FRAME, ACC_SLOTS, ACC_SLOT_GROUP } from '../config/accessories'
 import { assets } from '../pixel/assets'
 import { SkinRow, skinCardsFor } from './SkinCards'
 import type { PixelEngine } from '../pixel/engine'
@@ -55,7 +56,7 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
   useEffect(() => {
     if (tab !== 'building' || skinsReady) return
     let alive = true
-    void Promise.all([...new Set(Object.values(SKIN_ATLAS))].map((g) => assets.loadGroup(g))).then(() => alive && setSkinsReady(true), () => {})
+    void Promise.all([...new Set([...Object.values(SKIN_ATLAS), ACC_ATLAS])].map((g) => assets.loadGroup(g))).then(() => alive && setSkinsReady(true), () => {})
     return () => {
       alive = false
     }
@@ -201,7 +202,7 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
   const renderSkinRows = (cat: ShopCategory) => {
     const skinItems = itemsOf(cat).filter((it) => it.grant.type === 'skin')
     if (cat === 'building')
-      return SKIN_PARTS.map((part) => (
+      return [...SKIN_PARTS.map((part) => (
         <SkinRow
           key={part}
           slot={part}
@@ -211,7 +212,21 @@ export function ShopDialog({ engine }: { engine: PixelEngine }) {
           onBuy={buy}
           cards={skinCardsFor(PART_DEFAULT_FRAME[part], skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === part), SKINS.filter((d) => d.legend && d.part === part), save.skins.owned, skinDef)}
         />
-      ))
+      )),
+        // 4.0-C 房屋與鐘樓配件：每個掛點一列（不掛／已買的／沒買的）
+        ...ACC_SLOTS.map((slot) => (
+          <SkinRow
+            key={slot}
+            slot={slot}
+            title={ACC_SLOT_GROUP[slot]}
+            save={save}
+            busy={busy}
+            onBuy={buy}
+            removeText="取下"
+            cards={skinCardsFor(ACC_DEFAULT_FRAME[slot], skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === slot), [], save.skins.owned, () => undefined, '不掛')}
+          />
+        )),
+      ]
     const env = skinItems.filter((it) => it.grant.type === 'skin' && it.grant.slot === ENV_SLOT)
     if (!env.length) return null
     return <SkinRow slot={ENV_SLOT} title={ENV_GROUP} wide save={save} busy={busy} onBuy={buy} cards={skinCardsFor(envThumb('grass'), env, [], save.skins.owned, skinDef, '草地')} />

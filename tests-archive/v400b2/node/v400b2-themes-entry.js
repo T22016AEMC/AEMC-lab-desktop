@@ -71,7 +71,7 @@ for (const g of Object.keys(man.atlases)) if (/^env_|^decor_themes$/.test(g)) ok
     same++
   }
   const added = Object.keys(cur).filter((k) => !base[k])
-  const b2 = added.filter((k) => /^env_|^decor_themes$/.test(man.frames[k].atlas))
+  const b2 = added.filter((k) => /^env_|^decor_themes$|^acc$/.test(man.frames[k].atlas)) // 4.0-C：配件圖集 acc
   report.push(`既有素材逐像素相同 ${same} 張；新增 ${added.length} 張（B2：${b2.length}）`)
   ok(added.every((k) => b2.includes(k) || /^(house|tower|pond|board|doghouse|cat_tree|bowls)_|^sil_/.test(k)), '1 新增的素材只有 B1 外殼、剪影與 B2 素材')
 }
@@ -121,6 +121,47 @@ for (const g of Object.keys(man.atlases)) if (/^env_|^decor_themes$/.test(g)) ok
   eq(pa.PATH_H_LOGICAL, LAY.PATH_H, '2 管線的 PATH_H_LOGICAL = layout.ts 的 PATH_H')
   eq(pa.FAR_P, 5.501, '2 遠景像素格 = 舊遠景')
   for (const [t, [y0, y1]] of Object.entries(pa.PATH_BANDS)) ok(y0 % 4 === 0 && y1 % 4 === 0 && y1 - y0 > 250, `2 ${t} 小路的列範圍 ${y0}～${y1} 落在 4×4 像素格的邊上`)
+}
+
+// ---- 2b. 4.0-C 小修：地板只用 A～C、小路瑕疵段不取樣、遠景的粉紫斜線（原圖就有） ----
+{
+  const same = (t) => {
+    const f = crop(`floor_${t}`)
+    let diff = 0
+    for (let y = 0; y < 54; y++) for (let x = 0; x < 54; x++) { const a = px(f, x, y), b = px(f, x + 54, y + 54); if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) diff++ }
+    return diff
+  }
+  eq(pa.FLOOR_BLOCKS, { forest: 'ABCA', cleanroom: 'ABCA', punk: 'ABCA' }, '2b 森林、無塵室、龐克的地板只用 A～C（D 的位置補 A）')
+  for (const t of ['forest', 'cleanroom', 'punk']) eq(same(t), 0, `2b floor_${t} 右下塊（原 D）= 左上塊（A）`)
+  for (const t of ['atlantis', 'magic', 'plaid']) ok(same(t) > 1000, `2b floor_${t} 維持 A～D（右下塊和左上塊不同：${same(t)} 格）`)
+  // 小路右緣瑕疵：不取樣瑕疵段（原圖 x ≥ 約 2125），左右接縫的誤差不超過一般相鄰兩欄差的 4 倍
+  eq(pa.PATH_X1, { cleanroom: 2040, punk: 2008 }, '2b 無塵室、龐克小路只取樣到瑕疵段之前（2040、2008，整數個條紋週期）')
+  for (const t of THEMES) {
+    const s = crop(`path_${t}`)
+    const colDiff = (a, b) => { let d = 0; for (let y = 0; y < s.h; y++) { const p = px(s, a, y), q = px(s, b, y); d += Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) } return d / s.h }
+    let adj = 0
+    for (let x = 20; x < 120; x++) adj += colDiff(x, x + 1)
+    adj /= 100
+    const seam = colDiff(s.w - 1, 0)
+    ok(seam <= Math.max(adj * 4, 60), `2b path_${t} 左右接縫誤差 ${seam.toFixed(1)}（一般相鄰兩欄 ${adj.toFixed(1)}）`)
+    report.push(`2b path_${t} 接縫 ${seam.toFixed(1)}／相鄰 ${adj.toFixed(1)}`)
+  }
+  // 遠景、小路、地板：任何位置都沒有近洋紅（R、B ≥ 200、G ≤ 80）；無塵室每扇窗角落的粉紫斜線是原圖本來就有的（opaque 的 (255,~120,255)），保留
+  const cast = (r, g, b) => r > 180 && b > 180 && g < r - 40 && g < b - 40
+  for (const t of THEMES) for (const k of [`far_${t}`, `path_${t}`, `floor_${t}`]) {
+    const s = crop(k)
+    let nearAll = 0, pink = 0
+    for (let i = 0; i < s.w * s.h; i++) { if (!s.rgba[i * 4 + 3]) continue; const r = s.rgba[i * 4], g = s.rgba[i * 4 + 1], b = s.rgba[i * 4 + 2]; if (pa.isBgNear(r, g, b)) nearAll++; if (cast(r, g, b)) pink++ }
+    ok(nearAll === 0, `2b ${k} 近洋紅（任何位置）${nearAll}（應為 0）`)
+    if (k.startsWith('far_')) report.push(`2b ${k} 偏粉紫像素 ${pink}`)
+    if (k === 'far_cleanroom') ok(pink > 200, `2b far_cleanroom 窗角的粉紫斜線保留（原圖就有，${pink} 像素）`)
+  }
+  {
+    const { data, info } = await (await import('node:module')).createRequire(ROOT + '/package.json')('sharp')(join(process.env.ASSET_SRC ?? join(ROOT, '..', '像素風圖片'), 'far_cleanroom.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    let src = 0
+    for (let i = 0; i < info.width * info.height; i++) if (data[i * 4 + 3] === 255 && cast(data[i * 4], data[i * 4 + 1], data[i * 4 + 2])) src++
+    ok(src > 5000, `2b 原圖 far_cleanroom 就有偏粉紫的不透明像素 ${src}（窗角斜線不是我們去背弄出來的）`)
+  }
 }
 
 // ---- 3. 洋紅：0 殘留、0 誤吃 ----
@@ -235,7 +276,8 @@ for (const g of Object.keys(man.atlases)) if (/^env_|^decor_themes$/.test(g)) ok
   }
   // 逐件偵測結果（連通塊數）寫進報告
   report.push('4 偵測失敗 0 件；多連通塊的件（水母觸手、蠟燭光點…）：' + ['jelly_lamp', 'trident_statue', 'crystal_cluster', 'float_candles', 'magic_cauldron', 'rune_circle', 'speaker', 'fire_barrel'].join('、') + ' 都合成一件')
-  ok(!man.frames[LEGEND_STAND_KEY] || (ENVELOPES[LEGEND_STAND_KEY] === undefined && !isLayoutKind(LEGEND_STAND_KEY) && !INSTANCE_KINDS.includes(LEGEND_STAND_KEY)), '4 傳說展示台沒有輪廓、不是擺設種類、不賣')
+  // 4.0-C 起傳說展示台是擺設種類（集齊傳說送的，不賣）：有輪廓、可擺放，但不在 THEME_DECOR（商店）裡
+  ok(man.frames[LEGEND_STAND_KEY] && ENVELOPES[LEGEND_STAND_KEY] && isLayoutKind(LEGEND_STAND_KEY) && INSTANCE_KINDS.includes(LEGEND_STAND_KEY) && !THEME_DECOR_KINDS.includes(LEGEND_STAND_KEY), '4 傳說展示台（C）：有輪廓、是擺設種類、不在商店的主題裝飾表')
   ok(!SHOP_ITEMS.some((it) => it.id === 'decor.' + LEGEND_STAND_KEY), '4 傳說展示台不在商店')
 }
 
@@ -329,9 +371,9 @@ const buy = (s, id, opts) => { const r = purchase(s, id, opts); assert.ok(r.ok, 
   ok(equippedSkin(old, ENV_SLOT) === ENV_DEFAULT, '6 舊存檔是草地')
   // 新種類的實例與擺放
   const nu = S({ shop: { decor: [{ id: 'jelly_lamp#1', kind: 'jelly_lamp' }, { id: 'carousel#2', kind: 'carousel' }, { id: 'windmill#3', kind: 'windmill' }, { id: 'legend_stand#4', kind: 'legend_stand' }, { id: 'jelly_lamp#1', kind: 'jelly_lamp' }, { id: 'carousel#5', kind: 'rocks' }], nextDecorId: 2 }, farmLayout: { items: [{ id: 'carousel#2', kind: 'carousel', state: 'placed', x: 300.4, y: 250 }, { id: 'windmill#3', kind: 'windmill', state: 'stored' }, { id: 'legend_stand#4', kind: 'legend_stand', state: 'placed', x: 1, y: 1 }] } })
-  eq(nu.shop.decor.map((d) => d.id), ['jelly_lamp#1', 'carousel#2', 'windmill#3'], '6 新種類實例認得；傳說展示台不是種類、重複 id、種類對不上的丟掉')
-  eq(nu.shop.nextDecorId, 4, '6 nextDecorId 至少是最大編號 + 1')
-  eq(nu.farmLayout.items.map((i) => [i.id, i.state, i.x, i.y]), [['carousel#2', 'placed', 300, 250], ['windmill#3', 'stored', undefined, undefined]], '6 擺放紀錄：新種類認得、座標取整、傳說展示台丟掉')
+  eq(nu.shop.decor.map((d) => d.id), ['jelly_lamp#1', 'carousel#2', 'windmill#3', 'legend_stand#4'], '6 新種類實例認得（C：含傳說展示台）；重複 id、種類對不上的丟掉')
+  eq(nu.shop.nextDecorId, 5, '6 nextDecorId 至少是最大編號 + 1')
+  eq(nu.farmLayout.items.map((i) => [i.id, i.state, i.x, i.y]), [['carousel#2', 'placed', 300, 250], ['windmill#3', 'stored', undefined, undefined], ['legend_stand#4', 'placed', 1, 1]], '6 擺放紀錄：新種類認得、座標取整')
   eq(cleanShop(cleanShop(nu.shop)), cleanShop(nu.shop), '6 清理兩次和一次相同')
   eq(cleanFarmLayout(cleanFarmLayout(nu.farmLayout)), cleanFarmLayout(nu.farmLayout), '6 擺放清理兩次和一次相同')
   // 環境主題的存檔：owned／equipped 來回保留；穿著的不在 owned（壞檔）會被拿掉
@@ -396,7 +438,7 @@ const buy = (s, id, opts) => { const r = purchase(s, id, opts); assert.ok(r.ok, 
   eq(LAYOUT_ITEMS.length, 18, '8 內建固定物件仍是 18 個')
   ok(THEME_DECOR_KINDS.every((k) => !LAYOUT_ITEMS.some((d) => d.kind === k)), '8 主題裝飾沒有內建（固定 id）的物件，只能從商店買實例')
   eq(parseInstanceId('windmill#12'), { kind: 'windmill', n: 12 }, '8 解析 windmill#12')
-  eq(parseInstanceId('legend_stand#1'), null, '8 傳說展示台不能是實例')
+  eq(parseInstanceId('legend_stand#1'), { kind: 'legend_stand', n: 1 }, '8 傳說展示台（C）可以是實例')
 }
 
 if (fails.length) {

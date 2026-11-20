@@ -52,8 +52,8 @@ for (const t of THEMES) {
 }
 for (const g of Object.keys(GROUPS)) GROUPS[g] = [...new Set(GROUPS[g])]
 
-// 4.0-B2：主題裝飾（圖集 decor_themes；傳說展示台不是擺設種類，不產生輪廓）
-for (const [k, f] of Object.entries(manifest.frames)) if (f.atlas === 'decor_themes' && k !== 'legend_stand') GROUPS[k] = [k]
+// 4.0-B2：主題裝飾（圖集 decor_themes；4.0-C 起傳說展示台 legend_stand 也是擺設種類）
+for (const [k, f] of Object.entries(manifest.frames)) if (f.atlas === 'decor_themes') GROUPS[k] = [k]
 
 const out = {}
 for (const [id, keys] of Object.entries(GROUPS)) {

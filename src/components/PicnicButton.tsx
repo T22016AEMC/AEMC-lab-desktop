@@ -19,7 +19,7 @@ export function PicnicButton() {
     return () => window.clearInterval(t)
   }, [])
   const now = gameNow()
-  const ctx = { nowMs: now, hour: worldHour(now), weather: worldWeather(now) }
+  const ctx = { nowMs: now, hour: worldHour(now), weather: worldWeather(now, save) }
   const why = picnicBlock(save, ctx)
   const t = save ? picnicToday(save, now) : null
   const active = save?.picnic?.active

@@ -105,9 +105,9 @@ const oldFlags = { dogLeak: 1, catContract: 1, dogVault: 1, catAtlantis: 1 }
 LS.clear()
 await boot(RAW({ points: 10, collection: ALL, events: oldFlags }))
 eq(S().pendingEvents.map((e) => e.id), ['retroBatch'], '4 補發 5 個：合併成 1 個彈窗')
-eq(S().pendingEvents[0].parts.map((p) => p.id), ['colCommon', 'colUncommon', 'colRare', 'colLegend', 'colAll'], '4 合併彈窗的各項（依事件順序）')
+eq(S().pendingEvents[0].parts.map((p) => p.id), ['colCommon', 'colUncommon', 'colRare', 'legendStand', 'colLegend', 'colAll'], '4 合併彈窗的各項（依事件順序；4.0-C 多了傳說展示台）')
 eq([S().pendingEvents[0].coins, S().save.points, stored().points], [295, 305, 305], '4 合計 295、立刻寫入')
-ok(Object.keys(stored().events).length === 9, '4 旗標寫進儲存')
+ok(Object.keys(stored().events).length === 10, '4 旗標寫進儲存（4 個舊旗標＋6 個補發：4.0-C 多了 legendStand）')
 await boot(null)
 eq([S().pendingEvents, S().save.points], [[], 305], '4 重新載入：不再發')
 // 只達成 1 項：原彈窗
@@ -124,7 +124,7 @@ eq([S().pendingEvents, S().save.points, stored().dataRev], [[], 7, 5], '4 沒達
 // 舊事件不在載入時觸發（就算原始資料的旗標不見了）
 LS.clear()
 await boot(RAW({ points: 50, collection: { L001: 1, L002: 1, U002: 0, ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((i) => ['U002-' + i, 1])) } }))
-eq([S().pendingEvents, S().save.points], [[], 50], '4 舊的罰款與配對不在載入時觸發')
+eq([S().pendingEvents, S().save.points, S().save.events.dogVault], [[{ id: 'legendStand', coins: 0, retro: true }], 50, undefined], '4 舊的罰款與配對不在載入時觸發（4.0-C：只補送傳說展示台，0 金幣、不設配對旗標）')
 
 // ---------- 5. 3.10.x 的舊分頁讀到 dataRev 6：不讀、不覆寫（shop 不會被洗掉） ----------
 LS.clear()

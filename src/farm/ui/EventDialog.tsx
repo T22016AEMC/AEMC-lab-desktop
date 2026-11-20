@@ -32,7 +32,7 @@ export function EventDialog() {
           <ul className="mx-auto mt-2 w-fit text-left text-sm" data-testid="event-parts">
             {(notice.parts ?? []).map((p) => (
               <li key={p.id} data-testid={`event-part-${p.id}`}>
-                ・{(eventDef(p.id)?.title ?? p.id).replace(/！$/, '')}　+{p.coins} 金幣
+                ・{(eventDef(p.id)?.title ?? p.id).replace(/！$/, '')}　{p.coins > 0 ? `+${p.coins} 金幣` : '已放進倉庫'}
               </li>
             ))}
           </ul>

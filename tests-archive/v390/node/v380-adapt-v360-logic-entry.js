@@ -196,15 +196,15 @@ const withFind = (s, by = 'dog', extra = {}) => ({ ...s, finds: [...s.finds, { i
   eq(checkEvents({ ...base(), collection: c5 }, NOW).notices, [], '5 片不觸發')
   s = { ...base(), points: 7, collection: { L001: 1, L002: 3 } }
   r = checkEvents(s, NOW)
-  eq(r.notices, [{ id: 'dogVault', coins: 100 }], '狗：L001＋L002 → 100 金幣'); eq(r.save.points, 107)
+  eq(r.notices, [{ id: 'dogVault', coins: 100 }, { id: 'legendStand', coins: 0 }], '狗：L001＋L002 → 100 金幣＋（4.0-C）送傳說展示台'); eq(r.save.points, 107)
   eq(r.save.skins, { owned: ['house.gold'], equipped: { house: 'house.gold' } }, '金色屋頂解鎖並穿上')
   eq(checkEvents(r.save, NOW + 5).notices, [], '獎勵一次性')
   s = { ...base(), collection: { L003: 1, L004: 1 } }
   r = checkEvents(s, NOW)
-  eq(r.notices, [{ id: 'catAtlantis', coins: 100 }], '貓：L003＋L004'); eq(r.save.skins, { owned: ['tower.gold'], equipped: { tower: 'tower.gold' } }, '黃金鐘樓')
+  eq(r.notices, [{ id: 'catAtlantis', coins: 100 }, { id: 'legendStand', coins: 0 }], '貓：L003＋L004（4.0-C：多送傳說展示台）'); eq(r.save.skins, { owned: ['tower.gold'], equipped: { tower: 'tower.gold' } }, '黃金鐘樓')
   s = { ...base(), collection: { L001: 1, L002: 1, L003: 1, L004: 1 } }
   r = checkEvents(s, NOW)
-  eq(r.notices.map((x) => x.id), ['dogVault', 'catAtlantis', 'colLegend']); /* v4.0：L001～L004 全有時多了獨立的新事件「傳說全集齊」（+100），排在配對之後 */ eq([...r.save.skins.owned].sort(), ['house.gold', 'tower.gold']); eq(r.save.skins.equipped, { house: 'house.gold', tower: 'tower.gold' })
+  eq(r.notices.map((x) => x.id), ['dogVault', 'catAtlantis', 'legendStand', 'colLegend']); /* 4.0-C：配對之後送傳說展示台（0 金幣）。v4.0：L001～L004 全有時多了獨立的新事件「傳說全集齊」（+100），排在配對之後 */ eq([...r.save.skins.owned].sort(), ['house.gold', 'tower.gold']); eq(r.save.skins.equipped, { house: 'house.gold', tower: 'tower.gold' })
   eq(checkEvents({ ...base(), collection: { L001: 5 } }, NOW).notices, [], '只有 L001 不觸發')
   // 透過 revealFind 的最後一片觸發（rand 序列：結果→挑缺的項目→缺的片）
   const others = Object.fromEntries(itemsFor('dog', 'uncommon').filter((d) => d.id !== 'U002').map((d) => [d.id, 1]))

@@ -96,6 +96,7 @@ export function skinAtlasesFor(equipped: Readonly<Record<string, string>>): stri
     const d = skinDef(id)
     if (d) out.add(SKIN_ATLAS[d.part])
     else if (id.startsWith('env.') && (THEMES as readonly string[]).includes(id.slice(4))) out.add('env_' + id.slice(4))
+    else if (id.startsWith('acc.')) out.add('acc') // 4.0-C 房屋與鐘樓配件（config/accessories.ts）
   }
   return [...out]
 }

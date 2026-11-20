@@ -7,6 +7,7 @@ import { BALANCE } from './config/balance'
 import { gameNow, overrides, worldHour, worldWeather } from './overrides'
 import { skinAtlasesFor } from './config/skins'
 import { DECOR_ATLAS, isThemeDecorKind } from './config/themeDecor'
+import { PAIR_NAME, legendStandView } from './config/legendStand'
 import { assets } from './pixel/assets'
 import { PixelEngine, type FrameInfo } from './pixel/engine'
 import * as layoutMod from './pixel/layout'
@@ -194,6 +195,8 @@ export function Farm() {
     let lastShop: unknown = null
     let lastFinds: unknown = null
     let lastSkins: unknown = null
+    let lastCollection: unknown = null
+    let lastEvents: unknown = null
     let lastDraw = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
@@ -212,7 +215,7 @@ export function Farm() {
 
       const st = useFarmStore.getState()
       const nowMs = gameNow()
-      const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs), gifts: st.gifts }
+      const frame: FrameInfo = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save), gifts: st.gifts }
       // v3.9.0：已購買的建築或農場擺放變了 → 重新算擺放結果
       // v4.0：商店買來的擺設實例（shop）變了也要重算
       if (st.save?.ownedBuildings !== lastOwned || st.save?.farmLayout !== lastLayout || st.save?.shop !== lastShop) {
@@ -221,12 +224,20 @@ export function Farm() {
         lastShop = st.save?.shop
         engine.setLayoutData(st.save?.ownedBuildings ?? [], st.save?.farmLayout, st.save?.shop?.decor)
         // 4.0-B2：有買主題裝飾才載入延後載入的圖集 decor_themes（載入完成前引擎略過沒有圖的擺設，載入完立刻出現）
-        if (st.save?.shop?.decor.some((d) => isThemeDecorKind(d.kind))) assets.loadGroup(DECOR_ATLAS).catch(() => {})
+        if (st.save?.shop?.decor.some((d) => isThemeDecorKind(d.kind) || d.kind === 'legend_stand')) assets.loadGroup(DECOR_ATLAS).catch(() => {})
       }
       engine.bowlLeft = st.save ? bowlLeft(st.save, nowMs) : 0
       if (st.save?.finds !== lastFinds) {
         lastFinds = st.save?.finds
         engine.setFinds(st.save?.finds ?? [])
+      }
+      // 4.0-C 傳說展示台：台面顯示哪一對、兩對都集齊時可以點擊切換（只看收藏與事件旗標）
+      if (st.save?.collection !== lastCollection || st.save?.events !== lastEvents) {
+        lastCollection = st.save?.collection
+        lastEvents = st.save?.events
+        const v = st.save ? legendStandView(st.save) : { pair: null, canToggle: false }
+        engine.standPair = v.pair
+        engine.standToggle = v.canToggle
       }
       // 外觀（外殼）：穿上的部位才載入它的圖集，載入完成前引擎自己退回預設圖，載入完成立刻換
       if (st.save?.skins !== lastSkins) {
@@ -510,7 +521,7 @@ export function Farm() {
     }
     const id = engine.pointerMove(p.x, p.y)
     const hk = engine.hitTest(p.x, p.y)?.kind
-    const over = id || hk === 'gift' || hk === 'find'
+    const over = id || hk === 'gift' || hk === 'find' || hk === 'stand'
     // 玩耍中：除了別的寵物與禮物，整個畫布都是球游標
     e.currentTarget.style.cursor = over ? 'pointer' : playingRef.current ? ballCursor(engine.layout) : 'default'
   }
@@ -521,6 +532,11 @@ export function Farm() {
     const hit = engine.hitTest(p.x, p.y)
     if (hit?.kind === 'gift') useFarmStore.getState().collectGift(hit.id)
     else if (hit?.kind === 'find') revealAt(hit.id)
+    else if (hit?.kind === 'stand') {
+      // 4.0-C 傳說展示台：兩對都集齊時點一下切換台面顯示的那一對
+      const pair = useFarmStore.getState().toggleLegendStandView()
+      if (pair) useUIStore.getState().showToast(`展示台：${PAIR_NAME[pair]}`)
+    }
     else if (hit?.kind === 'pet') {
       // 走去水池的途中被點到或拖曳：取消洗澡
       engine.cancelBathWalk(hit.id)
@@ -637,7 +653,7 @@ export function Farm() {
   const picnicStartBlock = (): string | null => {
     const st = useFarmStore.getState()
     const nowMs = gameNow()
-    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save) }
     const why = picnicBlock(st.save, ctx)
     if (why) return why
     if (!engine.picnicMatFits()) return PICNIC_TEXT.noRoom
@@ -653,7 +669,7 @@ export function Farm() {
     const ui = useUIStore.getState()
     const st = useFarmStore.getState()
     const nowMs = gameNow()
-    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs) }
+    const ctx = { nowMs, hour: worldHour(nowMs), weather: worldWeather(nowMs, st.save) }
     const why = picnicStartBlock()
     if (why) {
       ui.showToast(why)

@@ -1773,6 +1773,7 @@ async function main() {
   // 10) 4.0-B2：環境主題（地板、小路、遠景、路燈、樹；延後載入圖集 env_<主題>、env_thumbs）、主題裝飾（延後載入圖集 decor_themes）
   await buildEnvThemes()
   await buildThemeDecor()
+  await buildAccessories()
 
   await writeOutputs()
 }
@@ -2030,6 +2031,12 @@ const ENV_THEMES = THEMES
 const FLOOR_P = P_FIXED.grass
 /** 小路：每主題的「中間路面帶」在原圖的列範圍 [y0, y1)（量法：列平均色的跳變；都落在 4 的倍數上，= 原圖的像素格邊），高度一律縮成 PATH_H = 67 列 */
 const PATH_H_LOGICAL = 67
+/**
+ * 4.0-C 小修：地板用哪幾塊。原圖 A（左上）B（右上）C（左下）D（右下）；森林的 D 是小路狀土徑、無塵室與龐克的 D 是大塊警示條紋，這三個主題只用 A～C，D 的位置補 A（其他主題 A～D）。
+ * 小路的取樣寬度：無塵室與龐克的原圖右緣（x ≥ 約 2125）有一段漸層瑕疵，只取「左右接起來誤差最小」的整數個條紋週期（無塵室 2040、龐克 2008；接縫誤差各約 2%、1%），瑕疵段不取樣，左右直接接。
+ */
+const FLOOR_BLOCKS = { forest: 'ABCA', cleanroom: 'ABCA', punk: 'ABCA' }
+const PATH_X1 = { cleanroom: 2040, punk: 2008 }
 const PATH_BANDS = { atlantis: [184, 556], cleanroom: [204, 504], forest: [136, 556], magic: [204, 512], punk: [208, 520], plaid: [224, 544] }
 /** 遠景：像素格 = 舊遠景（P_FIXED.far），輸出高度是「不透明內容的高度」（FAR_H 每張各自量；無塵室是牆填滿整張高度 → 約 131） */
 const FAR_P = P_FIXED.far
@@ -2143,6 +2150,31 @@ function fitDecor(render, cell, size) {
   return { spr, p: pp }
 }
 
+/**
+ * 4.0-C 房屋與鐘樓配件（house_acc.png、tower_acc.png，各 2×2，底色恰好 #FF00FF）：[鍵名, 大小目標, 錨點]。
+ * 大小：晴天娃娃、敲鐘人、旗幟以高度為準，門牌以寬度為準（最大寬高 maxW）。錨點：doll／sign = 上方中心（掛點，ay = 0）；flag／bellman = 底部（旗桿底、腳底）中心。
+ */
+const ACC_SHEETS = [
+  ['house_acc.png', [['acc_doll', { h: 22, maxW: 30 }, 'top'], ['acc_sign_home', { h: 999, maxW: 22 }, 'top'], ['acc_sign_paw', { h: 999, maxW: 22 }, 'top'], ['acc_sign_lab', { h: 999, maxW: 22 }, 'top']]],
+  ['tower_acc.png', [['acc_bellman', { h: 34, maxW: 36 }, 'bottom'], ['acc_flag_paw', { h: 26, maxW: 30 }, 'bottom'], ['acc_flag_clock', { h: 26, maxW: 30 }, 'bottom'], ['acc_flag_aemc', { h: 26, maxW: 30 }, 'bottom']]],
+]
+async function buildAccessories() {
+  info('')
+  info('===== 4.0-C 房屋與鐘樓配件 =====')
+  for (const [file, list] of ACC_SHEETS) {
+    const names = list.map((e) => e[0])
+    const r = await sheet({ file, cols: 2, rows: 2, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    list.forEach(([key, target, anchor], i) => {
+      const cell = r.cells[i]
+      if (!cell?.length) { warn('偵測失敗：' + file + ' 第 ' + (i + 1) + ' 格（' + key + '）找不到內容'); return }
+      const { spr, p } = fitCell(r.render, cell, target)
+      const ax = anchor === 'top' ? Math.round(spr.w / 2) : baseCenterX(spr, 3)
+      addFrame('acc', key, spr, { ax, ay: anchor === 'top' ? 0 : spr.h, exactBg: true })
+      info('  ' + key + '：' + spr.w + '×' + spr.h + '（p=' + p.toFixed(3) + '，連通塊 ' + cell.length + '），錨點 (' + ax + ', ' + (anchor === 'top' ? 0 : spr.h) + ')')
+    })
+  }
+}
+
 const envLog = []
 const decorLog = []
 async function buildEnvThemes() {
@@ -2153,6 +2185,16 @@ async function buildEnvThemes() {
     // 地板
     {
       const { img, mask } = await loadAlpha(`${t}_tiles.png`)
+      // 只用 A～C 的主題：把 D（右下 512×512）換成指定的那一塊（A）
+      const blocks = FLOOR_BLOCKS[t] ?? 'ABCD'
+      const Q = { A: [0, 0], B: [512, 0], C: [0, 512], D: [512, 512] }
+      if (blocks[3] !== 'D') {
+        const [sx, sy] = Q[blocks[3]]
+        for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+          const s = ((sy + y) * img.W + sx + x) * 3, d = ((512 + y) * img.W + 512 + x) * 3
+          img.data[d] = img.data[s]; img.data[d + 1] = img.data[s + 1]; img.data[d + 2] = img.data[s + 2]
+        }
+      }
       const cells = Math.floor(img.W / FLOOR_P)
       const one = resampleRect(img, mask, 0, 0, img.W, img.H, cells, cells)
       const top = hcat(one, flipX(one))
@@ -2165,8 +2207,9 @@ async function buildEnvThemes() {
     {
       const { img, mask } = await loadAlpha(`path_${t}.png`)
       const [y0, y1] = PATH_BANDS[t]
-      const w = Math.round(img.W / ((y1 - y0) / PATH_H_LOGICAL))
-      const spr = resampleRect(img, mask, 0, y0, img.W, y1, w, PATH_H_LOGICAL)
+      const x1 = PATH_X1[t] ?? img.W
+      const w = Math.round(x1 / ((y1 - y0) / PATH_H_LOGICAL))
+      const spr = resampleRect(img, mask, 0, y0, x1, y1, w, PATH_H_LOGICAL)
       addFrame(g, `path_${t}`, spr, { ax: 0, ay: spr.h, exactBg: true })
       envLog.push(`path_${t}：原圖列 ${y0}～${y1}（${y1 - y0} 列）→ ${spr.w}×${spr.h}（p=${((y1 - y0) / PATH_H_LOGICAL).toFixed(3)}），左右直接接（原圖橫向可無縫）`)
       thumbParts[t].path = spr
@@ -2283,5 +2326,5 @@ function nominalCells(comps, W, H, cols, rows) {
 }
 
 // 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
-export { ENV_THEMES, PATH_BANDS, PATH_H_LOGICAL, FLOOR_P, FAR_P, LAMP_TARGET, TREE_TARGET, DECOR_SHEETS, DECOR_AREA, DECOR_MAX, isBgExact, loadAlpha, resampleRect, SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+export { ACC_SHEETS, ENV_THEMES, FLOOR_BLOCKS, PATH_X1, PATH_BANDS, PATH_H_LOGICAL, FLOOR_P, FAR_P, LAMP_TARGET, TREE_TARGET, DECOR_SHEETS, DECOR_AREA, DECOR_MAX, isBgExact, loadAlpha, resampleRect, SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
 if (IS_MAIN) await main()

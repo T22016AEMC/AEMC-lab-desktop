@@ -5,6 +5,7 @@ import { PICNIC_TEXT, endPicnic, picnicEndDue, settlePicnicOnLoad, startPicnic, 
 import { LocalStorageAdapter, setNewerDataHandler, setOtherTabHandler } from '../save/storage'
 import type { FarmLayout, Find, SaveData, SaveStorage } from '../save/types'
 import { layoutItemDef } from '../config/layoutItems'
+import { LEGEND_STAND_VIEW_FLAG, legendStandView } from '../config/legendStand'
 import { withoutRecord } from '../pixel/placement'
 import { applySleepRecovery, buyBuilding, eatAtBowl } from '../sim/buildings'
 import { adopt, execute, settlePlay, startPlay, wakeForDrag, type ActionId, type PlayToyId, type AdoptRequest, type Ctx, type FarmEffect } from '../sim/commands'
@@ -95,6 +96,8 @@ interface FarmState {
   purchase: (itemId: string, opts?: PurchaseOptions) => Promise<ShopPurchaseResult>
   /** v4.0 切換外觀（環境主題等）：skinId = null 或預設主題 → 換回預設；沒擁有的不能穿。有變才寫入 */
   equipSkin: (slot: string, skinId: string | null) => void
+  /** 4.0-C 傳說展示台：兩對傳說都集齊時，切換台面顯示的那一對（存在 events.legendStandView）；回傳切換後顯示的那一對，不能切換 = null */
+  toggleLegendStandView: () => 'dog' | 'cat' | null
   /** v4.0 從商店領養（不是第一隻）：先確認寫入權，再走 adoptPet，立刻寫入。回傳錯誤訊息或 null */
   shopAdopt: (req: Omit<AdoptRequest, 'free'>) => Promise<string | null>
   /** v3.9.0 擺設模式：寫入農場擺放（只記和預設不同的；全部預設 = 拿掉欄位），立刻存檔。不動 ownedBuildings */
@@ -307,7 +310,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     next = applySleepRecovery(next, { nowMs: now, hour: worldHour(now) }, elapsedSec, atBuilding)
     if (next !== save) set({ save: next })
     // v3.8.0：野餐時間到、下雨、天黑 → 結束（主迴圈每個影格也會檢查；這裡是分頁被蓋住或在背景時的備援）
-    const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) })
+    const due = picnicEndDue(next, { nowMs: now, hour: worldHour(now), weather: worldWeather(now, next) })
     if (due) get().endPicnic(due)
     // 到期（10 分鐘）的寶物自動揭曉
     get().revealDueNow()
@@ -317,7 +320,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const save = get().save
     if (!save) return PICNIC_TEXT.noSave
     const now = gameNow()
-    const r = startPicnic(save, { nowMs: now, hour: worldHour(now), weather: worldWeather(now) }, participants, decor)
+    const r = startPicnic(save, { nowMs: now, hour: worldHour(now), weather: worldWeather(now, save) }, participants, decor)
     if (r.error) return r.error
     set((s) => ({ save: r.save, effects: [...s.effects, ...r.effects] }))
     flushSave()
@@ -399,6 +402,17 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     if (next === save) return
     set({ save: next })
     flushSave()
+  },
+
+  toggleLegendStandView: () => {
+    const save = get().save
+    if (!save || get().otherTab || get().newerData) return null
+    if (!legendStandView(save).canToggle) return null
+    const alt = save.events[LEGEND_STAND_VIEW_FLAG] === 1
+    set({ save: { ...save, events: { ...save.events, [LEGEND_STAND_VIEW_FLAG]: alt ? 0 : 1 } } })
+    flushSave()
+    const cur = get().save
+    return cur ? legendStandView(cur).pair : null
   },
 
   shopAdopt: async (req) => {

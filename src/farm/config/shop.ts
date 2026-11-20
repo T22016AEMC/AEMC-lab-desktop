@@ -4,6 +4,7 @@ import { layoutItemDef, type LayoutKind } from './layoutItems'
 import { SPECIES } from './species'
 import { SKINS, SKIN_PART_GROUP, THEME_NAME, type SkinDef, type SkinPart } from './skins'
 import { ENV_THEME_IDS, envSkinId, envThumb } from './envThemes'
+import { ACCESSORIES, ACC_SLOT_GROUP, type AccDef } from './accessories'
 import { DECOR_GROUP_OTHER, THEME_DECOR, type DecorSize, type ThemeDecorDef } from './themeDecor'
 
 /**
@@ -169,6 +170,22 @@ function skinItem(d: SkinDef): ShopItem {
   }
 }
 
+/** 4.0-C 房屋與鐘樓配件：建築分類內分組（房屋配件：晴天娃娃／門牌、鐘樓配件：敲鐘人／旗幟），每件買一次、買了立刻掛上（同一位置只能掛一個，之後可切換、可取下） */
+function accItem(d: AccDef): ShopItem {
+  return {
+    id: skinItemId(d.id),
+    name: d.name,
+    category: 'building',
+    group: ACC_SLOT_GROUP[d.slot],
+    price: d.price,
+    repeatable: false,
+    maxOwned: 1,
+    sprite: d.frame,
+    blurb: d.slot === 'houseDoll' ? '掛著的時候：下雨機率 −5%、晴天機率 +5%' : '買了立刻掛上；之後可以換或取下',
+    grant: { type: 'skin', skin: d.id, slot: d.slot },
+  }
+}
+
 export const SHOP_ITEMS: readonly ShopItem[] = [
   {
     id: 'pet.adopt',
@@ -188,6 +205,8 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   building('catTree'),
   // 4.0-B1：外觀（建築分類，依部位分組）。傳說獎勵（亞特蘭提斯房屋、鐘樓）不在商店賣
   ...SKINS.filter((d) => !d.legend).map((d) => skinItem(d)),
+  // 4.0-C：房屋與鐘樓配件（建築分類，排在外殼之後）
+  ...ACCESSORIES.map((d) => accItem(d)),
 ]
 
 /** 階段 A 的暫時商品（B2 起不賣；只供測試驗證「已經買的實例種類永遠認得」） */

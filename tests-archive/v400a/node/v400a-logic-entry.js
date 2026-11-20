@@ -266,11 +266,11 @@ const ALLCOL = {}
 for (const d of ITEMS) { if (d.shards) for (let i = 1; i <= d.shards; i++) ALLCOL[shardKey(d.id, i)] = 1; else ALLCOL[d.id] = 1 }
 const colOf = (filter) => { const c = {}; for (const [k, v] of Object.entries(ALLCOL)) if (filter(k)) c[k] = v; return c }
 {
-  eq(EVENTS.map((e) => e.id), ['dogLeak', 'catContract', 'colCommon', 'colUncommon', 'colRare', 'dogVault', 'catAtlantis', 'colLegend', 'colAll'], '9 固定順序：罰款 → 常見 → 少見 → 稀有 → 傳說配對 → 傳說全集齊 → 全圖鑑')
-  eq(RETRO_EVENT_IDS, ['colCommon', 'colUncommon', 'colRare', 'colLegend', 'colAll'], '9 補發只查 5 個新事件')
+  eq(EVENTS.map((e) => e.id), ['dogLeak', 'catContract', 'colCommon', 'colUncommon', 'colRare', 'dogVault', 'catAtlantis', 'legendStand', 'colLegend', 'colAll'], '9 固定順序（4.0-C：傳說展示台在傳說配對之後）：罰款 → 常見 → 少見 → 稀有 → 傳說配對 → 傳說全集齊 → 全圖鑑')
+  eq(RETRO_EVENT_IDS, ['colCommon', 'colUncommon', 'colRare', 'legendStand', 'colLegend', 'colAll'], '9 補發只查 6 個新事件（4.0-C 多了傳說展示台）')
   // 一次全部達成（揭曉時的 checkEvents）
   const r = checkEvents(S({ points: 3, collection: ALLCOL }), T0)
-  eq(r.notices, [{ id: 'dogLeak', coins: 3 }, { id: 'catContract', coins: 0 }, { id: 'colCommon', coins: 15 }, { id: 'colUncommon', coins: 30 }, { id: 'colRare', coins: 50 }, { id: 'dogVault', coins: 100 }, { id: 'catAtlantis', coins: 100 }, { id: 'colLegend', coins: 100 }, { id: 'colAll', coins: 100 }], '9 同時觸發：依固定順序；罰款先扣（只剩 3 → 扣 3，再扣 0）')
+  eq(r.notices, [{ id: 'dogLeak', coins: 3 }, { id: 'catContract', coins: 0 }, { id: 'colCommon', coins: 15 }, { id: 'colUncommon', coins: 30 }, { id: 'colRare', coins: 50 }, { id: 'dogVault', coins: 100 }, { id: 'catAtlantis', coins: 100 }, { id: 'legendStand', coins: 0 }, { id: 'colLegend', coins: 100 }, { id: 'colAll', coins: 100 }], '9 同時觸發（4.0-C：傳說配對之後多了展示台 0 金幣）：依固定順序；罰款先扣（只剩 3 → 扣 3，再扣 0）')
   eq(r.save.points, 0 + 15 + 30 + 50 + 100 + 100 + 100 + 100, '9 金幣')
   eq(checkEvents(r.save, T0 + 1).notices, [], '9 一次性')
   // 套組 5 片不算集齊少見
@@ -279,12 +279,12 @@ const colOf = (filter) => { const c = {}; for (const [k, v] of Object.entries(AL
   ok(!checkEvents(S({ collection: five }), T0).notices.some((x) => x.id === 'colAll'), '9 套組 5 片：全圖鑑不算')
   // 只有狗的傳說：配對 +100 但不算傳說全集齊
   const dogL = colOf((k) => k === 'L001' || k === 'L002')
-  eq(checkEvents(S({ collection: dogL }), T0).notices.map((x) => x.id), ['dogVault'], '9 只有狗的兩件傳說：只觸發舊配對')
+  eq(checkEvents(S({ collection: dogL }), T0).notices.map((x) => x.id), ['dogVault', 'legendStand'], '9 只有狗的兩件傳說：觸發舊配對＋（4.0-C）送 1 個傳說展示台')
   // 補發：只發已達成、旗標未設的；舊事件不在載入時觸發
   const old = S({ points: 10, collection: ALLCOL, events: { dogLeak: 1, catContract: 1, dogVault: 1, catAtlantis: 1 } })
   const rt = retroEvents(old, T0)
   eq(rt.notices.length, 1, '9 補發 5 個：合併成 1 個彈窗')
-  eq(rt.notices[0], { id: 'retroBatch', coins: 295, retro: true, parts: [{ id: 'colCommon', coins: 15 }, { id: 'colUncommon', coins: 30 }, { id: 'colRare', coins: 50 }, { id: 'colLegend', coins: 100 }, { id: 'colAll', coins: 100 }] }, '9 合併彈窗：各項與合計 295')
+  eq(rt.notices[0], { id: 'retroBatch', coins: 295, retro: true, parts: [{ id: 'colCommon', coins: 15 }, { id: 'colUncommon', coins: 30 }, { id: 'colRare', coins: 50 }, { id: 'legendStand', coins: 0 }, { id: 'colLegend', coins: 100 }, { id: 'colAll', coins: 100 }] }, '9 合併彈窗（4.0-C：多了展示台 0 金幣）：各項與合計 295')
   eq(rt.save.points, 305, '9 補發金幣')
   eq(retroEvents(rt.save, T0 + 5).notices, [], '9 補發只發一次（旗標）')
   const fresh = S({ collection: ALLCOL })
