@@ -66,6 +66,8 @@ const isBgStrict = (r, g, b) => {
  * v3.9.0：只認「接近純洋紅背景色」的像素（背景約 245,5,250）。小建築.png 右下格的珊瑚有粉紅枝（粉紅填色 R≈B、G 偏低，
  * 和 isBg／isBgStrict 的「R、B 接近而 G 低」條件重疊），用那兩個會把粉紅填色吃掉、只剩黑色輪廓，所以這一格改用這個很窄的判斷。
  */
+/** 4.0-B2：新原圖（路燈、樹、主題裝飾）的底色是「恰好」#FF00FF，畫作裡的紫、粉紅、霓虹都不會是這個值，所以只認這一個顏色（不放寬色鍵） */
+const isBgExact = (r, g, b) => r === 255 && g === 0 && b === 255
 const isBgNear = (r, g, b) => r >= 200 && b >= 200 && g <= 80 && Math.abs(r - b) <= 30
 
 /**
@@ -501,7 +503,7 @@ function depixelate(img, mask, lab, keep, box, p, phases) {
 }
 
 /** 裁到不透明內容的外框，並清掉殘留的洋紅色像素、孤立的單點 */
-function cleanSprite(s, bg = isBg) {
+function cleanSprite(s, bg = isBg, keepSpecks = false) {
   if (!s) return null
   const { w, h, rgba } = s
   // 殘留的洋紅色（邊緣混色）→ 透明
@@ -510,9 +512,10 @@ function cleanSprite(s, bg = isBg) {
   }
   // 孤立單點（上下左右都沒有鄰居）→ 移除
   const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rgba[(y * w + x) * 4 + 3] === 255
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      if (solid(x, y) && !solid(x - 1, y) && !solid(x + 1, y) && !solid(x, y - 1) && !solid(x, y + 1)) rgba[(y * w + x) * 4 + 3] = 0
+  if (!keepSpecks)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (solid(x, y) && !solid(x - 1, y) && !solid(x + 1, y) && !solid(x, y - 1) && !solid(x, y + 1)) rgba[(y * w + x) * 4 + 3] = 0
   let x0 = w, y0 = h, x1 = -1, y1 = -1
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rgba[(y * w + x) * 4 + 3]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
   if (x1 < 0) return null
@@ -571,8 +574,10 @@ const DEFRINGE = process.env.DEFRINGE !== '0'
 const defringeLog = {}
 function addFrame(group, key, spr, extra = {}) {
   atlases[group] ??= []
+  // 4.0-B2：底色恰好是 #FF00FF 的原圖（exactBg）沒有混色的邊，通用去邊只會動到畫作本身的紫、粉紅邊，不做
+  if (extra.exactBg) extra = { ...extra, noDefringe: true }
   // 4.0-R：通用去邊（只改顏色，不改透明度與尺寸）。spr 可能被別的素材共用（例如鐘樓），所以複製一份再改
-  if (DEFRINGE) {
+  if (DEFRINGE && !extra.noDefringe) {
     const before = edgeMagentaCount(spr)
     if (before) {
       spr = { ...spr, rgba: Buffer.from(spr.rgba) }
@@ -1002,9 +1007,9 @@ const POND_W = 110
  *  - solveGroup：{ 幀名稱: [量哪個尺寸 'w'|'h', 目標值] }，求「整張共用」的一個 p，讓這幾幀的輸出尺寸對目標值的對數誤差平方和最小（v3.6.3 橘貓換圖用）
  */
 async function sheet(opts) {
-  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe, keepEnclosed = false } = opts
+  const { file, cols, rows, names, minArea = 300, pRange, pFixed, targets = {}, scales = {}, solveFrom, pScale = 1, solveDim = 'h', fitMax, solveGroup, strictBg = false, nearBg = false, grid, pFrames = {}, probe, keepEnclosed = false, exactBg = false } = opts
   const img = await load(file)
-  const bgFn = nearBg ? isBgNear : strictBg ? isBgStrict : isBg
+  const bgFn = exactBg ? isBgExact : nearBg ? isBgNear : strictBg ? isBgStrict : isBg
   const mask = fgMask(img, bgFn)
   // 4.0-B1 keepEnclosed：只有「連到圖片邊緣」的洋紅才是背景；被物件圍住的洋紅是畫作本身的顏色（魔法主題的星雲、洋紅屋瓦、龐克的霓虹），保留
   if (keepEnclosed) keepEnclosedPixels(mask, img.W, img.H)
@@ -1019,7 +1024,7 @@ async function sheet(opts) {
   } else {
     ;({ lab, comps: all } = label(mask, img.W, img.H))
     comps = keepComps(all, minArea)
-    cells = groupCells(comps, cols, rows)
+    cells = grid === 'nominal' ? nominalCells(comps, img.W, img.H, cols, rows) : groupCells(comps, cols, rows)
   }
   const e = estimateP(img, mask, pRange)
   const base = (pFixed ?? e.p) * pScale
@@ -1031,7 +1036,7 @@ async function sheet(opts) {
     // 相位：每格各自估算（避開 AI 圖的整體漂移）
     const clip = [Math.max(0, box[0] - 4), Math.max(0, box[1] - 4), Math.min(img.W - 2, box[2] + 4), Math.min(img.H - 2, box[3] + 4)]
     const phases = [estimatePhase(img, mask, clip, pp, 0), estimatePhase(img, mask, clip, pp, 1)]
-    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), keepEnclosed ? NEVER_BG : bgFn)
+    return cleanSprite(depixelate(img, mask, lab, keep, clip, pp, phases), keepEnclosed ? NEVER_BG : bgFn, exactBg)
   }
   // 只給調參工具用（tests-archive/v400r/tune-p.mjs）：回傳切好的格子與取樣函式，不輸出任何東西
   if (probe) return { render, cells, names, e }
@@ -1765,6 +1770,10 @@ async function main() {
     await composePreview('v380-assets.png', tiles, { cols: 5, cellW: 300, cellH: 300, scale: 3, bg: bgPrev })
   }
 
+  // 10) 4.0-B2：環境主題（地板、小路、遠景、路燈、樹；延後載入圖集 env_<主題>、env_thumbs）、主題裝飾（延後載入圖集 decor_themes）
+  await buildEnvThemes()
+  await buildThemeDecor()
+
   await writeOutputs()
 }
 
@@ -1919,7 +1928,7 @@ async function writeOutputs() {
   for (const frames of Object.values(atlases))
     for (const f of frames) {
       let magenta = 0
-      const bgFn = f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
+      const bgFn = f.exactBg ? isBgExact : f.nearBg ? isBgNear : f.strictBg ? isBgStrict : isBg
       // 4.0-B1：保留內部洋紅畫作的外殼（keepEnclosed）只算貼著透明處的殘留
       for (let i = 0; i < f.w * f.h; i++) if (f.rgba[i * 4 + 3] && bgFn(f.rgba[i * 4], f.rgba[i * 4 + 1], f.rgba[i * 4 + 2]) && (!f.keepEnclosed || isEdge(f.rgba, f.w, f.h, i % f.w, (i / f.w) | 0))) magenta++
       if (magenta) warn(`${f.key} 殘留洋紅像素 ${magenta} 個`)
@@ -1971,7 +1980,7 @@ async function overview(tag, bg) {
   const SCALE = 3
   const groups = Object.entries(atlases)
   const rows = []
-  for (const [group, frames] of groups) rows.push({ group, frames: frames.filter((f) => group !== 'terrain') })
+  for (const [group, frames] of groups) rows.push({ group, frames: frames.filter((f) => group !== 'terrain' && !/^env_(?!thumbs)/.test(group)) })
   const MAXW = 1800
   const layout = []
   let y = 6
@@ -2007,6 +2016,272 @@ async function overview(tag, bg) {
   info(`總覽圖：screenshots/assets-overview-${tag}.png（${W}×${H}）`)
 }
 
+// ===========================================================================
+// 4.0-B2：環境主題（地板＋小路＋遠景＋路燈＋樹）與主題裝飾
+// ===========================================================================
+
+/**
+ * 原圖：<主題>_tiles.png（地板，1024×1024，2×2 四塊變化版 A～D；指令稱 floor_<主題>.png，實際檔名是 *_tiles.png）、path_<主題>.png、far_<主題>.png（2172×724，
+ * 真透明 alpha）、lamp_themes.png／tree_themes.png（3×2，每格 512）、*_decor.png。順序一律 THEMES：亞特蘭提斯、無塵室、森林、魔法、龐克、野餐鄉村。
+ * 新原圖的底色是恰好 #FF00FF（exactBg）。地板、小路、遠景是 4×4 像素格的圖，取樣用 resampleRect（格子大小可以不是整數，輸出格數固定）。
+ */
+const ENV_THEMES = THEMES
+/** 地板：整張 1024×1024（A～D 四塊）取樣成 round(1024 / FLOOR_P) 格，再 2×2 鏡像成可無縫拼接的方塊（接縫在 A～D 之間本來就有，鏡像保證外緣無縫） */
+const FLOOR_P = P_FIXED.grass
+/** 小路：每主題的「中間路面帶」在原圖的列範圍 [y0, y1)（量法：列平均色的跳變；都落在 4 的倍數上，= 原圖的像素格邊），高度一律縮成 PATH_H = 67 列 */
+const PATH_H_LOGICAL = 67
+const PATH_BANDS = { atlantis: [184, 556], cleanroom: [204, 504], forest: [136, 556], magic: [204, 512], punk: [208, 520], plaid: [224, 544] }
+/** 遠景：像素格 = 舊遠景（P_FIXED.far），輸出高度是「不透明內容的高度」（FAR_H 每張各自量；無塵室是牆填滿整張高度 → 約 131） */
+const FAR_P = P_FIXED.far
+/** 路燈、樹：每格各自求 p，讓高度 = 舊素材（路燈 84、樹 103）；樹太寬時以寬度上限為準。錨點 = 最下面幾列的水平中心（底部中心對位） */
+const LAMP_TARGET = { h: 84, maxW: 60 }
+const TREE_TARGET = { h: 103, maxW: 100 }
+/**
+ * 主題裝飾（連通區域偵測切件）：[原圖, 欄, 列, [[種類, 級別] | null …]]，順序 = 原圖左到右、上到下。級別決定輸出大小（邏輯像素的外框面積）：
+ * 小 ≈ 1300、中 ≈ 2100、大 ≈ 4000，另有寬高上限。legend_stand（傳說展示台）不賣，只切好放進圖集（C 階段用）。
+ * 這張表要和 src/farm/config/themeDecor.ts 一致（測試比對）。
+ */
+const DECOR_SHEETS = [
+  ['atlantis_decor.png', 4, 2, [['jelly_lamp', 'S'], ['conch_lamp', 'S'], ['old_pillar', 'M'], ['seahorse_statue', 'M'], ['trident_statue', 'L'], ['temple_arch', 'L'], ['legend_stand', 'M'], null]],
+  ['cleanroom_decor.png', 4, 2, [['warn_light', 'S'], ['tube_rack', 'S'], ['lab_bench', 'M'], ['air_filter', 'M'], ['centrifuge', 'M'], ['air_shower', 'L'], null, null]],
+  ['forest_decor.png', 4, 2, [['firefly_jar', 'S'], ['bird_house', 'S'], ['moss_log', 'M'], ['hollow_stump_door', 'M'], ['vine_arch', 'M'], ['tree_house', 'L'], null, null]],
+  ['magic_decor.png', 4, 2, [['crystal_cluster', 'S'], ['spell_books', 'S'], ['float_candles', 'M'], ['star_telescope', 'M'], ['magic_cauldron', 'M'], ['rune_circle', 'L'], null, null]],
+  ['punk_decor.png', 4, 2, [['neon_star', 'S'], ['spray_cans', 'S'], ['speaker', 'M'], ['graffiti_wall', 'M'], ['fire_barrel', 'M'], ['neon_stage', 'L'], null, null]],
+  ['plaid_decor.png', 4, 2, [['cake_stand', 'S'], ['lemonade_jar', 'S'], ['rocking_chair', 'M'], ['picnic_set', 'M'], ['vine_gazebo', 'L'], ['carousel', 'L'], null, null]],
+  ['extra_decor_a.png', 3, 2, [['coral_pot', 'S'], ['twin_jar', 'S'], ['gas_cylinders', 'S'], ['info_terminal', 'S'], ['mushroom_ring', 'S'], ['stone_stack', 'S']]],
+  ['extra_decor_b.png', 3, 2, [['crystal_ball', 'S'], ['magic_broom', 'S'], ['guitar_stand', 'S'], ['tire_stack', 'S'], ['red_pots', 'S'], ['windmill', 'S']]],
+]
+const DECOR_AREA = { S: 1300, M: 2100, L: 4000 }
+const DECOR_MAX = { S: { w: 46, h: 46 }, M: { w: 72, h: 62 }, L: { w: 100, h: 90 } }
+
+/** 不是整數大小的格子取樣：把原圖矩形 [x0,x1)×[y0,y1) 平均成 w×h 格（每格取中央一半的前景像素平均；前景佔格子 ≥ 50% 才算不透明，和 depixelate 同一規則） */
+function resampleRect(img, mask, x0, y0, x1, y1, w, h) {
+  const { data, W } = img
+  const dx = (x1 - x0) / w, dy = (y1 - y0) / h
+  const rgba = Buffer.alloc(w * h * 4)
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const sx0 = Math.round(x0 + i * dx), sx1 = Math.max(sx0, Math.round(x0 + (i + 1) * dx) - 1)
+      const sy0 = Math.round(y0 + j * dy), sy1 = Math.max(sy0, Math.round(y0 + (j + 1) * dy) - 1)
+      const mx0 = sx0 + (sx1 - sx0) * 0.25, mx1 = sx1 - (sx1 - sx0) * 0.25
+      const my0 = sy0 + (sy1 - sy0) * 0.25, my1 = sy1 - (sy1 - sy0) * 0.25
+      let fg = 0, tot = 0, r = 0, g = 0, b = 0, cn = 0, ar = 0, ag = 0, ab = 0, an = 0
+      for (let y = sy0; y <= sy1; y++)
+        for (let x = sx0; x <= sx1; x++) {
+          const k = y * W + x
+          tot++
+          if (!mask[k]) continue
+          fg++
+          ar += data[k * 3]; ag += data[k * 3 + 1]; ab += data[k * 3 + 2]; an++
+          if (x >= mx0 && x <= mx1 && y >= my0 && y <= my1) { r += data[k * 3]; g += data[k * 3 + 1]; b += data[k * 3 + 2]; cn++ }
+        }
+      if (tot && fg / tot >= 0.5) {
+        const o = (j * w + i) * 4
+        if (!cn) { r = ar; g = ag; b = ab; cn = an }
+        rgba[o] = Math.round(r / cn); rgba[o + 1] = Math.round(g / cn); rgba[o + 2] = Math.round(b / cn); rgba[o + 3] = 255
+      }
+    }
+  return { w, h, rgba }
+}
+
+/** 讀有 alpha 的原圖：RGB 與前景遮罩（alpha ≥ 128） */
+async function loadAlpha(file) {
+  const path = join(SRC, file)
+  if (!existsSync(path)) throw new Error('找不到原圖：' + path)
+  const { data, info: i } = await sharp(path).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const rgb = Buffer.alloc(i.width * i.height * 3)
+  const mask = new Uint8Array(i.width * i.height)
+  for (let k = 0; k < i.width * i.height; k++) { rgb[k * 3] = data[k * 4]; rgb[k * 3 + 1] = data[k * 4 + 1]; rgb[k * 3 + 2] = data[k * 4 + 2]; mask[k] = data[k * 4 + 3] >= 128 ? 1 : 0 }
+  return { img: { data: rgb, W: i.width, H: i.height, file }, mask }
+}
+
+/** 裁到不透明內容外框的列（只裁上下，不裁左右：遠景要保持可水平重複的寬度） */
+function cropRows(spr) {
+  let y0 = spr.h, y1 = -1
+  for (let y = 0; y < spr.h; y++) for (let x = 0; x < spr.w; x++) if (spr.rgba[(y * spr.w + x) * 4 + 3]) { y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
+  if (y1 < 0) throw new Error('遠景是空的')
+  return { w: spr.w, h: y1 - y0 + 1, rgba: Buffer.from(spr.rgba.subarray(y0 * spr.w * 4, (y1 + 1) * spr.w * 4)) }
+}
+
+/** 底部中心：最下面 6 列不透明像素的水平中心（路燈、樹的錨點 x） */
+function baseCenterX(spr, rows = 6) {
+  let lo = spr.w, hi = -1
+  for (let y = Math.max(0, spr.h - rows); y < spr.h; y++) for (let x = 0; x < spr.w; x++) if (spr.rgba[(y * spr.w + x) * 4 + 3]) { lo = Math.min(lo, x); hi = Math.max(hi, x) }
+  return Math.round((lo + hi + 1) / 2)
+}
+
+/** 逐格求 p：輸出高度 = target.h（±1 內收斂）；寬度超過 target.maxW 時改以寬度為準。回傳 { spr, p } */
+function fitCell(render, cell, target) {
+  const bx = Math.max(...cell.map((c) => c.x1)) - Math.min(...cell.map((c) => c.x0)) + 1
+  const by = Math.max(...cell.map((c) => c.y1)) - Math.min(...cell.map((c) => c.y0)) + 1
+  let pp = Math.max(by / target.h, bx / target.maxW)
+  let best = null
+  for (let k = 0; k < 10; k++) {
+    const spr = render(cell, pp)
+    if (!spr) break
+    const dim = spr.w > target.maxW ? spr.w / target.maxW : spr.h / target.h
+    const err = Math.abs(dim - 1)
+    if (!best || err < best.err) best = { spr, p: pp, err }
+    if (spr.w <= target.maxW && spr.h === target.h) break
+    pp *= dim
+  }
+  return best
+}
+
+/** 主題裝飾：外框面積 ≈ DECOR_AREA[級別]，再套寬高上限（求 p 的方式和 fitCell 一樣收斂到整數大小） */
+function fitDecor(render, cell, size) {
+  const bx = Math.max(...cell.map((c) => c.x1)) - Math.min(...cell.map((c) => c.x0)) + 1
+  const by = Math.max(...cell.map((c) => c.y1)) - Math.min(...cell.map((c) => c.y0)) + 1
+  const mx = DECOR_MAX[size]
+  let pp = Math.max(Math.sqrt((bx * by) / DECOR_AREA[size]), bx / mx.w, by / mx.h)
+  let spr = render(cell, pp)
+  for (let k = 0; k < 4 && spr; k++) {
+    if (spr.w <= mx.w && spr.h <= mx.h) break
+    pp *= Math.max(spr.w / mx.w, spr.h / mx.h)
+    spr = render(cell, pp)
+  }
+  return { spr, p: pp }
+}
+
+const envLog = []
+const decorLog = []
+async function buildEnvThemes() {
+  const thumbParts = {}
+  // ---- 地板、小路、遠景 ----
+  for (const t of ENV_THEMES) {
+    const g = 'env_' + t
+    // 地板
+    {
+      const { img, mask } = await loadAlpha(`${t}_tiles.png`)
+      const cells = Math.floor(img.W / FLOOR_P)
+      const one = resampleRect(img, mask, 0, 0, img.W, img.H, cells, cells)
+      const top = hcat(one, flipX(one))
+      const tile = vcat(top, flipY(top))
+      addFrame(g, `floor_${t}`, tile, { ax: 0, ay: 0, exactBg: true })
+      envLog.push(`floor_${t}：原圖 ${img.W}×${img.H} → ${cells}×${cells} 格（p=${(img.W / cells).toFixed(3)}），2×2 鏡像 ${tile.w}×${tile.h}`)
+      thumbParts[t] = { floor: tile }
+    }
+    // 小路
+    {
+      const { img, mask } = await loadAlpha(`path_${t}.png`)
+      const [y0, y1] = PATH_BANDS[t]
+      const w = Math.round(img.W / ((y1 - y0) / PATH_H_LOGICAL))
+      const spr = resampleRect(img, mask, 0, y0, img.W, y1, w, PATH_H_LOGICAL)
+      addFrame(g, `path_${t}`, spr, { ax: 0, ay: spr.h, exactBg: true })
+      envLog.push(`path_${t}：原圖列 ${y0}～${y1}（${y1 - y0} 列）→ ${spr.w}×${spr.h}（p=${((y1 - y0) / PATH_H_LOGICAL).toFixed(3)}），左右直接接（原圖橫向可無縫）`)
+      thumbParts[t].path = spr
+    }
+    // 遠景
+    {
+      const { img, mask } = await loadAlpha(`far_${t}.png`)
+      const w = Math.round(img.W / FAR_P)
+      const dx = img.W / w
+      const h = Math.floor(img.H / dx)
+      const full = resampleRect(img, mask, 0, img.H - h * dx, img.W, img.H, w, h)
+      const spr = cropRows(full)
+      addFrame(g, `far_${t}`, spr, { ax: 0, ay: spr.h, exactBg: true })
+      envLog.push(`far_${t}：原圖 ${img.W}×${img.H} → ${spr.w}×${spr.h}（p=${dx.toFixed(3)}；FAR_H = ${spr.h}${t === 'cleanroom' ? '，牆填滿整張高度、只有窗玻璃透明' : ''}）`)
+      thumbParts[t].far = spr
+    }
+  }
+  // ---- 路燈、樹（3×2；底色恰好 #FF00FF）----
+  for (const [file, prefix, target] of [['lamp_themes.png', 'lamp_', LAMP_TARGET], ['tree_themes.png', 'tree_', TREE_TARGET]]) {
+    const names = ENV_THEMES.map((t) => prefix + t)
+    const r = await sheet({ file, cols: 3, rows: 2, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    for (let i = 0; i < names.length; i++) {
+      const cell = r.cells[i]
+      if (!cell?.length) throw new Error(`${file} 第 ${i + 1} 格（${names[i]}）找不到內容`)
+      const { spr, p } = fitCell(r.render, cell, target)
+      const ax = baseCenterX(spr)
+      const t = ENV_THEMES[i]
+      addFrame('env_' + t, names[i], spr, { ax, ay: spr.h, exactBg: true })
+      envLog.push(`${names[i]}：${spr.w}×${spr.h}（p=${p.toFixed(3)}），錨點 x=${ax}（底部中心）`)
+      thumbParts[t][prefix.slice(0, -1)] = spr
+    }
+  }
+  // ---- 商店縮圖（env_thumbs，延後載入）：遠景 24 列＋地板／小路 36 列，裁自成品（沒有縮放）----
+  const defaults = { far: atlases.terrain.find((f) => f.key === 'far'), floor: atlases.terrain.find((f) => f.key === 'grass_tile'), path: atlases.terrain.find((f) => f.key === 'path') }
+  const thumb = (parts, name, farX0) => {
+    const W = 96, FAR = 24, GROUND = 36
+    const out = Buffer.alloc(W * (FAR + GROUND) * 4)
+    const blit = (src, sx, sy, dw, dh, dx, dy) => {
+      for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+        const xx = (sx + x) % src.w, yy = Math.min(src.h - 1, sy + y)
+        if (yy < 0) continue
+        src.rgba.copy(out, ((dy + y) * W + dx + x) * 4, (yy * src.w + xx) * 4, (yy * src.w + xx + 1) * 4)
+      }
+    }
+    const f = parts.far
+    // 遠景：底邊對齊縮圖的第 24 列；比 24 列高的（無塵室）取中間 24 列
+    const sy = f.h > FAR ? Math.floor((f.h - FAR) / 2) : 0
+    if (f.h >= FAR) blit(f, farX0, sy, W, FAR, 0, 0)
+    else blit(f, farX0, 0, W, f.h, 0, FAR - f.h)
+    blit(parts.floor, 10, 10, W, 10, 0, FAR)
+    blit(parts.path, 10, Math.floor((parts.path.h - 16) / 2), W, 16, 0, FAR + 10)
+    blit(parts.floor, 10, 30, W, 10, 0, FAR + 26)
+    addFrame('env_thumbs', name, { w: W, h: FAR + GROUND, rgba: out }, { ax: W / 2, ay: FAR + GROUND, exactBg: true })
+  }
+  for (const t of ENV_THEMES) thumb(thumbParts[t], 'envthumb_' + t, 40)
+  thumb(defaults, 'envthumb_grass', 40)
+  info('')
+  info('===== 4.0-B2 環境主題（地板、小路、遠景、路燈、樹） =====')
+  for (const l of envLog) info('  ' + l)
+}
+
+async function buildThemeDecor() {
+  info('')
+  info('===== 4.0-B2 主題裝飾（連通區域偵測切件） =====')
+  const failed = []
+  for (const [file, cols, rows, entries] of DECOR_SHEETS) {
+    const names = entries.map((e) => (e ? e[0] : null))
+    const r = await sheet({ file, cols, rows, names, exactBg: true, minArea: 12, grid: 'nominal', probe: true })
+    const found = r.cells.map((c) => c.length)
+    info(`${file}：連通區域分到 ${cols}×${rows} 格，每格的連通塊數 [${found.join(',')}]`)
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]
+      if (!e) {
+        if (found[i]) failed.push(`${file} 第 ${i + 1} 格預期是空的，卻有 ${found[i]} 個連通塊`)
+        continue
+      }
+      if (!found[i]) { failed.push(`${file} 第 ${i + 1} 格（${e[0]}）找不到內容`); continue }
+      const { spr, p } = fitDecor(r.render, r.cells[i], e[1])
+      if (!spr) { failed.push(`${file} ${e[0]}：處理後是空的`); continue }
+      addFrame('decor_themes', e[0], spr, { ax: baseCenterX(spr), ay: spr.h, exactBg: true })
+      decorLog.push(`${e[0]}（${e[1]}）：${spr.w}×${spr.h}＝${spr.w * spr.h}（p=${p.toFixed(3)}，連通塊 ${r.cells[i].length}）`)
+    }
+  }
+  for (const l of decorLog) info('  ' + l)
+  info('名義格切件時被丟掉的遠離小碎塊：' + nominalDropped + ' 個')
+  if (failed.length) for (const f of failed) warn('偵測失敗：' + f)
+}
+
+/**
+ * 4.0-B2：依「名義上的欄×列」把連通塊分到格子（主題裝飾、路燈、樹用）：大塊（面積 ≥ 400）看外框中心落在哪一格；小碎塊（閃光、水母觸手）歸到外框最近的那一格（距離 < 80），
+ * 太遠的丟掉並記數（nominalDropped，報告用）。和 groupCells 不同：不靠「大塊分群」，所以小件（小級別裝飾）不會因為面積比大件小很多而被分錯格。
+ */
+let nominalDropped = 0
+function nominalCells(comps, W, H, cols, rows) {
+  const cells = Array.from({ length: rows * cols }, () => [])
+  const cw = W / cols, ch = H / rows
+  const at = (c) => Math.min(rows - 1, Math.floor((c.y0 + c.y1) / 2 / ch)) * cols + Math.min(cols - 1, Math.floor((c.x0 + c.x1) / 2 / cw))
+  for (const c of comps) if (c.area >= 400) cells[at(c)].push(c)
+  const bb = (items) => ({ x0: Math.min(...items.map((c) => c.x0)), y0: Math.min(...items.map((c) => c.y0)), x1: Math.max(...items.map((c) => c.x1)), y1: Math.max(...items.map((c) => c.y1)) })
+  for (const c of comps) {
+    if (c.area >= 400) continue
+    let best = -1, bd = Infinity
+    cells.forEach((items, i) => {
+      if (!items.length) return
+      const b = bb(items)
+      const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2
+      const d = Math.hypot(Math.max(b.x0 - cx, 0, cx - b.x1), Math.max(b.y0 - cy, 0, cy - b.y1))
+      if (d < bd) { bd = d; best = i }
+    })
+    if (best >= 0 && bd < 80) cells[best].push(c)
+    else nominalDropped++
+  }
+  return cells
+}
+
 // 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
-export { SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+export { ENV_THEMES, PATH_BANDS, PATH_H_LOGICAL, FLOOR_P, FAR_P, LAMP_TARGET, TREE_TARGET, DECOR_SHEETS, DECOR_AREA, DECOR_MAX, isBgExact, loadAlpha, resampleRect, SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
 if (IS_MAIN) await main()
