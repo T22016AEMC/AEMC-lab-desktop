@@ -246,7 +246,7 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **測試**：`tests-archive/calendar-tweaks/`（見該資料夾 README.md；`adapt-c.py` 是對 `tests-archive/v390` 舊測試寫死版本號的修改）。
 
 
-## v4.0（開發中，A、B1、B2、C 全部做完才一次上線；版本字串到上線 commit 才改）
+## v4.0（4.0.0 已上線：A、R、B1、B2、C 一次上線）
 
 ### 階段 A：商店骨架、實例 id、集齊獎勵
 
