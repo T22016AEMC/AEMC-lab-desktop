@@ -6,7 +6,9 @@ import assert from 'node:assert/strict'
 import { parseSave, cleanShop, cleanFarmLayout, isNewerData, SHOP_DECOR_SAFETY_MAX } from '../../../src/farm/save/migrate.ts'
 import { DATA_REV, CURRENT_SCHEMA_VERSION } from '../../../src/farm/save/types.ts'
 import { INSTANCE_KINDS, LAYOUT_ITEMS, layoutItemDef, parseInstanceId } from '../../../src/farm/config/layoutItems.ts'
-import { SHOP_ITEMS, SHOP_LIMITS, SIZE_PRICE, ENV_SLOT, ENV_DEFAULT, ENV_GROUP, envTheme, itemsOf, shopItem } from '../../../src/farm/config/shop.ts'
+import { SHOP_ITEMS, LEGACY_TEMP_ITEMS, SHOP_LIMITS, SIZE_PRICE, ENV_SLOT, ENV_DEFAULT, ENV_GROUP, envTheme, itemsOf, shopItem } from '../../../src/farm/config/shop.ts'
+// 4.0-B2：階段 A 的暫時裝飾商品（蘑菇、小花叢、石頭、灌木、花槽、珊瑚石堆）B2 起商店不賣（換成 48 種主題裝飾）；這個測試的商店流程拿它們當樣本，所以測試開頭把 LEGACY_TEMP_ITEMS 加回商品表
+SHOP_ITEMS.push(...LEGACY_TEMP_ITEMS)
 import { purchase, itemStatus, ownedCount, equipSkin, equippedSkin, SHOP_TEXT } from '../../../src/farm/sim/shop.ts'
 import * as PL from '../../../src/farm/pixel/placement.ts'
 import * as LAY from '../../../src/farm/pixel/layout.ts'
@@ -48,11 +50,11 @@ eq(LAYOUT_ITEMS.length, 18, '1 內建固定物件仍是 18 個')
 eq(SIZE_PRICE, { S: 3, M: 6, L: 10 }, '1 尺寸價格')
 eq([SHOP_LIMITS.decorPerKind, SHOP_LIMITS.decorTotal, SHOP_LIMITS.envThemePrice], [10, 60, 30], '1 上限 10／60、環境主題 30')
 eq(itemsOf('farm'), [], '1 農場分類沒有商品')
-eq(itemsOf('decor').map((d) => [d.grant.kind, d.price, !!d.temp]), [['mushroom', 3, true], ['flowers', 3, true], ['rocks', 6, true], ['bush', 6, true], ['planter', 10, true], ['coral', 10, true]], '1 6 種 TEMP 裝飾與價格')
+eq(itemsOf('decor').filter((d) => d.temp).map((d) => [d.grant.kind, d.price, !!d.temp]), [['mushroom', 3, true], ['flowers', 3, true], ['rocks', 6, true], ['bush', 6, true], ['planter', 10, true], ['coral', 10, true]], '1 6 種 TEMP 裝飾與價格')
 eq(itemsOf('building').filter((d) => d.grant.type === 'building').map((d) => [d.grant.building, d.price, d.repeatable, d.maxOwned]), /* 4.0-B1：建築分類另有外觀商品 */ [['bowls', 10, false, 1], ['kennel', 20, false, 1], ['catTree', 20, false, 1]], '1 建築 3 種、各買一次')
 eq(shopItem('pet.adopt').price, 15, '1 領養 15')
-ok(SHOP_ITEMS.every((it) => it.grant.type !== 'skin' || (it.category === 'building' && it.grant.slot !== 'env')), '1 商品表的外觀只有 B1 的建築外殼（環境主題還沒有商品）')
-for (const it of itemsOf('decor')) ok(INSTANCE_KINDS.includes(it.grant.kind), `1 商品種類 ${it.grant.kind} 在可複製種類表裡`)
+ok(SHOP_ITEMS.every((it) => it.grant.type !== 'skin' || (it.category === 'building' && it.grant.slot !== 'env') || (it.category === 'decor' && it.grant.slot === 'env')), '1 商品表的外觀只有 B1 的建築外殼與 B2 的環境主題')
+for (const it of itemsOf('decor').filter((d) => d.grant.type === 'decor')) ok(INSTANCE_KINDS.includes(it.grant.kind), `1 商品種類 ${it.grant.kind} 在可複製種類表裡`)
 ok(!INSTANCE_KINDS.includes('lamp') && !INSTANCE_KINDS.includes('tree'), '1 路燈、樹不可複製')
 
 // ========== 2. 實例 id 與 cleanShop ==========
@@ -117,7 +119,7 @@ for (let i = 0; i < 5000; i++) {
   ok(!r.ok && r.error === SHOP_TEXT.perKind(10) && r.save === s, '5 每種最多 10 個：第 11 個被擋、存檔不變（同一個物件）')
   // 全體 60
   let t = S({ points: 100000 })
-  const ids = itemsOf('decor').map((d) => d.id)
+  const ids = itemsOf('decor').filter((d) => d.temp).map((d) => d.id) // 4.0-B2：商品表有 54 種裝飾、這段只用 6 種暫時商品各買 10 個湊 60
   for (const id of ids) for (let i = 0; i < 10; i++) t = buy(t, id)
   eq(t.shop.decor.length, 60, '5 6 種各 10 個 = 60')
   ok(!purchase(t, 'decor.rocks').ok, '5 滿 60 不能再買')
@@ -307,7 +309,7 @@ const colOf = (filter) => { const c = {}; for (const [k, v] of Object.entries(AL
 // ========== 10. 最擠的情況：買到 60、盡量擺滿 → 寶物與野餐不會當掉、提示正確 ==========
 {
   let s = S({ points: 100000, ownedBuildings: [] })
-  for (const it of itemsOf('decor')) for (let i = 0; i < 10; i++) s = buy(s, it.id)
+  for (const it of itemsOf('decor').filter((d) => d.temp)) for (let i = 0; i < 10; i++) s = buy(s, it.id) // 4.0-B2：6 種暫時裝飾各 10 個 = 60
   for (const it of itemsOf('building')) s = buy(s, it.id)
   const L = LAY.computeLayout(1920, 960, 1)
   LAY.setPlacement(L, PL.placementOf(s))

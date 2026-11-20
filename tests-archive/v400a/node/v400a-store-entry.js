@@ -7,6 +7,9 @@ import assert from 'node:assert/strict'
 import { useFarmStore, setSaveStorage } from '../../../src/farm/store/farmStore.ts'
 import { LocalStorageAdapter, WRITER_KEY, setOtherTabHandler } from '../../../src/farm/save/storage.ts'
 import { SHOP_TEXT } from '../../../src/farm/sim/shop.ts'
+import { SHOP_ITEMS, LEGACY_TEMP_ITEMS } from '../../../src/farm/config/shop.ts'
+// 4.0-B2：階段 A 的暫時裝飾商品（蘑菇、小花叢、石頭、灌木、花槽、珊瑚石堆）B2 起商店不賣（換成 48 種主題裝飾）；這個測試的商店流程拿它們當樣本，所以測試開頭把 LEGACY_TEMP_ITEMS 加回商品表
+SHOP_ITEMS.push(...LEGACY_TEMP_ITEMS)
 import { ITEMS, shardKey } from '../../../src/farm/config/items.ts'
 import { newSave } from '../../../src/farm/sim/points.ts'
 import { LocalStorageAdapter as OldAdapter, setNewerDataHandler as setOldNewer } from '../../calendar-tweaks/.work/v3100src/src/farm/save/storage.ts'

@@ -414,7 +414,7 @@ log(rows.join('\n'))
   ok(LAZY_ATLASES.includes('polaroid') && ['skins_house', 'skins_tower', 'skins_pond', 'skins_board', 'skins_small'].every((g) => LAZY_ATLASES.includes(g)), '相框圖集延後載入（4.0-B1：外殼圖集依部位拆開）')
   const keys = Object.keys(man.frames).join(' ')
   ok(!/sticker|decor_|polaroid_a|polaroid_c|parasol|vase/.test(keys), '沒有打包貼紙、陽傘、花瓶、相框 a/c')
-  eq(Object.keys(man.atlases).sort(), ['cat_black', 'cat_bluecat', 'cat_calico', 'cat_orange', 'cat_ragdoll', 'cat_siamese', 'dog_collie', 'dog_corgi', 'dog_golden', 'dog_husky', 'dog_poodle', 'dog_shiba', 'fx', 'items', 'picnic', 'polaroid', 'scene', 'skins_board', 'skins_house', 'skins_pond', 'skins_small', 'skins_tower', 'terrain', 'tools', 'toys', 'ui'], '圖集清單（4.0-B1：skins 拆成五個）')
+  eq(Object.keys(man.atlases).sort(), ['cat_black', 'cat_bluecat', 'cat_calico', 'cat_orange', 'cat_ragdoll', 'cat_siamese', 'decor_themes', 'dog_collie', 'dog_corgi', 'dog_golden', 'dog_husky', 'dog_poodle', 'dog_shiba', 'env_atlantis', 'env_cleanroom', 'env_forest', 'env_magic', 'env_plaid', 'env_punk', 'env_thumbs', 'fx', 'items', 'picnic', 'polaroid', 'scene', 'skins_board', 'skins_house', 'skins_pond', 'skins_small', 'skins_tower', 'terrain', 'tools', 'toys', 'ui'], '圖集清單（4.0-B1：skins 拆成五個）')
   eq(photoFileName(new Date(2026, 10, 17, 9, 5, 7)), 'picnic-20261117-090507.png', '下載檔名')
 }
 

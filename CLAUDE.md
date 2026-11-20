@@ -276,3 +276,14 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **商品**（`config/shop.ts`）：建築分類每部位一列（房子外裝／鐘樓外裝／池塘外裝／公佈欄外裝／狗窩外殼／貓跳台外殼／食盆外殼），卡片 原樣／使用中／換上／購買（`ui/SkinCards.tsx`，環境主題共用）；大建築外裝 `SHOP_LIMITS.skinPrice` 30，小建築外殼 = 該建築價格且要先買建築。
 - **幾何**：鐘面、窗戶走 `meta.clock`／共用座標；池塘水面 `meta.water`（`process-assets.mjs` 的 `WATER_TABLE` 寫死、plaid 偵測）；狗窩門洞與貓跳台平台是相對預設的差（`meta.door`、`meta.seats`），引擎每影格 `syncSkinGeometry` → `buildingUse.setSkinGeometry`；擺放規則（塔門保護、座位、洗澡站位、水面保護區）仍用預設幾何。輪廓（`envelopes.ts`、`CAT_TREE_ENVELOPE`）是各主題腳底對齊的聯集，改外殼素材要重跑 `gen-envelopes.mjs` 與 `tests-archive/v400r/cat-tree-envelope.mjs`。
 - **測試**：`tests-archive/v400b1/`（見 README；`adapt-b1.py`）。
+
+### 階段 B2：環境主題（地板＋小路＋遠景＋路燈＋樹）與主題裝飾
+
+- **環境主題**（`config/envThemes.ts`）：外觀 id `env.<主題>`（部位 `env` = `ENV_SLOT`，預設草地 `env.grass` 不寫進存檔），一次 30 金幣買整套、買了立刻換上、之後可切換（含換回草地），商店在「裝飾品」分頁最上面的「環境主題」列（共用 `ui/SkinCards.tsx` 的 `SkinRow`，`wide` 版放縮圖）。主題順序一律：亞特蘭提斯、無塵室、森林、魔法、龐克、野餐鄉村。圖集 `env_<主題>`（地板 `floor_`、小路 `path_`、遠景 `far_`、路燈 `lamp_`、樹 `tree_`；延後載入，穿上才載入，`skinAtlasesFor`）、`env_thumbs`（商店縮圖，開裝飾品分頁才載入）。引擎 `engine.envNow()`（穿著且圖集載入完成才算，否則預設草地、畫面逐像素和以前相同）。
+- **素材管線**（`scripts/process-assets.mjs` 第 10 段）：新原圖底色**恰好 #FF00FF**（`exactBg`／`isBgExact`，只認這一個顏色，不放寬色鍵；通用去邊與孤立單點移除對這些素材關閉）。地板：原圖是 `<主題>_tiles.png`（不是 `floor_<主題>.png`），1024×1024 的 A～D 四塊整張取樣成 108×108 格（p≈9.48）再 2×2 鏡像成 216×216（原圖四塊的外緣並不真的無縫，鏡像保證可拼接；A～D 之間的接縫是原圖本來就有的）。小路：`PATH_BANDS` 每主題的「中間路面帶」原圖列範圍（量列平均色的跳變，都落在 4 的倍數）縮成高 `PATH_H` = 67 列，原圖橫向本來就可無縫，左右直接接（不鏡像）。遠景：原圖是真透明 alpha，像素格 = 舊遠景（5.501），裁掉上方透明列，**FAR_H 每張各自量**（`frame.h`；一般 39 列、無塵室 131 列）；`drawFar` 用 `s.h` 貼在遠景底邊 `farBottom` 往上，無塵室比天空區矮 5 列，牆的最上一列往上延伸到可見範圍頂端。路燈、樹：`sheet` 名義 3×2 格（`grid: 'nominal'`，連通塊依名義格分組，小碎塊歸最近的件），每格各自求 p 讓路燈高 84、樹高 ≤ 103（寬 ≤ 100），**錨點 x = 最下面 6 列的水平中心**（底部中心對位）。
+- **無塵室「看窗外」**：遠景牆填滿整張高度，只有窗玻璃透明。`ENV_WINDOW_THEMES`（只有 cleanroom）：天氣粒子（雨雪）畫在雲之後、遠景之前，所以只出現在窗玻璃裡，牆與地面沒有雨；其他主題的順序不變（雨雪在最上層）。天氣邏輯與素材沒改（躲雨照常）；夜晚星月在窗外看得到。
+- **夜晚補光**（`config/envThemes.ts` 的 `GLOW`，`scene.drawGlow(…, opts)`）：路燈六款各自的光暈錨點與顏色（原本寫死的「腳下往上 62」= `LAMP_GLOW_DEFAULT`，沒穿主題時畫圖指令和以前逐筆相同）；水晶球座、資訊終端螢幕擺出來也各自發光（`engine.render` 夜晚段）。數字由 `tests-archive/v400b2/measure-glow.mjs` 從成品的發光部位重心量出，測試重跑比對。其他裝飾不補光。
+- **路燈與樹**沿用舊的腳下佔地、輪廓（`ENVELOPES.lamp／tree` 不含主題圖）與座位；`engine.kindSprite('lamp'|'tree')` 穿了主題就換成主題圖。
+- **主題裝飾**（`config/themeDecor.ts`，48 種＋傳說展示台）：連通區域偵測切件（`DECOR_SHEETS`：原圖、欄×列、種類＋尺寸級別；偵測失敗會 `warn`），輸出大小依級別（外框面積小 ≈ 1300／中 ≈ 2100／大 ≈ 4000，另有寬高上限），錨點底部中心，圖集 `decor_themes`（延後載入：存檔有主題裝飾實例就載入，開商店裝飾品分頁也載入）。種類加進 `LayoutKind`／`INSTANCE_KINDS`（只增不減），`KIND_GEOM` 腳下佔地 = 0.8 倍素材寬 × 深 10，輪廓由 `gen-envelopes.mjs` 產生（含全部主題裝飾）。商店「裝飾品」分頁小標題：各主題「<主題>裝飾」＋「其他擺設」；價格小 3／中 6／大 10、每種 10／合計 60 不變。階段 A 的 6 種暫時裝飾（蘑菇、小花叢、石頭、灌木、花槽、珊瑚石堆）不賣了（`LEGACY_TEMP_ITEMS` 只供測試），已買的實例仍認得。傳說展示台（`legend_stand`）只放進圖集，C 階段用，不是擺設種類、不賣。
+- **存檔格式不變**（`schemaVersion` 5、`DATA_REV` 6、匯出格式 8）：環境主題用既有的 `skins.owned／equipped.env`，裝飾用既有的 `shop.decor`。
+- **測試**：`tests-archive/v400b2/`（見 README；`adapt-b2.py` 是對既有測試的預期值異動，含 t9 野餐選位置改假時鐘）。

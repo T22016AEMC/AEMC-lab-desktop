@@ -81,12 +81,7 @@ EDITS = [
         "ok(SHOP_ITEMS.every((it) => it.grant.type !== 'skin' || (it.category === 'building' && it.grant.slot !== 'env')), '1 商品表的外觀只有 B1 的建築外殼（環境主題還沒有商品）')",
         '商品表有 B1 外殼（環境主題仍沒有）',
     ),
-    (
-        'v390/browser/t9-picnic-pick-browser.mjs',
-        "const T0 = new Date(2026, 10, 19, 10, 0, 0).getTime()\nconst today = '2026-11-19'",
-        "// 4.0-B1：原本寫死 2026-11-19 10:00 而且沒有假時鐘，隔天跑會離線衰減到心情 29（< 野餐 minMood 30）→ 沒有候選寵物。改成今天（仍要在白天 6:00～19:30 跑）\nconst T0 = Date.now()\nconst today = ((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date(T0))",
-        'v3.9.1 野餐選位置測試的存檔日期改成今天（原本寫死 11/19、沒有假時鐘，隔天會失敗）',
-    ),
+    # t9（野餐選位置）的存檔日期：B1 先改成今天、B2 改成假時鐘＋相對日期，見 tests-archive/v400b2/adapt-b2.py
 ]
 
 

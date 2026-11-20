@@ -8,7 +8,13 @@
 //  7 商店開著時事件先排隊，關掉商店才出現
 import { fileURLToPath } from 'node:url'
 import { mkdirSync } from 'node:fs'
-import { launch, open, bootPage, ok, fails, save, pet, stored, sleep, KEY, WRITER } from '../../calendar-tweaks/browser/lib.mjs'
+import { launch, open as openRaw, bootPage, ok, fails, save, pet, stored, sleep, KEY, WRITER } from '../../calendar-tweaks/browser/lib.mjs'
+// 4.0-B2：階段 A 的暫時裝飾商品（蘑菇、小花叢、石頭、灌木、花槽、珊瑚石堆）B2 起商店不賣（換成 48 種主題裝飾）；這個測試的商店流程拿它們當樣本，所以測試開頭把 LEGACY_TEMP_ITEMS 加回商品表
+const open = async (...a) => {
+  const r = await openRaw(...a)
+  await r.page.evaluate(async () => { const m = await import('/src/farm/config/shop.ts'); if (!m.SHOP_ITEMS.some((i) => i.id === 'decor.rocks')) m.SHOP_ITEMS.push(...m.LEGACY_TEMP_ITEMS) })
+  return r
+}
 const SHOTS = fileURLToPath(new URL('./shots/', import.meta.url))
 mkdirSync(SHOTS, { recursive: true })
 const b = await launch()

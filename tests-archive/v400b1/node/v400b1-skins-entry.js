@@ -77,7 +77,7 @@ eq(ms.SHARED.DOOR, LAY.DOOR, 'measure-skins 的 DOOR = layout.ts')
     eq(cur[k], v, `${k} 和階段 R 完成時相同`)
     if (JSON.stringify(cur[k]) === JSON.stringify(v)) same++
   }
-  for (const k of Object.keys(cur)) if (!base[k]) ok(keys.includes(k) || k === 'sil_house_atlantis' || k === 'sil_tower_atlantis', `新增的 ${k} 是外殼或亞特蘭提斯剪影`)
+  for (const k of Object.keys(cur)) if (!base[k]) ok(keys.includes(k) || k === 'sil_house_atlantis' || k === 'sil_tower_atlantis' || /^env_|^decor_themes$/.test(man.frames[k]?.atlas ?? ''), `新增的 ${k} 是外殼、亞特蘭提斯剪影或 B2 的環境主題／主題裝飾`)
   console.log(`預設素材和階段 R 完成時相同 ${same} 張`)
 }
 
@@ -113,7 +113,7 @@ eq(eventDef('catAtlantis').body(100), '雷射與山銅合而為一，鐘樓變�
   eq(shopSkins.length, 40, '商店外觀 40 款（房子 5、鐘樓 5、池塘 6、公佈欄 6、狗窩 6、貓跳台 6、食盆 6）')
   eq(SKINS.filter((d) => d.legend).map((d) => d.id), ['house.gold', 'tower.gold'], '傳說外觀只有亞特蘭提斯房屋、鐘樓')
   for (const d of SKINS) for (const f of Object.values(d.frames)) eq(man.frames[f]?.atlas, SKIN_ATLAS[d.part], `${d.id} 的 ${f} 在 ${SKIN_ATLAS[d.part]}`)
-  const items = SHOP.SHOP_ITEMS.filter((it) => it.grant.type === 'skin')
+  const items = SHOP.SHOP_ITEMS.filter((it) => it.grant.type === 'skin' && it.grant.slot !== 'env') // 4.0-B2：環境主題也是 skin 商品，另測
   eq(items.length, 40, '商品表有 40 個外觀商品')
   ok(!items.some((it) => it.grant.skin === 'house.gold' || it.grant.skin === 'tower.gold'), '亞特蘭提斯房屋、鐘樓不在商店賣')
   const PRICE = { house: 30, tower: 30, pond: 30, board: 30, kennel: BALANCE.buildings.price.kennel, catTree: BALANCE.buildings.price.catTree, bowls: BALANCE.buildings.price.bowls }
