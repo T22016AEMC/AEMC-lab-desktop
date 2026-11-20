@@ -1,0 +1,2647 @@
+{
+ "manifest": "manifest.ee7c846a.json",
+ "atlases": {
+  "dog_shiba": {
+   "file": "dog_shiba.1f429f58.png",
+   "width": 1024,
+   "height": 45
+  },
+  "dog_corgi": {
+   "file": "dog_corgi.19997db5.png",
+   "width": 1024,
+   "height": 40
+  },
+  "dog_husky": {
+   "file": "dog_husky.1a62d751.png",
+   "width": 1024,
+   "height": 54
+  },
+  "dog_golden": {
+   "file": "dog_golden.f74938fb.png",
+   "width": 1024,
+   "height": 60
+  },
+  "dog_collie": {
+   "file": "dog_collie.641bfdc6.png",
+   "width": 1024,
+   "height": 50
+  },
+  "dog_poodle": {
+   "file": "dog_poodle.a25619f3.png",
+   "width": 1024,
+   "height": 43
+  },
+  "cat_orange": {
+   "file": "cat_orange.38a400eb.png",
+   "width": 1024,
+   "height": 38
+  },
+  "cat_black": {
+   "file": "cat_black.7dbaab15.png",
+   "width": 1024,
+   "height": 36
+  },
+  "cat_calico": {
+   "file": "cat_calico.78699d72.png",
+   "width": 1024,
+   "height": 35
+  },
+  "cat_siamese": {
+   "file": "cat_siamese.b74fa13c.png",
+   "width": 1024,
+   "height": 37
+  },
+  "cat_bluecat": {
+   "file": "cat_bluecat.d20344fd.png",
+   "width": 1024,
+   "height": 40
+  },
+  "cat_ragdoll": {
+   "file": "cat_ragdoll.affc6af0.png",
+   "width": 1024,
+   "height": 41
+  },
+  "ui": {
+   "file": "ui.c2398187.png",
+   "width": 1024,
+   "height": 63
+  },
+  "scene": {
+   "file": "scene.d2af543d.png",
+   "width": 1024,
+   "height": 243
+  },
+  "fx": {
+   "file": "fx.bf705650.png",
+   "width": 1024,
+   "height": 30
+  },
+  "toys": {
+   "file": "toys.2f3afc57.png",
+   "width": 1024,
+   "height": 39
+  },
+  "terrain": {
+   "file": "terrain.2b502ab4.png",
+   "width": 1024,
+   "height": 140
+  },
+  "items": {
+   "file": "items.05244a18.png",
+   "width": 1024,
+   "height": 193
+  },
+  "skins": {
+   "file": "skins.4b658a73.png",
+   "width": 1024,
+   "height": 160
+  },
+  "tools": {
+   "file": "tools.84f54c2f.png",
+   "width": 1024,
+   "height": 50
+  },
+  "picnic": {
+   "file": "picnic.da970eca.png",
+   "width": 1024,
+   "height": 63
+  },
+  "polaroid": {
+   "file": "polaroid.4c366b25.png",
+   "width": 1024,
+   "height": 80
+  }
+ },
+ "frames": {
+  "dog_shiba_jump": {
+   "atlas": "dog_shiba",
+   "w": 55,
+   "h": 45,
+   "ax": 28,
+   "ay": 45
+  },
+  "dog_shiba_happy": {
+   "atlas": "dog_shiba",
+   "w": 33,
+   "h": 38,
+   "ax": 17,
+   "ay": 38
+  },
+  "dog_shiba_bark": {
+   "atlas": "dog_shiba",
+   "w": 49,
+   "h": 37,
+   "ax": 25,
+   "ay": 37
+  },
+  "dog_shiba_sit_a": {
+   "atlas": "dog_shiba",
+   "w": 32,
+   "h": 37,
+   "ax": 16,
+   "ay": 37
+  },
+  "dog_shiba_sit_b": {
+   "atlas": "dog_shiba",
+   "w": 31,
+   "h": 37,
+   "ax": 16,
+   "ay": 37
+  },
+  "dog_shiba_stand": {
+   "atlas": "dog_shiba",
+   "w": 37,
+   "h": 36,
+   "ax": 19,
+   "ay": 36
+  },
+  "dog_shiba_tug": {
+   "atlas": "dog_shiba",
+   "w": 59,
+   "h": 35,
+   "ax": 30,
+   "ay": 35
+  },
+  "dog_shiba_dig_b": {
+   "atlas": "dog_shiba",
+   "w": 51,
+   "h": 35,
+   "ax": 26,
+   "ay": 35
+  },
+  "dog_shiba_dig_a": {
+   "atlas": "dog_shiba",
+   "w": 47,
+   "h": 35,
+   "ax": 24,
+   "ay": 35
+  },
+  "dog_shiba_walk_a": {
+   "atlas": "dog_shiba",
+   "w": 40,
+   "h": 35,
+   "ax": 20,
+   "ay": 35
+  },
+  "dog_shiba_walk_b": {
+   "atlas": "dog_shiba",
+   "w": 40,
+   "h": 35,
+   "ax": 20,
+   "ay": 35
+  },
+  "dog_shiba_eat": {
+   "atlas": "dog_shiba",
+   "w": 40,
+   "h": 33,
+   "ax": 20,
+   "ay": 33
+  },
+  "dog_shiba_belly_up": {
+   "atlas": "dog_shiba",
+   "w": 50,
+   "h": 32,
+   "ax": 25,
+   "ay": 32
+  },
+  "dog_shiba_sleep": {
+   "atlas": "dog_shiba",
+   "w": 40,
+   "h": 22,
+   "ax": 20,
+   "ay": 22
+  },
+  "dog_corgi_jump": {
+   "atlas": "dog_corgi",
+   "w": 52,
+   "h": 40,
+   "ax": 26,
+   "ay": 40
+  },
+  "dog_corgi_bark": {
+   "atlas": "dog_corgi",
+   "w": 48,
+   "h": 34,
+   "ax": 24,
+   "ay": 34
+  },
+  "dog_corgi_walk_a": {
+   "atlas": "dog_corgi",
+   "w": 36,
+   "h": 32,
+   "ax": 18,
+   "ay": 32
+  },
+  "dog_corgi_walk_b": {
+   "atlas": "dog_corgi",
+   "w": 36,
+   "h": 32,
+   "ax": 18,
+   "ay": 32
+  },
+  "dog_corgi_stand": {
+   "atlas": "dog_corgi",
+   "w": 35,
+   "h": 31,
+   "ax": 18,
+   "ay": 31
+  },
+  "dog_corgi_happy": {
+   "atlas": "dog_corgi",
+   "w": 33,
+   "h": 31,
+   "ax": 17,
+   "ay": 31
+  },
+  "dog_corgi_sit_b": {
+   "atlas": "dog_corgi",
+   "w": 30,
+   "h": 31,
+   "ax": 15,
+   "ay": 31
+  },
+  "dog_corgi_sit_a": {
+   "atlas": "dog_corgi",
+   "w": 29,
+   "h": 31,
+   "ax": 15,
+   "ay": 31
+  },
+  "dog_corgi_tug": {
+   "atlas": "dog_corgi",
+   "w": 55,
+   "h": 30,
+   "ax": 28,
+   "ay": 30
+  },
+  "dog_corgi_dig_b": {
+   "atlas": "dog_corgi",
+   "w": 49,
+   "h": 28,
+   "ax": 25,
+   "ay": 28
+  },
+  "dog_corgi_dig_a": {
+   "atlas": "dog_corgi",
+   "w": 47,
+   "h": 28,
+   "ax": 24,
+   "ay": 28
+  },
+  "dog_corgi_eat": {
+   "atlas": "dog_corgi",
+   "w": 39,
+   "h": 24,
+   "ax": 20,
+   "ay": 24
+  },
+  "dog_corgi_belly_up": {
+   "atlas": "dog_corgi",
+   "w": 47,
+   "h": 23,
+   "ax": 24,
+   "ay": 23
+  },
+  "dog_corgi_sleep": {
+   "atlas": "dog_corgi",
+   "w": 38,
+   "h": 20,
+   "ax": 19,
+   "ay": 20
+  },
+  "dog_husky_jump": {
+   "atlas": "dog_husky",
+   "w": 71,
+   "h": 54,
+   "ax": 36,
+   "ay": 54
+  },
+  "dog_husky_bark": {
+   "atlas": "dog_husky",
+   "w": 60,
+   "h": 48,
+   "ax": 30,
+   "ay": 48
+  },
+  "dog_husky_dig_b": {
+   "atlas": "dog_husky",
+   "w": 60,
+   "h": 46,
+   "ax": 30,
+   "ay": 46
+  },
+  "dog_husky_happy": {
+   "atlas": "dog_husky",
+   "w": 42,
+   "h": 46,
+   "ax": 21,
+   "ay": 46
+  },
+  "dog_husky_sit_a": {
+   "atlas": "dog_husky",
+   "w": 40,
+   "h": 45,
+   "ax": 20,
+   "ay": 45
+  },
+  "dog_husky_sit_b": {
+   "atlas": "dog_husky",
+   "w": 38,
+   "h": 45,
+   "ax": 19,
+   "ay": 45
+  },
+  "dog_husky_dig_a": {
+   "atlas": "dog_husky",
+   "w": 58,
+   "h": 44,
+   "ax": 29,
+   "ay": 44
+  },
+  "dog_husky_walk_b": {
+   "atlas": "dog_husky",
+   "w": 48,
+   "h": 43,
+   "ax": 24,
+   "ay": 43
+  },
+  "dog_husky_stand": {
+   "atlas": "dog_husky",
+   "w": 44,
+   "h": 43,
+   "ax": 22,
+   "ay": 43
+  },
+  "dog_husky_walk_a": {
+   "atlas": "dog_husky",
+   "w": 49,
+   "h": 42,
+   "ax": 25,
+   "ay": 42
+  },
+  "dog_husky_eat": {
+   "atlas": "dog_husky",
+   "w": 49,
+   "h": 41,
+   "ax": 25,
+   "ay": 41
+  },
+  "dog_husky_tug": {
+   "atlas": "dog_husky",
+   "w": 67,
+   "h": 40,
+   "ax": 34,
+   "ay": 40
+  },
+  "dog_husky_belly_up": {
+   "atlas": "dog_husky",
+   "w": 63,
+   "h": 30,
+   "ax": 32,
+   "ay": 30
+  },
+  "dog_husky_sleep": {
+   "atlas": "dog_husky",
+   "w": 51,
+   "h": 27,
+   "ax": 26,
+   "ay": 27
+  },
+  "dog_golden_jump": {
+   "atlas": "dog_golden",
+   "w": 79,
+   "h": 60,
+   "ax": 40,
+   "ay": 60
+  },
+  "dog_golden_bark": {
+   "atlas": "dog_golden",
+   "w": 70,
+   "h": 49,
+   "ax": 35,
+   "ay": 49
+  },
+  "dog_golden_dig_b": {
+   "atlas": "dog_golden",
+   "w": 63,
+   "h": 48,
+   "ax": 32,
+   "ay": 48
+  },
+  "dog_golden_happy": {
+   "atlas": "dog_golden",
+   "w": 49,
+   "h": 48,
+   "ax": 25,
+   "ay": 48
+  },
+  "dog_golden_dig_a": {
+   "atlas": "dog_golden",
+   "w": 63,
+   "h": 47,
+   "ax": 32,
+   "ay": 47
+  },
+  "dog_golden_walk_b": {
+   "atlas": "dog_golden",
+   "w": 57,
+   "h": 47,
+   "ax": 29,
+   "ay": 47
+  },
+  "dog_golden_sit_b": {
+   "atlas": "dog_golden",
+   "w": 50,
+   "h": 47,
+   "ax": 25,
+   "ay": 47
+  },
+  "dog_golden_tug": {
+   "atlas": "dog_golden",
+   "w": 84,
+   "h": 46,
+   "ax": 42,
+   "ay": 46
+  },
+  "dog_golden_walk_a": {
+   "atlas": "dog_golden",
+   "w": 54,
+   "h": 46,
+   "ax": 27,
+   "ay": 46
+  },
+  "dog_golden_stand": {
+   "atlas": "dog_golden",
+   "w": 49,
+   "h": 46,
+   "ax": 25,
+   "ay": 46
+  },
+  "dog_golden_sit_a": {
+   "atlas": "dog_golden",
+   "w": 47,
+   "h": 46,
+   "ax": 24,
+   "ay": 46
+  },
+  "dog_golden_eat": {
+   "atlas": "dog_golden",
+   "w": 54,
+   "h": 44,
+   "ax": 27,
+   "ay": 44
+  },
+  "dog_golden_belly_up": {
+   "atlas": "dog_golden",
+   "w": 74,
+   "h": 34,
+   "ax": 37,
+   "ay": 34
+  },
+  "dog_golden_sleep": {
+   "atlas": "dog_golden",
+   "w": 56,
+   "h": 27,
+   "ax": 28,
+   "ay": 27
+  },
+  "dog_collie_jump": {
+   "atlas": "dog_collie",
+   "w": 65,
+   "h": 50,
+   "ax": 33,
+   "ay": 50
+  },
+  "dog_collie_dig_b": {
+   "atlas": "dog_collie",
+   "w": 59,
+   "h": 45,
+   "ax": 30,
+   "ay": 45
+  },
+  "dog_collie_dig_a": {
+   "atlas": "dog_collie",
+   "w": 55,
+   "h": 44,
+   "ax": 28,
+   "ay": 44
+  },
+  "dog_collie_bark": {
+   "atlas": "dog_collie",
+   "w": 64,
+   "h": 43,
+   "ax": 32,
+   "ay": 43
+  },
+  "dog_collie_sit_a": {
+   "atlas": "dog_collie",
+   "w": 43,
+   "h": 43,
+   "ax": 22,
+   "ay": 43
+  },
+  "dog_collie_happy": {
+   "atlas": "dog_collie",
+   "w": 43,
+   "h": 43,
+   "ax": 22,
+   "ay": 43
+  },
+  "dog_collie_sit_b": {
+   "atlas": "dog_collie",
+   "w": 42,
+   "h": 42,
+   "ax": 21,
+   "ay": 42
+  },
+  "dog_collie_walk_a": {
+   "atlas": "dog_collie",
+   "w": 48,
+   "h": 41,
+   "ax": 24,
+   "ay": 41
+  },
+  "dog_collie_walk_b": {
+   "atlas": "dog_collie",
+   "w": 48,
+   "h": 41,
+   "ax": 24,
+   "ay": 41
+  },
+  "dog_collie_stand": {
+   "atlas": "dog_collie",
+   "w": 44,
+   "h": 41,
+   "ax": 22,
+   "ay": 41
+  },
+  "dog_collie_eat": {
+   "atlas": "dog_collie",
+   "w": 49,
+   "h": 40,
+   "ax": 25,
+   "ay": 40
+  },
+  "dog_collie_tug": {
+   "atlas": "dog_collie",
+   "w": 71,
+   "h": 37,
+   "ax": 36,
+   "ay": 37
+  },
+  "dog_collie_belly_up": {
+   "atlas": "dog_collie",
+   "w": 68,
+   "h": 29,
+   "ax": 34,
+   "ay": 29
+  },
+  "dog_collie_sleep": {
+   "atlas": "dog_collie",
+   "w": 51,
+   "h": 25,
+   "ax": 26,
+   "ay": 25
+  },
+  "dog_poodle_jump": {
+   "atlas": "dog_poodle",
+   "w": 55,
+   "h": 43,
+   "ax": 28,
+   "ay": 43
+  },
+  "dog_poodle_bark": {
+   "atlas": "dog_poodle",
+   "w": 49,
+   "h": 37,
+   "ax": 25,
+   "ay": 37
+  },
+  "dog_poodle_dig_a": {
+   "atlas": "dog_poodle",
+   "w": 48,
+   "h": 35,
+   "ax": 24,
+   "ay": 35
+  },
+  "dog_poodle_dig_b": {
+   "atlas": "dog_poodle",
+   "w": 48,
+   "h": 34,
+   "ax": 24,
+   "ay": 34
+  },
+  "dog_poodle_walk_b": {
+   "atlas": "dog_poodle",
+   "w": 38,
+   "h": 34,
+   "ax": 19,
+   "ay": 34
+  },
+  "dog_poodle_walk_a": {
+   "atlas": "dog_poodle",
+   "w": 37,
+   "h": 34,
+   "ax": 19,
+   "ay": 34
+  },
+  "dog_poodle_happy": {
+   "atlas": "dog_poodle",
+   "w": 34,
+   "h": 34,
+   "ax": 17,
+   "ay": 34
+  },
+  "dog_poodle_stand": {
+   "atlas": "dog_poodle",
+   "w": 32,
+   "h": 34,
+   "ax": 16,
+   "ay": 34
+  },
+  "dog_poodle_sit_a": {
+   "atlas": "dog_poodle",
+   "w": 32,
+   "h": 34,
+   "ax": 16,
+   "ay": 34
+  },
+  "dog_poodle_sit_b": {
+   "atlas": "dog_poodle",
+   "w": 31,
+   "h": 34,
+   "ax": 16,
+   "ay": 34
+  },
+  "dog_poodle_tug": {
+   "atlas": "dog_poodle",
+   "w": 61,
+   "h": 32,
+   "ax": 31,
+   "ay": 32
+  },
+  "dog_poodle_eat": {
+   "atlas": "dog_poodle",
+   "w": 38,
+   "h": 31,
+   "ax": 19,
+   "ay": 31
+  },
+  "dog_poodle_belly_up": {
+   "atlas": "dog_poodle",
+   "w": 47,
+   "h": 24,
+   "ax": 24,
+   "ay": 24
+  },
+  "dog_poodle_sleep": {
+   "atlas": "dog_poodle",
+   "w": 40,
+   "h": 20,
+   "ax": 20,
+   "ay": 20
+  },
+  "cat_orange_swat": {
+   "atlas": "cat_orange",
+   "w": 38,
+   "h": 38,
+   "ax": 19,
+   "ay": 38
+  },
+  "cat_orange_crouch": {
+   "atlas": "cat_orange",
+   "w": 35,
+   "h": 37,
+   "ax": 18,
+   "ay": 37
+  },
+  "cat_orange_pounce": {
+   "atlas": "cat_orange",
+   "w": 40,
+   "h": 34,
+   "ax": 20,
+   "ay": 34
+  },
+  "cat_orange_tangled": {
+   "atlas": "cat_orange",
+   "w": 40,
+   "h": 34,
+   "ax": 20,
+   "ay": 34
+  },
+  "cat_orange_sit_a": {
+   "atlas": "cat_orange",
+   "w": 28,
+   "h": 31,
+   "ax": 14,
+   "ay": 31
+  },
+  "cat_orange_stand": {
+   "atlas": "cat_orange",
+   "w": 37,
+   "h": 30,
+   "ax": 19,
+   "ay": 30
+  },
+  "cat_orange_walk_a": {
+   "atlas": "cat_orange",
+   "w": 36,
+   "h": 30,
+   "ax": 18,
+   "ay": 30
+  },
+  "cat_orange_walk_b": {
+   "atlas": "cat_orange",
+   "w": 35,
+   "h": 30,
+   "ax": 18,
+   "ay": 30
+  },
+  "cat_orange_groom": {
+   "atlas": "cat_orange",
+   "w": 27,
+   "h": 29,
+   "ax": 14,
+   "ay": 29
+  },
+  "cat_orange_unused_back": {
+   "atlas": "cat_orange",
+   "w": 24,
+   "h": 29,
+   "ax": 12,
+   "ay": 29,
+   "unused": true
+  },
+  "cat_orange_eat": {
+   "atlas": "cat_orange",
+   "w": 38,
+   "h": 20,
+   "ax": 19,
+   "ay": 20
+  },
+  "cat_orange_sleep": {
+   "atlas": "cat_orange",
+   "w": 33,
+   "h": 19,
+   "ax": 17,
+   "ay": 19
+  },
+  "cat_black_swat": {
+   "atlas": "cat_black",
+   "w": 35,
+   "h": 36,
+   "ax": 18,
+   "ay": 36
+  },
+  "cat_black_crouch": {
+   "atlas": "cat_black",
+   "w": 33,
+   "h": 34,
+   "ax": 17,
+   "ay": 34
+  },
+  "cat_black_tangled": {
+   "atlas": "cat_black",
+   "w": 39,
+   "h": 32,
+   "ax": 20,
+   "ay": 32
+  },
+  "cat_black_sit_a": {
+   "atlas": "cat_black",
+   "w": 24,
+   "h": 29,
+   "ax": 12,
+   "ay": 29
+  },
+  "cat_black_walk_a": {
+   "atlas": "cat_black",
+   "w": 34,
+   "h": 28,
+   "ax": 17,
+   "ay": 28
+  },
+  "cat_black_stand": {
+   "atlas": "cat_black",
+   "w": 33,
+   "h": 28,
+   "ax": 17,
+   "ay": 28
+  },
+  "cat_black_walk_b": {
+   "atlas": "cat_black",
+   "w": 33,
+   "h": 28,
+   "ax": 17,
+   "ay": 28
+  },
+  "cat_black_groom": {
+   "atlas": "cat_black",
+   "w": 23,
+   "h": 27,
+   "ax": 12,
+   "ay": 27
+  },
+  "cat_black_unused_back": {
+   "atlas": "cat_black",
+   "w": 20,
+   "h": 27,
+   "ax": 10,
+   "ay": 27,
+   "unused": true
+  },
+  "cat_black_pounce": {
+   "atlas": "cat_black",
+   "w": 38,
+   "h": 26,
+   "ax": 19,
+   "ay": 26
+  },
+  "cat_black_eat": {
+   "atlas": "cat_black",
+   "w": 32,
+   "h": 20,
+   "ax": 16,
+   "ay": 20
+  },
+  "cat_black_sleep": {
+   "atlas": "cat_black",
+   "w": 32,
+   "h": 19,
+   "ax": 16,
+   "ay": 19
+  },
+  "cat_calico_crouch": {
+   "atlas": "cat_calico",
+   "w": 33,
+   "h": 35,
+   "ax": 17,
+   "ay": 35
+  },
+  "cat_calico_swat": {
+   "atlas": "cat_calico",
+   "w": 31,
+   "h": 35,
+   "ax": 16,
+   "ay": 35
+  },
+  "cat_calico_tangled": {
+   "atlas": "cat_calico",
+   "w": 39,
+   "h": 34,
+   "ax": 20,
+   "ay": 34
+  },
+  "cat_calico_pounce": {
+   "atlas": "cat_calico",
+   "w": 38,
+   "h": 30,
+   "ax": 19,
+   "ay": 30
+  },
+  "cat_calico_sit_a": {
+   "atlas": "cat_calico",
+   "w": 27,
+   "h": 30,
+   "ax": 14,
+   "ay": 30
+  },
+  "cat_calico_stand": {
+   "atlas": "cat_calico",
+   "w": 34,
+   "h": 29,
+   "ax": 17,
+   "ay": 29
+  },
+  "cat_calico_walk_b": {
+   "atlas": "cat_calico",
+   "w": 34,
+   "h": 29,
+   "ax": 17,
+   "ay": 29
+  },
+  "cat_calico_walk_a": {
+   "atlas": "cat_calico",
+   "w": 33,
+   "h": 29,
+   "ax": 17,
+   "ay": 29
+  },
+  "cat_calico_unused_back": {
+   "atlas": "cat_calico",
+   "w": 23,
+   "h": 27,
+   "ax": 12,
+   "ay": 27,
+   "unused": true
+  },
+  "cat_calico_groom": {
+   "atlas": "cat_calico",
+   "w": 23,
+   "h": 27,
+   "ax": 12,
+   "ay": 27
+  },
+  "cat_calico_sleep": {
+   "atlas": "cat_calico",
+   "w": 32,
+   "h": 19,
+   "ax": 16,
+   "ay": 19
+  },
+  "cat_calico_eat": {
+   "atlas": "cat_calico",
+   "w": 32,
+   "h": 19,
+   "ax": 16,
+   "ay": 19
+  },
+  "cat_siamese_swat": {
+   "atlas": "cat_siamese",
+   "w": 33,
+   "h": 37,
+   "ax": 17,
+   "ay": 37
+  },
+  "cat_siamese_crouch": {
+   "atlas": "cat_siamese",
+   "w": 34,
+   "h": 36,
+   "ax": 17,
+   "ay": 36
+  },
+  "cat_siamese_tangled": {
+   "atlas": "cat_siamese",
+   "w": 40,
+   "h": 35,
+   "ax": 20,
+   "ay": 35
+  },
+  "cat_siamese_stand": {
+   "atlas": "cat_siamese",
+   "w": 35,
+   "h": 31,
+   "ax": 18,
+   "ay": 31
+  },
+  "cat_siamese_sit_a": {
+   "atlas": "cat_siamese",
+   "w": 28,
+   "h": 31,
+   "ax": 14,
+   "ay": 31
+  },
+  "cat_siamese_pounce": {
+   "atlas": "cat_siamese",
+   "w": 40,
+   "h": 30,
+   "ax": 20,
+   "ay": 30
+  },
+  "cat_siamese_walk_a": {
+   "atlas": "cat_siamese",
+   "w": 35,
+   "h": 29,
+   "ax": 18,
+   "ay": 29
+  },
+  "cat_siamese_walk_b": {
+   "atlas": "cat_siamese",
+   "w": 35,
+   "h": 29,
+   "ax": 18,
+   "ay": 29
+  },
+  "cat_siamese_groom": {
+   "atlas": "cat_siamese",
+   "w": 26,
+   "h": 29,
+   "ax": 13,
+   "ay": 29
+  },
+  "cat_siamese_unused_back": {
+   "atlas": "cat_siamese",
+   "w": 25,
+   "h": 28,
+   "ax": 13,
+   "ay": 28,
+   "unused": true
+  },
+  "cat_siamese_eat": {
+   "atlas": "cat_siamese",
+   "w": 33,
+   "h": 21,
+   "ax": 17,
+   "ay": 21
+  },
+  "cat_siamese_sleep": {
+   "atlas": "cat_siamese",
+   "w": 33,
+   "h": 20,
+   "ax": 17,
+   "ay": 20
+  },
+  "cat_bluecat_swat": {
+   "atlas": "cat_bluecat",
+   "w": 39,
+   "h": 40,
+   "ax": 20,
+   "ay": 40
+  },
+  "cat_bluecat_crouch": {
+   "atlas": "cat_bluecat",
+   "w": 38,
+   "h": 40,
+   "ax": 19,
+   "ay": 40
+  },
+  "cat_bluecat_tangled": {
+   "atlas": "cat_bluecat",
+   "w": 44,
+   "h": 38,
+   "ax": 22,
+   "ay": 38
+  },
+  "cat_bluecat_pounce": {
+   "atlas": "cat_bluecat",
+   "w": 42,
+   "h": 33,
+   "ax": 21,
+   "ay": 33
+  },
+  "cat_bluecat_stand": {
+   "atlas": "cat_bluecat",
+   "w": 38,
+   "h": 32,
+   "ax": 19,
+   "ay": 32
+  },
+  "cat_bluecat_sit_a": {
+   "atlas": "cat_bluecat",
+   "w": 29,
+   "h": 32,
+   "ax": 15,
+   "ay": 32
+  },
+  "cat_bluecat_walk_a": {
+   "atlas": "cat_bluecat",
+   "w": 37,
+   "h": 31,
+   "ax": 19,
+   "ay": 31
+  },
+  "cat_bluecat_walk_b": {
+   "atlas": "cat_bluecat",
+   "w": 37,
+   "h": 31,
+   "ax": 19,
+   "ay": 31
+  },
+  "cat_bluecat_unused_back": {
+   "atlas": "cat_bluecat",
+   "w": 25,
+   "h": 31,
+   "ax": 13,
+   "ay": 31,
+   "unused": true
+  },
+  "cat_bluecat_groom": {
+   "atlas": "cat_bluecat",
+   "w": 26,
+   "h": 30,
+   "ax": 13,
+   "ay": 30
+  },
+  "cat_bluecat_eat": {
+   "atlas": "cat_bluecat",
+   "w": 36,
+   "h": 22,
+   "ax": 18,
+   "ay": 22
+  },
+  "cat_bluecat_sleep": {
+   "atlas": "cat_bluecat",
+   "w": 36,
+   "h": 21,
+   "ax": 18,
+   "ay": 21
+  },
+  "cat_ragdoll_swat": {
+   "atlas": "cat_ragdoll",
+   "w": 39,
+   "h": 41,
+   "ax": 20,
+   "ay": 41
+  },
+  "cat_ragdoll_tangled": {
+   "atlas": "cat_ragdoll",
+   "w": 43,
+   "h": 40,
+   "ax": 22,
+   "ay": 40
+  },
+  "cat_ragdoll_crouch": {
+   "atlas": "cat_ragdoll",
+   "w": 39,
+   "h": 40,
+   "ax": 20,
+   "ay": 40
+  },
+  "cat_ragdoll_stand": {
+   "atlas": "cat_ragdoll",
+   "w": 40,
+   "h": 33,
+   "ax": 20,
+   "ay": 33
+  },
+  "cat_ragdoll_sit_a": {
+   "atlas": "cat_ragdoll",
+   "w": 31,
+   "h": 33,
+   "ax": 16,
+   "ay": 33
+  },
+  "cat_ragdoll_pounce": {
+   "atlas": "cat_ragdoll",
+   "w": 42,
+   "h": 32,
+   "ax": 21,
+   "ay": 32
+  },
+  "cat_ragdoll_walk_a": {
+   "atlas": "cat_ragdoll",
+   "w": 38,
+   "h": 31,
+   "ax": 19,
+   "ay": 31
+  },
+  "cat_ragdoll_walk_b": {
+   "atlas": "cat_ragdoll",
+   "w": 38,
+   "h": 31,
+   "ax": 19,
+   "ay": 31
+  },
+  "cat_ragdoll_groom": {
+   "atlas": "cat_ragdoll",
+   "w": 28,
+   "h": 29,
+   "ax": 14,
+   "ay": 29
+  },
+  "cat_ragdoll_unused_back": {
+   "atlas": "cat_ragdoll",
+   "w": 27,
+   "h": 29,
+   "ax": 14,
+   "ay": 29,
+   "unused": true
+  },
+  "cat_ragdoll_eat": {
+   "atlas": "cat_ragdoll",
+   "w": 38,
+   "h": 22,
+   "ax": 19,
+   "ay": 22
+  },
+  "cat_ragdoll_sleep": {
+   "atlas": "cat_ragdoll",
+   "w": 36,
+   "h": 21,
+   "ax": 18,
+   "ay": 21
+  },
+  "front_dog_husky": {
+   "atlas": "ui",
+   "w": 48,
+   "h": 63,
+   "ax": 24,
+   "ay": 63
+  },
+  "front_dog_golden": {
+   "atlas": "ui",
+   "w": 51,
+   "h": 62,
+   "ax": 26,
+   "ay": 62
+  },
+  "front_dog_collie": {
+   "atlas": "ui",
+   "w": 48,
+   "h": 61,
+   "ax": 24,
+   "ay": 61
+  },
+  "front_cat_calico": {
+   "atlas": "ui",
+   "w": 46,
+   "h": 61,
+   "ax": 23,
+   "ay": 61
+  },
+  "front_cat_black": {
+   "atlas": "ui",
+   "w": 45,
+   "h": 61,
+   "ax": 23,
+   "ay": 61
+  },
+  "front_dog_shiba": {
+   "atlas": "ui",
+   "w": 44,
+   "h": 61,
+   "ax": 22,
+   "ay": 61
+  },
+  "front_cat_ragdoll": {
+   "atlas": "ui",
+   "w": 51,
+   "h": 60,
+   "ax": 26,
+   "ay": 60
+  },
+  "front_cat_bluecat": {
+   "atlas": "ui",
+   "w": 48,
+   "h": 60,
+   "ax": 24,
+   "ay": 60
+  },
+  "front_cat_orange": {
+   "atlas": "ui",
+   "w": 47,
+   "h": 60,
+   "ax": 24,
+   "ay": 60
+  },
+  "front_cat_siamese": {
+   "atlas": "ui",
+   "w": 40,
+   "h": 60,
+   "ax": 20,
+   "ay": 60
+  },
+  "front_dog_poodle": {
+   "atlas": "ui",
+   "w": 44,
+   "h": 59,
+   "ax": 22,
+   "ay": 59
+  },
+  "front_dog_corgi": {
+   "atlas": "ui",
+   "w": 40,
+   "h": 55,
+   "ax": 20,
+   "ay": 55
+  },
+  "pers_lively": {
+   "atlas": "ui",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "pers_greedy": {
+   "atlas": "ui",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "pers_lazy": {
+   "atlas": "ui",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "pers_clingy": {
+   "atlas": "ui",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "pers_timid": {
+   "atlas": "ui",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "clocktower": {
+   "atlas": "scene",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "meta": {
+    "clock": {
+     "cx": 62,
+     "cy": 82,
+     "r": 17
+    }
+   }
+  },
+  "clocktower_open": {
+   "atlas": "scene",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "meta": {
+    "clock": {
+     "cx": 63,
+     "cy": 82,
+     "r": 17
+    }
+   }
+  },
+  "house_closed": {
+   "atlas": "scene",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "house_open": {
+   "atlas": "scene",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "house_night": {
+   "atlas": "scene",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "tree": {
+   "atlas": "scene",
+   "w": 82,
+   "h": 103,
+   "ax": 41,
+   "ay": 103
+  },
+  "cat_tree": {
+   "atlas": "scene",
+   "w": 72,
+   "h": 90,
+   "ax": 36,
+   "ay": 90
+  },
+  "lamp": {
+   "atlas": "scene",
+   "w": 51,
+   "h": 84,
+   "ax": 26,
+   "ay": 84
+  },
+  "doghouse": {
+   "atlas": "scene",
+   "w": 99,
+   "h": 83,
+   "ax": 50,
+   "ay": 83
+  },
+  "bathtub": {
+   "atlas": "scene",
+   "w": 103,
+   "h": 82,
+   "ax": 52,
+   "ay": 82
+  },
+  "pond": {
+   "atlas": "scene",
+   "w": 110,
+   "h": 79,
+   "ax": 55,
+   "ay": 79,
+   "meta": {
+    "water": {
+     "cx": 55,
+     "cy": 41,
+     "rx": 43,
+     "ry": 26
+    }
+   }
+  },
+  "picnic": {
+   "atlas": "scene",
+   "w": 117,
+   "h": 69,
+   "ax": 59,
+   "ay": 69
+  },
+  "coral": {
+   "atlas": "scene",
+   "w": 59,
+   "h": 50,
+   "ax": 30,
+   "ay": 50
+  },
+  "planter": {
+   "atlas": "scene",
+   "w": 62,
+   "h": 45,
+   "ax": 31,
+   "ay": 45
+  },
+  "bush": {
+   "atlas": "scene",
+   "w": 47,
+   "h": 40,
+   "ax": 24,
+   "ay": 40
+  },
+  "tall_grass": {
+   "atlas": "scene",
+   "w": 44,
+   "h": 38,
+   "ax": 22,
+   "ay": 38
+  },
+  "mushroom": {
+   "atlas": "scene",
+   "w": 37,
+   "h": 37,
+   "ax": 19,
+   "ay": 37
+  },
+  "stump": {
+   "atlas": "scene",
+   "w": 53,
+   "h": 36,
+   "ax": 27,
+   "ay": 36
+  },
+  "rocks": {
+   "atlas": "scene",
+   "w": 52,
+   "h": 34,
+   "ax": 26,
+   "ay": 34
+  },
+  "flowers": {
+   "atlas": "scene",
+   "w": 39,
+   "h": 28,
+   "ax": 20,
+   "ay": 28
+  },
+  "bowls": {
+   "atlas": "scene",
+   "w": 57,
+   "h": 26,
+   "ax": 29,
+   "ay": 26
+  },
+  "water_splash_2": {
+   "atlas": "fx",
+   "w": 31,
+   "h": 30,
+   "ax": 16,
+   "ay": 30
+  },
+  "water_splash_1": {
+   "atlas": "fx",
+   "w": 23,
+   "h": 25,
+   "ax": 12,
+   "ay": 25
+  },
+  "water_splash_3": {
+   "atlas": "fx",
+   "w": 30,
+   "h": 24,
+   "ax": 15,
+   "ay": 24
+  },
+  "sun": {
+   "atlas": "fx",
+   "w": 20,
+   "h": 20,
+   "ax": 10,
+   "ay": 20
+  },
+  "water_bubble_l": {
+   "atlas": "fx",
+   "w": 19,
+   "h": 19,
+   "ax": 10,
+   "ay": 10
+  },
+  "star": {
+   "atlas": "fx",
+   "w": 21,
+   "h": 18,
+   "ax": 11,
+   "ay": 18
+  },
+  "moon": {
+   "atlas": "fx",
+   "w": 17,
+   "h": 18,
+   "ax": 9,
+   "ay": 18
+  },
+  "cloud_a": {
+   "atlas": "fx",
+   "w": 27,
+   "h": 17,
+   "ax": 14,
+   "ay": 17
+  },
+  "water_ripple_3": {
+   "atlas": "fx",
+   "w": 39,
+   "h": 16,
+   "ax": 20,
+   "ay": 8
+  },
+  "cloud_b": {
+   "atlas": "fx",
+   "w": 23,
+   "h": 16,
+   "ax": 12,
+   "ay": 16
+  },
+  "fx_heart": {
+   "atlas": "fx",
+   "w": 16,
+   "h": 15,
+   "ax": 8,
+   "ay": 15
+  },
+  "fx_zzz": {
+   "atlas": "fx",
+   "w": 16,
+   "h": 15,
+   "ax": 8,
+   "ay": 15
+  },
+  "fx_note": {
+   "atlas": "fx",
+   "w": 15,
+   "h": 15,
+   "ax": 8,
+   "ay": 15
+  },
+  "fx_bubble": {
+   "atlas": "fx",
+   "w": 15,
+   "h": 15,
+   "ax": 8,
+   "ay": 15
+  },
+  "fx_sparkle": {
+   "atlas": "fx",
+   "w": 13,
+   "h": 15,
+   "ax": 7,
+   "ay": 15
+  },
+  "fx_sweat": {
+   "atlas": "fx",
+   "w": 10,
+   "h": 15,
+   "ax": 5,
+   "ay": 15
+  },
+  "fx_question": {
+   "atlas": "fx",
+   "w": 9,
+   "h": 15,
+   "ax": 5,
+   "ay": 15
+  },
+  "fx_exclaim": {
+   "atlas": "fx",
+   "w": 7,
+   "h": 15,
+   "ax": 4,
+   "ay": 15
+  },
+  "water_drop_1": {
+   "atlas": "fx",
+   "w": 11,
+   "h": 14,
+   "ax": 6,
+   "ay": 7
+  },
+  "raindrop": {
+   "atlas": "fx",
+   "w": 9,
+   "h": 14,
+   "ax": 5,
+   "ay": 14
+  },
+  "cloud_c": {
+   "atlas": "fx",
+   "w": 34,
+   "h": 13,
+   "ax": 17,
+   "ay": 13
+  },
+  "water_ripple_2": {
+   "atlas": "fx",
+   "w": 27,
+   "h": 12,
+   "ax": 14,
+   "ay": 6
+  },
+  "water_drop_2": {
+   "atlas": "fx",
+   "w": 8,
+   "h": 10,
+   "ax": 4,
+   "ay": 5
+  },
+  "snowflake": {
+   "atlas": "fx",
+   "w": 8,
+   "h": 9,
+   "ax": 4,
+   "ay": 9
+  },
+  "water_ripple_1": {
+   "atlas": "fx",
+   "w": 18,
+   "h": 8,
+   "ax": 9,
+   "ay": 4
+  },
+  "water_bubble_s": {
+   "atlas": "fx",
+   "w": 8,
+   "h": 8,
+   "ax": 4,
+   "ay": 4
+  },
+  "water_drop_3": {
+   "atlas": "fx",
+   "w": 7,
+   "h": 7,
+   "ax": 4,
+   "ay": 4
+  },
+  "toy_chest_open": {
+   "atlas": "toys",
+   "w": 43,
+   "h": 39,
+   "ax": 22,
+   "ay": 39
+  },
+  "toy_chest_closed": {
+   "atlas": "toys",
+   "w": 39,
+   "h": 34,
+   "ax": 20,
+   "ay": 34
+  },
+  "toy_dirt_mound": {
+   "atlas": "toys",
+   "w": 53,
+   "h": 30,
+   "ax": 27,
+   "ay": 30
+  },
+  "toy_shoe": {
+   "atlas": "toys",
+   "w": 39,
+   "h": 30,
+   "ax": 20,
+   "ay": 30
+  },
+  "toy_rope": {
+   "atlas": "toys",
+   "w": 53,
+   "h": 29,
+   "ax": 27,
+   "ay": 29
+  },
+  "toy_yarn": {
+   "atlas": "toys",
+   "w": 36,
+   "h": 28,
+   "ax": 18,
+   "ay": 28
+  },
+  "toy_bone": {
+   "atlas": "toys",
+   "w": 39,
+   "h": 27,
+   "ax": 20,
+   "ay": 27
+  },
+  "toy_ball": {
+   "atlas": "toys",
+   "w": 26,
+   "h": 27,
+   "ax": 13,
+   "ay": 27
+  },
+  "toy_frisbee": {
+   "atlas": "toys",
+   "w": 44,
+   "h": 25,
+   "ax": 22,
+   "ay": 25
+  },
+  "toy_wand": {
+   "atlas": "toys",
+   "w": 43,
+   "h": 25,
+   "ax": 22,
+   "ay": 25
+  },
+  "toy_dirt_mound_s": {
+   "atlas": "toys",
+   "w": 25,
+   "h": 15,
+   "ax": 13,
+   "ay": 15
+  },
+  "toy_ball_s": {
+   "atlas": "toys",
+   "w": 11,
+   "h": 12,
+   "ax": 6,
+   "ay": 12
+  },
+  "toy_laser_dot": {
+   "atlas": "toys",
+   "w": 22,
+   "h": 11,
+   "ax": 11,
+   "ay": 11
+  },
+  "grass_tile": {
+   "atlas": "terrain",
+   "w": 106,
+   "h": 102,
+   "ax": 0,
+   "ay": 0
+  },
+  "path": {
+   "atlas": "terrain",
+   "w": 700,
+   "h": 67,
+   "ax": 0,
+   "ay": 67
+  },
+  "far": {
+   "atlas": "terrain",
+   "w": 792,
+   "h": 37,
+   "ax": 0,
+   "ay": 37
+  },
+  "paper_dog": {
+   "atlas": "items",
+   "w": 93,
+   "h": 95,
+   "ax": 47,
+   "ay": 95
+  },
+  "paper_cat": {
+   "atlas": "items",
+   "w": 93,
+   "h": 94,
+   "ax": 47,
+   "ay": 94
+  },
+  "item_C001": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C002": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C003": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C004": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C005": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C006": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C007": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C008": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C009": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_C010": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U001": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_1": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_2": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_3": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_4": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_5": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U003": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U004": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U005": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U006": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U007": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U008": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_R001": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_R002": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_R003": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_R004": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_R005": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_L001": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_L002": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U002_6": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_1": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_2": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_3": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_4": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_5": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_U009_6": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_L003": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "item_L004": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "sil_house_gold": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "sil_tower_gold": {
+   "atlas": "items",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "fx_reveal": {
+   "atlas": "items",
+   "w": 23,
+   "h": 22,
+   "ax": 12,
+   "ay": 22
+  },
+  "coin_bronze": {
+   "atlas": "items",
+   "w": 17,
+   "h": 16,
+   "ax": 9,
+   "ay": 16
+  },
+  "coin_silver": {
+   "atlas": "items",
+   "w": 17,
+   "h": 16,
+   "ax": 9,
+   "ay": 16
+  },
+  "coin_gold": {
+   "atlas": "items",
+   "w": 17,
+   "h": 16,
+   "ax": 9,
+   "ay": 16
+  },
+  "clocktower_gold": {
+   "atlas": "skins",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "meta": {
+    "clock": {
+     "cx": 63,
+     "cy": 82,
+     "r": 17
+    }
+   }
+  },
+  "clocktower_open_gold": {
+   "atlas": "skins",
+   "w": 123,
+   "h": 160,
+   "ax": 62,
+   "ay": 160,
+   "meta": {
+    "clock": {
+     "cx": 63,
+     "cy": 82,
+     "r": 17
+    }
+   }
+  },
+  "house_gold_closed": {
+   "atlas": "skins",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "house_gold_open": {
+   "atlas": "skins",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "house_gold_night": {
+   "atlas": "skins",
+   "w": 139,
+   "h": 134,
+   "ax": 70,
+   "ay": 134
+  },
+  "board": {
+   "atlas": "tools",
+   "w": 64,
+   "h": 50,
+   "ax": 32,
+   "ay": 50,
+   "meta": {
+    "board": {
+     "x0": 8,
+     "y0": 7,
+     "x1": 56,
+     "y1": 39
+    }
+   }
+  },
+  "tool_calc": {
+   "atlas": "tools",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "tool_timer": {
+   "atlas": "tools",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "tool_board": {
+   "atlas": "tools",
+   "w": 48,
+   "h": 48,
+   "ax": 24,
+   "ay": 48
+  },
+  "note_yellow": {
+   "atlas": "tools",
+   "w": 32,
+   "h": 32,
+   "ax": 16,
+   "ay": 32
+  },
+  "note_pink": {
+   "atlas": "tools",
+   "w": 32,
+   "h": 32,
+   "ax": 16,
+   "ay": 32
+  },
+  "note_blue": {
+   "atlas": "tools",
+   "w": 32,
+   "h": 32,
+   "ax": 16,
+   "ay": 32
+  },
+  "note_green": {
+   "atlas": "tools",
+   "w": 32,
+   "h": 32,
+   "ax": 16,
+   "ay": 32
+  },
+  "picnic_mat_red": {
+   "atlas": "picnic",
+   "w": 104,
+   "h": 63,
+   "ax": 52,
+   "ay": 63,
+   "meta": {
+    "mat": {
+     "top": 0,
+     "bottom": 63,
+     "rows": [
+      [
+       0,
+       40,
+       52
+      ],
+      [
+       4,
+       37,
+       66
+      ],
+      [
+       8,
+       32,
+       94
+      ],
+      [
+       12,
+       29,
+       104
+      ],
+      [
+       16,
+       26,
+       103
+      ],
+      [
+       20,
+       21,
+       100
+      ],
+      [
+       24,
+       18,
+       98
+      ],
+      [
+       28,
+       15,
+       96
+      ],
+      [
+       32,
+       11,
+       93
+      ],
+      [
+       36,
+       8,
+       91
+      ],
+      [
+       40,
+       3,
+       89
+      ],
+      [
+       44,
+       0,
+       85
+      ],
+      [
+       48,
+       1,
+       83
+      ],
+      [
+       52,
+       20,
+       81
+      ],
+      [
+       56,
+       40,
+       78
+      ],
+      [
+       60,
+       54,
+       76
+      ],
+      [
+       62,
+       68,
+       75
+      ]
+     ]
+    }
+   }
+  },
+  "picnic_mat_blue": {
+   "atlas": "picnic",
+   "w": 104,
+   "h": 63,
+   "ax": 52,
+   "ay": 63,
+   "meta": {
+    "mat": {
+     "top": 0,
+     "bottom": 63,
+     "rows": [
+      [
+       0,
+       39,
+       51
+      ],
+      [
+       4,
+       37,
+       66
+      ],
+      [
+       8,
+       32,
+       94
+      ],
+      [
+       12,
+       29,
+       104
+      ],
+      [
+       16,
+       26,
+       102
+      ],
+      [
+       20,
+       21,
+       100
+      ],
+      [
+       24,
+       18,
+       98
+      ],
+      [
+       28,
+       15,
+       95
+      ],
+      [
+       32,
+       11,
+       93
+      ],
+      [
+       36,
+       8,
+       91
+      ],
+      [
+       40,
+       3,
+       89
+      ],
+      [
+       44,
+       0,
+       85
+      ],
+      [
+       48,
+       1,
+       83
+      ],
+      [
+       52,
+       20,
+       81
+      ],
+      [
+       56,
+       40,
+       78
+      ],
+      [
+       60,
+       53,
+       76
+      ],
+      [
+       62,
+       67,
+       74
+      ]
+     ]
+    }
+   }
+  },
+  "picnic_mat_pink": {
+   "atlas": "picnic",
+   "w": 104,
+   "h": 63,
+   "ax": 52,
+   "ay": 63,
+   "meta": {
+    "mat": {
+     "top": 0,
+     "bottom": 63,
+     "rows": [
+      [
+       0,
+       39,
+       51
+      ],
+      [
+       4,
+       36,
+       68
+      ],
+      [
+       8,
+       32,
+       94
+      ],
+      [
+       12,
+       28,
+       104
+      ],
+      [
+       16,
+       26,
+       102
+      ],
+      [
+       20,
+       21,
+       99
+      ],
+      [
+       24,
+       17,
+       98
+      ],
+      [
+       28,
+       15,
+       95
+      ],
+      [
+       32,
+       11,
+       92
+      ],
+      [
+       36,
+       8,
+       90
+      ],
+      [
+       40,
+       3,
+       88
+      ],
+      [
+       44,
+       0,
+       85
+      ],
+      [
+       48,
+       0,
+       83
+      ],
+      [
+       52,
+       19,
+       81
+      ],
+      [
+       56,
+       40,
+       78
+      ],
+      [
+       60,
+       56,
+       76
+      ],
+      [
+       62,
+       67,
+       74
+      ]
+     ]
+    }
+   }
+  },
+  "picnic_basket_closed": {
+   "atlas": "picnic",
+   "w": 21,
+   "h": 22,
+   "ax": 11,
+   "ay": 22
+  },
+  "picnic_basket_open": {
+   "atlas": "picnic",
+   "w": 21,
+   "h": 22,
+   "ax": 11,
+   "ay": 22
+  },
+  "picnic_camera": {
+   "atlas": "picnic",
+   "w": 20,
+   "h": 16,
+   "ax": 10,
+   "ay": 16
+  },
+  "picnic_food_juice": {
+   "atlas": "picnic",
+   "w": 8,
+   "h": 13,
+   "ax": 4,
+   "ay": 13
+  },
+  "picnic_food_sandwich": {
+   "atlas": "picnic",
+   "w": 13,
+   "h": 12,
+   "ax": 7,
+   "ay": 12
+  },
+  "picnic_food_cake": {
+   "atlas": "picnic",
+   "w": 11,
+   "h": 12,
+   "ax": 6,
+   "ay": 12
+  },
+  "picnic_food_fruit": {
+   "atlas": "picnic",
+   "w": 16,
+   "h": 11,
+   "ax": 8,
+   "ay": 11
+  },
+  "picnic_snack_dog": {
+   "atlas": "picnic",
+   "w": 15,
+   "h": 8,
+   "ax": 8,
+   "ay": 8
+  },
+  "picnic_snack_cat": {
+   "atlas": "picnic",
+   "w": 15,
+   "h": 4,
+   "ax": 8,
+   "ay": 4
+  },
+  "polaroid_stars": {
+   "atlas": "polaroid",
+   "w": 70,
+   "h": 80,
+   "ax": 35,
+   "ay": 80,
+   "meta": {
+    "window": {
+     "x0": 10,
+     "y0": 11,
+     "x1": 60,
+     "y1": 60
+    }
+   }
+  },
+  "polaroid_flowers": {
+   "atlas": "polaroid",
+   "w": 69,
+   "h": 79,
+   "ax": 35,
+   "ay": 79,
+   "meta": {
+    "window": {
+     "x0": 9,
+     "y0": 11,
+     "x1": 60,
+     "y1": 59
+    }
+   }
+  },
+  "polaroid_hearts": {
+   "atlas": "polaroid",
+   "w": 68,
+   "h": 78,
+   "ax": 34,
+   "ay": 78,
+   "meta": {
+    "window": {
+     "x0": 9,
+     "y0": 9,
+     "x1": 59,
+     "y1": 58
+    }
+   }
+  }
+ }
+}
