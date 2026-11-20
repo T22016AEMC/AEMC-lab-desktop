@@ -78,7 +78,7 @@ const compare = (id, opts = {}) => page.evaluate(([id, opts]) => {
     hearts: C ? diffBox(C, B) : null,
     heartsOutside: C ? (() => {
       // 每個差異像素都要在某一顆（屬於這隻的）愛心的素材範圍內
-      const boxes = [...E.particles.filter((p) => p.owner === id), planted].map((p) => { const s = { w: 16, h: 15, ax: 8, ay: 15 }; return toPx({ x0: Math.round(p.x) - s.ax, y0: Math.round(p.y) - s.ay, x1: Math.round(p.x) - s.ax + s.w, y1: Math.round(p.y) - s.ay + s.h }) })
+      const boxes = [...E.particles.filter((p) => p.owner === id), planted].map((p) => { const s = { w: 17, h: 15, ax: 9, ay: 15 } /* 4.0-R：fx_heart 16×15 → 17×15 */; return toPx({ x0: Math.round(p.x) - s.ax, y0: Math.round(p.y) - s.ay, x1: Math.round(p.x) - s.ax + s.w, y1: Math.round(p.y) - s.ay + s.h }) })
       let out = 0
       for (let i = 0; i < B.length; i += 4) {
         if (B[i] === C[i] && B[i + 1] === C[i + 1] && B[i + 2] === C[i + 2] && B[i + 3] === C[i + 3]) continue

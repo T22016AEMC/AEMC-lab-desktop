@@ -262,3 +262,10 @@ macOS 風格虛擬桌面網頁（React + TypeScript + Vite + zustand + Tailwind�
 - **擺設太多的提示**：寶物與野餐放不下一律「擺設太多…請收起一些擺設」（場景固定 640×320，和視窗大小無關，不提示放大視窗）。
 - **存檔版本**：`schemaVersion` 5（**不能升**）、`DATA_REV` 6、匯出格式 8（`SHOP_FORMAT_VERSION`；匯入 2～7 的 shop 一律當空）。
 - **測試**：`tests-archive/v400a/`（見 README；`adapt-a.py` 是對既有測試的預期值異動）。
+
+### 階段 R：統一 4×4 格的原圖重新套用（素材管線）
+
+- 原圖資料夾的每張圖都是整齊的 4×4 像素格，`estimateP` 每張都估出 4.00（= 範圍下限），**估算值不可靠**。`process-assets.mjs` 的 `P_FIXED` 是每張圖明確的像素格（由 `tests-archive/v400r/tune-p.mjs`、`tune-terrain.mjs` 掃描，讓輸出尺寸＝換圖前）；`guardEstimate`：有格子要直接用估算值取樣、而估算碰到範圍邊界時管線報錯。新增素材要給明確的 `pFixed`／`pFrames`／`targets`，不要靠估算。
+- `sheet` 新選項：`pFrames`（逐格明確 p，已含縮放）、`grid: 'even'`（固定欄×列，黏在一起的連通塊從前景最少的欄切開；大家的正面照用）、`probe`（調參用）。小建築的 p 已含 `BUILDING_SCALES`（`smallP`，環境變數改係數時依比例換算）。鐘樓關門／開門貼到兩張裡最大的畫布。
+- 尺寸改變：食盆水盆 57×27（`BOWLS_H` 27）、小路寬 704（高仍 67）、寵物部分姿勢 ±1～2（站姿高不變）；常數 `BOARD_GREEN`、`TOWER_CLOCK_FALLBACK`、`CAT_TREE_ENVELOPE`（`tests-archive/v400r/cat-tree-envelope.mjs` 產生）、`MOUTH` 已重量。
+- 測試：`tests-archive/v400r/`（素材與常數一致性；`adapt-r.py`；改素材後跑 `overlay-old-assets.mjs` 再跑舊版逐像素比對）。原圖備份 `像素風圖片_備份_20261120.zip`。

@@ -15,6 +15,10 @@ import { LAYOUT_ITEMS } from '../../../src/farm/config/layoutItems.ts'
 import * as OLAY from '../.work/v390src/src/farm/pixel/layout.ts'
 import * as OPL from '../.work/v390src/src/farm/pixel/placement.ts'
 import * as OPC from '../.work/v390src/src/farm/pixel/picnic.ts'
+// 4.0-R：原圖重新套用後素材輪廓（envelopes.ts）改變；讓 v3.9.0 的程式用同一份輪廓，比的是程式邏輯（不比較素材本身）
+import { ENVELOPES as OENV } from '../.work/v390src/src/farm/pixel/envelopes.ts'
+import { ENVELOPES as NENV } from '../../../src/farm/pixel/envelopes.ts'
+Object.assign(OENV, NENV)
 
 let n = 0
 const ok = (c, m) => { n++; assert.ok(c, m) }

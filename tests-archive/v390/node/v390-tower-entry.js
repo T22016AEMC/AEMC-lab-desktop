@@ -182,7 +182,7 @@ const SPRITE_KINDS = Object.keys(IDS)
     LAY.setPlacement(L2, PL.withMove(L2.placement, 'tree1', 524, 201))
     const r2 = PR.canPlace(L2, 'lamp', 598, 188)
     ok(r2.ok, 'B t8 用位置 lamp (598,188) 合法：' + (r2.ok ? '' : r2.detail))
-    eq([PR.coverStats('tree', 524, 201, ZR.door).covered, PR.coverStats('lamp', 598, 188, ZR.sign).covered], [207, 86], 'B t8 用位置的蓋住格數 = 207（塔門）、86（招牌）')
+    eq([PR.coverStats('tree', 524, 201, ZR.door).covered, PR.coverStats('lamp', 598, 188, ZR.sign).covered], [205, 82], 'B t8 用位置的蓋住格數 = 205（塔門）、82（招牌）（4.0-R：樹與路燈的輪廓重畫，原本 207、86 恰好 25%）')
   }
   // 貓跳台專用規則沒動：預設貓跳台合法；頂層貓碰到塔門仍然擋下
   ok(PR.canPlace(L, 'catTree', 574, 271).ok, 'B 貓跳台預設位置合法')
@@ -194,8 +194,9 @@ const SPRITE_KINDS = Object.keys(IDS)
 // ================= C. 面積量測（和報告對照） =================
 const rep = {
   // 報告 E 欄（舊規則：四個區任何一格被蓋住都擋）、B 25% 欄（只護門洞、25%）
-  E: { lamp: 8865, tree1: 10455, kennel: 10195, catTree: 12303, planter: 7013, rocks: 6183, bowls: 6248 },
-  B25: { lamp: 6577, tree1: 8801, kennel: 8964, catTree: 12303, planter: 6035, rocks: 5922, bowls: 6248 },
+  // 4.0-R：原圖重新套用，素材輪廓重畫，面積跟著改（原本 E: lamp 8865, tree1 10455, kennel 10195, catTree 12303, planter 7013, rocks 6183；B25: lamp 6577, tree1 8801, kennel 8964, catTree 12303, planter 6035）
+  E: { lamp: 8850, tree1: 10438, kennel: 10189, catTree: 12266, planter: 7024, rocks: 6189, bowls: 6248 },
+  B25: { lamp: 6580, tree1: 8781, kennel: 8967, catTree: 12266, planter: 6049, rocks: 5922, bowls: 6248 },
 }
 const CAT = { lamp: 'lamp', tree1: 'tree', kennel: 'kennel', catTree: 'catTree', planter: 'planter', rocks: 'rocks', bowls: 'bowls' }
 const towerFoot = PL.footprintAt('tower', tw.x, tw.y)
@@ -245,7 +246,8 @@ for (const [id, kind] of Object.entries(CAT)) {
 }
 function EXPECT_NEW() {
   // 實際值（和報告 B 25% 欄不同的原因：報告的 B 25% 欄只保護門洞、不保護招牌與鐘面；這次的規則還保護招牌與鐘面各 25%、窗戶完全不能蓋）
-  return { lamp: 7253, tree1: 8919, kennel: 8972, catTree: 12303, planter: 6035, rocks: 5922, bowls: 6248 }
+  // 4.0-R：素材輪廓重畫（原本 lamp 7253, tree1 8919, kennel 8972, catTree 12303, planter 6035）
+  return { lamp: 7260, tree1: 8902, kennel: 8974, catTree: 12266, planter: 6049, rocks: 5922, bowls: 6248 }
 }
 
 // ================= D. 放寬後新增的位置：連通、座位、原因文字 =================

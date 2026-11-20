@@ -2,7 +2,7 @@
 // 用 process-assets.mjs 的 sheet({ probe: true }) 拿到和管線一模一樣的切格與取樣函式，p 以 0.15% 的等比步長掃描，
 // 取「完全相同的格數最多」的 p 區間的中點（區間越寬，原圖小改時越不會跳）。只印結果，不改任何檔。
 // 用法：ASSET_SRC=<原圖資料夾> node tests-archive/v400r/tune-p.mjs [項目 id…]
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -132,4 +132,5 @@ for (const spec of SPECS) {
   }
   console.log(spec.id, JSON.stringify(results[spec.id]))
 }
-writeFileSync(join(HERE, '.tune-result.json'), JSON.stringify(results, null, 1))
+mkdirSync(join(HERE, '.work'), { recursive: true })
+writeFileSync(join(HERE, '.work', 'tune-result.json'), JSON.stringify(results, null, 1))
