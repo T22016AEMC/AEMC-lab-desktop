@@ -835,6 +835,47 @@ function padBottomAt(spr, W, H, ox) {
     }
   return { w: W, h: H, rgba: out }
 }
+/**
+ * 4.0-B1 池塘水面（相對素材左上角的橢圓）：藍色水面用 detectWater；偵測不可靠的（星雲、岩漿不是藍色；森林只抓到瀑布；
+ * 亞特蘭提斯、無塵室會把藍色池緣算進去）用這張表，數字是看 ×5 放大圖量的（tests-archive/v400b1 的 water 檢查圖）。
+ * 站位與洗澡通道一律用預設 WATER（layout.ts），這裡的水面只用在泡澡裁切與漣漪。
+ */
+const WATER_TABLE = {
+  atlantis: { cx: 55, cy: 36, rx: 32, ry: 17 },
+  cleanroom: { cx: 55, cy: 34, rx: 41, ry: 27 },
+  forest: { cx: 55, cy: 44, rx: 38, ry: 16 },
+  magic: { cx: 56, cy: 32, rx: 41, ry: 19 },
+  punk: { cx: 55, cy: 36, rx: 40, ry: 20 },
+}
+const lum = (rgba, i) => (rgba[i] + rgba[i + 1] + rgba[i + 2]) / 3
+/**
+ * 狗窩門洞的量法（預設狗窩與外殼用同一套，外殼存「和預設的差」）：第 52 列從門洞中心找暗色（亮度 < 60）連續段 → 左右緣；
+ * 從中心往上到不暗為止 → 拱頂；往下「暗色占門洞寬一半以上」的列結束後（墊子），下一個又過半的列 → 墊子前緣
+ */
+function doorProbe(s) {
+  const dark = (x, y) => { const i = (y * s.w + x) * 4; return s.rgba[i + 3] > 0 && lum(s.rgba, i) < 60 }
+  let sx = -1
+  for (const x of [39, 38, 40, 37, 41, 36, 42, 35, 43]) if (dark(x, 52)) { sx = x; break }
+  if (sx < 0) return null
+  let left = sx, right = sx
+  while (left > 0 && dark(left - 1, 52)) left--
+  while (right < s.w - 1 && dark(right + 1, 52)) right++
+  let top = 52
+  while (top > 0 && dark(sx, top - 1)) top--
+  const frac = (y) => { let n = 0; for (let x = left; x <= right; x++) if (dark(x, y)) n++; return n / (right - left + 1) }
+  let y = 53
+  while (y < s.h && frac(y) >= 0.5) y++
+  let front = -1
+  for (; y < s.h; y++) if (frac(y) >= 0.5) { front = y; break }
+  return { left, right, top, front }
+}
+/** 貓跳台平台的頂面：x 欄從 from 列往下第一個不透明像素（頂層 x46 從 0、中層 x19 從 20） */
+function surfaceTop(s, x, from) {
+  let y = from
+  while (y < s.h && !s.rgba[(y * s.w + x) * 4 + 3]) y++
+  return y
+}
+
 /** 外殼的鐘面：關門版偵測、取整數，同主題的開門版共用（和預設鐘樓 sharedClock 同一規則） */
 function themeClock(name, closed, open) {
   const c = detectClockFace(closed)
@@ -884,10 +925,40 @@ async function buildSkins() {
     addFrame('skins_tower', `tower_${t}`, closed, { nearBg: true, keepEnclosed: c.keepEnclosed, meta: { clock: { ...clock } } })
     addFrame('skins_tower', `tower_${t}_open`, open, { nearBg: true, keepEnclosed: o.keepEnclosed, meta: { clock: { ...clock } } })
   }
+  // 小建築、池塘的 meta：狗窩門洞與貓跳台座位是「和預設圖的差」（引擎用自己的常數加上差），池塘是水面橢圓
+  const refDog = atlases.scene.find((f) => f.key === 'doghouse'), refCat = atlases.scene.find((f) => f.key === 'cat_tree')
+  const dogRef = doorProbe(refDog)
+  const catRef = { top: surfaceTop(refCat, 46, 0), mid: surfaceTop(refCat, 19, 20) }
+  const metaOf = (n, spr) => {
+    const t = n.slice(n.lastIndexOf('_') + 1)
+    if (n.startsWith('pond_')) {
+      const water = WATER_TABLE[t] ?? detectWater(spr)
+      if (!water || water.rx < 25 || water.ry < 10) throw new Error(n + '：水面偵測失敗，請加進 WATER_TABLE')
+      info(`  ${n}：水面 ${JSON.stringify(water)}（${WATER_TABLE[t] ? '表格' : '偵測'}）`)
+      return { water }
+    }
+    if (n.startsWith('doghouse_')) {
+      const d = doorProbe(spr)
+      if (!d || d.front < 0) throw new Error(n + '：量不到門洞')
+      const door = { dx: d.right - dogRef.right, dyTop: d.top - dogRef.top, dyFront: d.front - dogRef.front }
+      info(`  ${n}：門洞 左 ${d.left} 右 ${d.right} 拱頂 ${d.top} 墊子前緣 ${d.front}（預設 ${dogRef.left}／${dogRef.right}／${dogRef.top}／${dogRef.front}）→ ${JSON.stringify(door)}`)
+      return { door }
+    }
+    if (n.startsWith('cat_tree_')) {
+      const seats = { dyTop: surfaceTop(spr, 46, 0) - catRef.top, dyMid: surfaceTop(spr, 19, 20) - catRef.mid }
+      info(`  ${n}：平台頂面差 ${JSON.stringify(seats)}`)
+      return { seats }
+    }
+    return null
+  }
   const six = async (file, order, prefix, canvas, atlas) => {
     const names = order.map((t) => prefix + t)
     const cells = await skinSheet(file, 3, 2, names)
-    for (const n of names) addFrame(atlas, n, skinFit(n, cells[n], canvas), { nearBg: true, keepEnclosed: cells[n].keepEnclosed })
+    for (const n of names) {
+      const spr = skinFit(n, cells[n], canvas)
+      const meta = metaOf(n, spr)
+      addFrame(atlas, n, spr, { nearBg: true, keepEnclosed: cells[n].keepEnclosed, ...(meta ? { meta } : {}) })
+    }
   }
   await six('pond_themes.png', POND_ORDER, 'pond_', SKIN_CANVAS.pond, 'skins_pond')
   await six('board_themes.png', THEMES, 'board_', SKIN_CANVAS.board, 'skins_board')
@@ -1937,5 +2008,5 @@ async function overview(tag, bg) {
 }
 
 // 4.0-R：直接執行才跑管線；被 import（tests-archive/v400r/tune-p.mjs 調參工具）時只提供下面這些函式，不寫任何輸出
-export { SKIN_KEEP_ENCLOSED, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
+export { SKIN_KEEP_ENCLOSED, WATER_TABLE, doorProbe, surfaceTop, isEdge, sheet, load, isBg, isBgNear, isBgStrict, trimMagentaFringe, edgeMagentaCount, defringeEdges, estimateP, estimatePhase, fgMask, label, depixelate, cleanSprite, BUILDING_SCALES }
 if (IS_MAIN) await main()

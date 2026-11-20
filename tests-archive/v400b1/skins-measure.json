@@ -741,7 +741,15 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 1
+   "edgeMagenta": 1,
+   "meta": {
+    "water": {
+     "cx": 55,
+     "cy": 36,
+     "rx": 32,
+     "ry": 17
+    }
+   }
   },
   "board_atlantis": {
    "atlas": "skins_board",
@@ -775,7 +783,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "door": {
+     "dx": 1,
+     "dyTop": 1,
+     "dyFront": 0
+    }
+   }
   },
   "cat_tree_atlantis": {
    "atlas": "skins_small",
@@ -792,7 +807,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 4
+   "edgeMagenta": 4,
+   "meta": {
+    "seats": {
+     "dyTop": 0,
+     "dyMid": -2
+    }
+   }
   },
   "bowls_atlantis": {
    "atlas": "skins_small",
@@ -826,7 +847,15 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "water": {
+     "cx": 55,
+     "cy": 34,
+     "rx": 41,
+     "ry": 27
+    }
+   }
   },
   "board_cleanroom": {
    "atlas": "skins_board",
@@ -860,7 +889,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "door": {
+     "dx": 0,
+     "dyTop": -1,
+     "dyFront": -2
+    }
+   }
   },
   "cat_tree_cleanroom": {
    "atlas": "skins_small",
@@ -877,7 +913,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "seats": {
+     "dyTop": 0,
+     "dyMid": -1
+    }
+   }
   },
   "bowls_cleanroom": {
    "atlas": "skins_small",
@@ -911,7 +953,15 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "water": {
+     "cx": 55,
+     "cy": 44,
+     "rx": 38,
+     "ry": 16
+    }
+   }
   },
   "board_forest": {
    "atlas": "skins_board",
@@ -945,7 +995,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "door": {
+     "dx": 1,
+     "dyTop": 1,
+     "dyFront": 0
+    }
+   }
   },
   "cat_tree_forest": {
    "atlas": "skins_small",
@@ -962,7 +1019,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "seats": {
+     "dyTop": 0,
+     "dyMid": -1
+    }
+   }
   },
   "bowls_forest": {
    "atlas": "skins_small",
@@ -996,7 +1059,15 @@
    "keepEnclosed": true,
    "magentaNear": 0,
    "magentaInterior": 316,
-   "edgeMagenta": 40
+   "edgeMagenta": 40,
+   "meta": {
+    "water": {
+     "cx": 56,
+     "cy": 32,
+     "rx": 41,
+     "ry": 19
+    }
+   }
   },
   "board_magic": {
    "atlas": "skins_board",
@@ -1030,7 +1101,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 2
+   "edgeMagenta": 2,
+   "meta": {
+    "door": {
+     "dx": 1,
+     "dyTop": 1,
+     "dyFront": 0
+    }
+   }
   },
   "cat_tree_magic": {
    "atlas": "skins_small",
@@ -1047,7 +1125,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 48
+   "edgeMagenta": 48,
+   "meta": {
+    "seats": {
+     "dyTop": 5,
+     "dyMid": 0
+    }
+   }
   },
   "bowls_magic": {
    "atlas": "skins_small",
@@ -1081,7 +1165,15 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 5
+   "edgeMagenta": 5,
+   "meta": {
+    "water": {
+     "cx": 55,
+     "cy": 36,
+     "rx": 40,
+     "ry": 20
+    }
+   }
   },
   "board_punk": {
    "atlas": "skins_board",
@@ -1115,7 +1207,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "door": {
+     "dx": 1,
+     "dyTop": 0,
+     "dyFront": -3
+    }
+   }
   },
   "cat_tree_punk": {
    "atlas": "skins_small",
@@ -1132,7 +1231,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "seats": {
+     "dyTop": 0,
+     "dyMid": 0
+    }
+   }
   },
   "bowls_punk": {
    "atlas": "skins_small",
@@ -1166,7 +1271,15 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 2
+   "edgeMagenta": 2,
+   "meta": {
+    "water": {
+     "cx": 57,
+     "cy": 39,
+     "rx": 41,
+     "ry": 20
+    }
+   }
   },
   "board_plaid": {
    "atlas": "skins_board",
@@ -1200,7 +1313,14 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 1
+   "edgeMagenta": 1,
+   "meta": {
+    "door": {
+     "dx": 1,
+     "dyTop": 0,
+     "dyFront": 0
+    }
+   }
   },
   "cat_tree_plaid": {
    "atlas": "skins_small",
@@ -1217,7 +1337,13 @@
    "keepEnclosed": false,
    "magentaNear": 0,
    "magentaInterior": 0,
-   "edgeMagenta": 0
+   "edgeMagenta": 0,
+   "meta": {
+    "seats": {
+     "dyTop": 0,
+     "dyMid": 0
+    }
+   }
   },
   "bowls_plaid": {
    "atlas": "skins_small",

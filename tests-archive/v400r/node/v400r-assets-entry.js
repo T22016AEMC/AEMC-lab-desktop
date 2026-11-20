@@ -79,39 +79,34 @@ for (const k of ['clocktower', 'clocktower_open']) {
 }
 
 // ---- 2. envelopes.ts ----
+// 4.0-B1：每個群組含所有主題外殼的聯集（寬度、錨點 ax 相同、腳底對齊；高度取最高的），和 scripts/gen-envelopes.mjs 同一規則
+const THEMES = ['atlantis', 'cleanroom', 'forest', 'magic', 'punk', 'plaid']
 const GROUPS = {
-  house: ['house_closed', 'house_open', 'house_night', 'house_atlantis_closed', 'house_atlantis_open', 'house_atlantis_night'],
-  clocktower: ['clocktower', 'clocktower_open', 'tower_atlantis', 'tower_atlantis_open'],
-  pond: ['pond'], board: ['board'], lamp: ['lamp'], tree: ['tree'], bush: ['bush'], mushroom: ['mushroom'], rocks: ['rocks'], flowers: ['flowers'],
-  stump: ['stump'], tall_grass: ['tall_grass'], doghouse: ['doghouse'], cat_tree: ['cat_tree'], bowls: ['bowls'], planter: ['planter'], coral: ['coral'],
+  house: ['house_closed', 'house_open', 'house_night', ...THEMES.flatMap((t) => [`house_${t}_closed`, `house_${t}_open`, `house_${t}_night`])],
+  clocktower: ['clocktower', 'clocktower_open', ...THEMES.flatMap((t) => [`tower_${t}`, `tower_${t}_open`])],
+  pond: ['pond', ...THEMES.map((t) => 'pond_' + t)], board: ['board', ...THEMES.map((t) => 'board_' + t)], lamp: ['lamp'], tree: ['tree'], bush: ['bush'], mushroom: ['mushroom'], rocks: ['rocks'], flowers: ['flowers'],
+  stump: ['stump'], tall_grass: ['tall_grass'], doghouse: ['doghouse', ...THEMES.map((t) => 'doghouse_' + t)], cat_tree: ['cat_tree', ...THEMES.map((t) => 'cat_tree_' + t)], bowls: ['bowls', ...THEMES.map((t) => 'bowls_' + t)], planter: ['planter'], coral: ['coral'],
 }
 for (const [g, keys] of Object.entries(GROUPS)) {
   const e = ENVELOPES[g], f0 = F(keys[0])
-  eq([e.w, e.h, e.ax, e.ay], [f0.w, f0.h, f0.ax, f0.ay], `envelopes.ts ${g} 尺寸與錨點 = manifest`)
+  const H = Math.max(...keys.map((k) => F(k).ay))
+  eq([e.w, e.h, e.ax, e.ay], [f0.w, H, f0.ax, H], `envelopes.ts ${g} 尺寸與錨點 = 預設圖（高度取外殼裡最高的）`)
   const rows = []
-  for (let y = 0; y < f0.h; y++) {
+  for (let y = 0; y < H; y++) {
     const on = new Array(f0.w).fill(false)
-    for (const k of keys) { const f = F(k); for (let x = 0; x < f.w; x++) if (f.on(x, y)) on[x] = true }
+    for (const k of keys) { const f = F(k); const yy = y - (H - f.ay); if (yy < 0 || yy >= f.h) continue; for (let x = 0; x < f.w; x++) if (f.on(x, yy)) on[x] = true }
     const segs = []
     for (let x = 0; x < f0.w; x++) if (on[x] && (x === 0 || !on[x - 1])) { let e2 = x; while (e2 < f0.w && on[e2]) e2++; segs.push([x - f0.ax, e2 - f0.ax]) }
     rows.push(segs)
   }
-  eq(e.rows.map((r) => r.map((s) => [...s])), rows, `envelopes.ts ${g} 逐列不透明區段 = 圖集`)
+  eq(e.rows.map((r) => r.map((s) => [...s])), rows, `envelopes.ts ${g} 逐列不透明區段 = 圖集（含外殼聯集）`)
 }
 
 // ---- 3. CAT_TREE_ENVELOPE ----
 {
-  const tree = F('cat_tree')
-  const m = new Map()
-  const add = (rel, a, b) => { const r = m.get(rel) ?? [Infinity, -Infinity]; m.set(rel, [Math.min(r[0], a), Math.max(r[1], b)]) }
-  for (let y = 0; y < tree.h; y++) for (let x = 0; x < tree.w; x++) if (tree.on(x, y)) add(y, x - tree.ax, x - tree.ax + 1)
-  for (const c of ['orange', 'black', 'calico', 'siamese', 'bluecat', 'ragdoll']) {
-    const s = F(`cat_${c}_sleep`)
-    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (s.on(x, y)) { const col = CAT_TREE_TOP_SEAT.x - tree.ax + s.ax - x - 1; add(CAT_TREE_TOP_SEAT.y - s.ay + y, col, col + 1) }
-  }
-  const want = []
-  for (let rel = LAY.CAT_TREE_ENVELOPE_ROW0; rel < tree.h; rel++) want.push(m.get(rel) ?? [0, 0])
-  eq(LAY.CAT_TREE_ENVELOPE.map((r) => [...r]), want, 'CAT_TREE_ENVELOPE = 圖集重新算一次')
+  const { catTreeEnvelope } = await import(pathToFileURL(ROOT + '/tests-archive/v400r/cat-tree-envelope.mjs').href)
+  const want = (await catTreeEnvelope(ROOT)).rows
+  eq(LAY.CAT_TREE_ENVELOPE.map((r) => [...r]), want, 'CAT_TREE_ENVELOPE = 圖集重新算一次（含貓跳台外殼）')
 }
 
 // ---- 4. 寵物：腳底 ----

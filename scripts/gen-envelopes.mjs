@@ -41,19 +41,33 @@ async function atlas(name) {
   return atlases[name]
 }
 
+// 4.0-B1：每個群組再加上所有主題外殼（擺放規則對任何外觀都安全）。外殼和預設圖寬度、錨點 ax 相同、腳底對齊（錨點 ay = 底邊），
+// 高度可以不同（食盆外殼 31、預設 27）：聯集的高度取最高的，第 0 列 = 最高那張的頂端
+const THEMES = ['atlantis', 'cleanroom', 'forest', 'magic', 'punk', 'plaid']
+const SKIN_PREFIX = { house: null, clocktower: null, pond: 'pond_', board: 'board_', doghouse: 'doghouse_', cat_tree: 'cat_tree_', bowls: 'bowls_' }
+for (const t of THEMES) {
+  GROUPS.house.push(`house_${t}_closed`, `house_${t}_open`, `house_${t}_night`)
+  GROUPS.clocktower.push(`tower_${t}`, `tower_${t}_open`)
+  for (const [g, pre] of Object.entries(SKIN_PREFIX)) if (pre) GROUPS[g].push(pre + t)
+}
+for (const g of Object.keys(GROUPS)) GROUPS[g] = [...new Set(GROUPS[g])]
+
 const out = {}
 for (const [id, keys] of Object.entries(GROUPS)) {
   const main = manifest.frames[keys[0]]
   if (!main) throw new Error('manifest 沒有 ' + keys[0])
-  const mask = Array.from({ length: main.h }, () => new Uint8Array(main.w))
+  const frames = keys.map((k) => manifest.frames[k]).filter(Boolean)
+  const H = Math.max(...frames.map((f) => f.ay))
+  for (const f of frames) if (f.w !== main.w || f.ax !== main.ax || f.ay !== f.h) throw new Error(keys[frames.indexOf(f)] + ' 寬度或錨點和 ' + keys[0] + ' 不同')
+  const mask = Array.from({ length: H }, () => new Uint8Array(main.w))
   for (const k of keys) {
     const f = manifest.frames[k]
     if (!f) continue
-    if (f.w !== main.w || f.h !== main.h || f.ax !== main.ax || f.ay !== main.ay) throw new Error(k + ' 尺寸或錨點和 ' + keys[0] + ' 不同')
     const a = await atlas(f.atlas)
+    const oy = H - f.ay
     for (let y = 0; y < f.h; y++)
       for (let x = 0; x < f.w; x++) {
-        if (a.data[((f.y + y) * a.w + f.x + x) * 4 + 3] !== 0) mask[y][x] = 1
+        if (a.data[((f.y + y) * a.w + f.x + x) * 4 + 3] !== 0) mask[y + oy][x] = 1
       }
   }
   // 每列切成連續的不透明區段
@@ -68,7 +82,7 @@ for (const [id, keys] of Object.entries(GROUPS)) {
     }
     return runs
   })
-  out[id] = { w: main.w, h: main.h, ax: main.ax, ay: main.ay, rows }
+  out[id] = { w: main.w, h: H, ax: main.ax, ay: H, rows }
 }
 
 let ts = `/**

@@ -24,6 +24,10 @@ export interface Frame {
     window?: { x0: number; y0: number; x1: number; y1: number }
     /** v3.8.0 野餐墊的墊面（每 4 列一筆 [y, 左緣, 右緣)） */
     mat?: { top: number; bottom: number; rows: [number, number, number][] }
+    /** 4.0-B1 外殼：池塘水面（相對素材左上角）、狗窩門洞與貓跳台座位（和預設圖的差） */
+    water?: { cx: number; cy: number; rx: number; ry: number }
+    door?: { dx: number; dyTop: number; dyFront: number }
+    seats?: { dyTop: number; dyMid: number }
   }
 }
 

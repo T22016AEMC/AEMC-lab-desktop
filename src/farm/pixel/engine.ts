@@ -4,7 +4,7 @@ import { SWAT_ARC_COLORS, swatArcScreen } from './swatArc'
 import { isPicnicNapping } from './picnic'
 import { BASKET_KEYS, FOOD_KEYS, MAT_BASKET, MAT_FOODS, MAT_KEYS, MAT_SEATS, MAT_SNACKS, SNACK_KEYS, cameraRect, picnicMatRect, picnicSnacks, type PicnicSeat } from './picnic'
 import type { FarmEffect } from '../sim/commands'
-import { skinDef } from '../config/skins'
+import { SKIN_PARTS, equippedSkinDef, type SkinPart } from '../config/skins'
 import type { RevealResult } from '../sim/dig'
 import { BALANCE } from '../config/balance'
 import { buildingDef } from '../config/buildings'
@@ -20,7 +20,7 @@ import {
   POND_AX, POND_H, WATER, setPlacement, toCss, towerBase, towerDoorRect, towerSignCenter, towerTopLeft, towerX, waterEllipse, type BuildingSlot, type Layout,
   boardPos, boardGreenRect, rectCss, toolHitRects, type Rect as LayoutRect, type ToolHits,
 } from './layout'
-import { KENNEL_DOOR_CLIP, KENNEL_DOOR_CX, KENNEL_INSIDE_BOTTOM, KENNEL_INSIDE_RIGHT, isOverflowSeat, releaseUse, seatsOf } from './buildingUse'
+import { isOverflowSeat, kennelGeometry, releaseUse, seatsOf, setSkinGeometry } from './buildingUse'
 import {
   PLAY_OPS, assetPrefix, beginBathWalk, cancelBath, clampActor, computeSeparation, createActor, dropKind, enterPond, frameKeyOf, frameNameOf, isBathing, triggerAnim,
   updateActor, usesPond, type Actor, type BehaviorEnv,
@@ -411,6 +411,7 @@ export class PixelEngine {
   }
 
   update(dt: number, f: FrameInfo): void {
+    this.syncSkinGeometry()
     this.time += dt
     this.lastFrame = f
     if (this.editing) {
@@ -470,6 +471,7 @@ export class PixelEngine {
     const L = this.renderLayout()
     const f = this.lastFrame
     if (!assets.ready) return
+    this.syncSkinGeometry()
     // v3.9.0 非整數倍：先在 1 倍的暫存畫布畫出整個可見範圍，再關掉平滑等比放大貼上（不會有接縫，像素寬度會差 1 個裝置像素）
     if (!view && !L.whole) {
       this.renderScaled(ctx)
@@ -508,7 +510,7 @@ export class PixelEngine {
     })
     const pond = pondPos(L)
     // v3.7.0：公佈欄（水池上方的遠景區，腳底在草地上緣，排在所有後排物件之前）
-    const board = assets.get('board')
+    const board = this.kindSprite('board')
     if (board) {
       const bp = boardPos(L)
       items.push({ y: bp.y, draw: () => drawSprite(ctx, board, bp.x, bp.y) })
@@ -519,8 +521,8 @@ export class PixelEngine {
         items.push({ y: o.y, draw: () => this.drawPond(ctx, o.x, o.y, f) })
         continue
       }
-      const key = KIND_GEOM[o.kind].sprite
-      const s = o.key === 'clocktower' ? this.towerSprite() : key ? assets.get(key) : null
+      // 4.0-B1：穿了外殼就用外殼的圖（kindSprite 集中處理；鐘樓依滑鼠換開門版）
+      const s = this.kindSprite(o.kind)
       if (!s) continue
       items.push({
         y: o.y,
@@ -532,7 +534,7 @@ export class PixelEngine {
     // 已購買的建築（這個視窗放得下的才畫）：依腳底 y 排前後；食盆空了在上方顯示「空」
     for (const slot of ownedSlots(L)) {
       const def = buildingDef(slot.id)
-      const spr = def?.sprite ? assets.get(def.sprite) : null
+      const spr = this.skinFrame(slot.id as SkinPart) ?? (def?.sprite ? assets.get(def.sprite) : null)
       if (spr) items.push({ y: slot.y, draw: () => drawSprite(ctx, spr, slot.x, slot.y) })
       if (slot.id === 'bowls' && this.bowlLeft <= 0) items.push({ y: slot.y + 60, draw: () => drawEmptyIcon(ctx, slot.x, slot.y - slot.h - 3 + Math.round(Math.sin(this.time * 3) * 1)) })
     }
@@ -790,11 +792,12 @@ export class PixelEngine {
 
   /** 水池本體＋泡澡中的寵物（用水面橢圓裁切，只露出水面以上）＋漣漪 */
   private drawPond(ctx: CanvasRenderingContext2D, x: number, y: number, f: FrameInfo): void {
-    const s = assets.get('pond')
+    const s = this.kindSprite('pond')
     if (!s) return
     drawSprite(ctx, s, x, y)
-    // 水面跟著這次畫的水池位置（擺設模式拖曳水池時是預覽位置）
-    const w = { cx: x - POND_AX + WATER.cx, cy: y - POND_H + WATER.cy, rx: WATER.rx, ry: WATER.ry }
+    // 水面跟著這次畫的水池位置（擺設模式拖曳水池時是預覽位置）；4.0-B1：池塘外裝用該外觀自己的水面（只影響泡澡裁切與漣漪）
+    const wm = s.meta?.water ?? WATER
+    const w = { cx: x - POND_AX + wm.cx, cy: y - POND_H + wm.cy, rx: wm.rx, ry: wm.ry }
     const line = w.cy + 6 // 水面線
     for (const a of this.actors.values()) {
       if (a.bath?.phase !== 'soak') continue
@@ -850,13 +853,14 @@ export class PixelEngine {
     const spr = this.actorSprite(a)
     const left = slot.x - KENNEL_AX
     const top = slot.y - KENNEL_H
+    const kg = kennelGeometry()
     return {
-      x: left + KENNEL_INSIDE_RIGHT - (spr ? spr.w - spr.ax : 24),
-      y: top + KENNEL_INSIDE_BOTTOM,
-      clip: KENNEL_DOOR_CLIP.map((r) => ({ x0: left + r.x0, x1: left + r.x1, y0: top + r.y0, y1: top + r.y1 })),
+      x: left + kg.insideRight - (spr ? spr.w - spr.ax : 24),
+      y: top + kg.insideBottom,
+      clip: kg.clip.map((r) => ({ x0: left + r.x0, x1: left + r.x1, y0: top + r.y0, y1: top + r.y1 })),
       sortY: slot.y + 0.5,
-      iconX: left + KENNEL_DOOR_CX,
-      iconBottom: top + KENNEL_DOOR_CLIP[0].y0 - 2,
+      iconX: left + kg.doorCx,
+      iconBottom: top + kg.clip[0].y0 - 2,
     }
   }
 
@@ -884,7 +888,7 @@ export class PixelEngine {
   /** 住家的圖：穿了外觀（圖集 skins 已載入）就用外觀的，否則用預設圖 */
   private houseSprite(night: boolean): Sprite | null {
     const base = night ? 'house_night' : this.doorHover ? 'house_open' : 'house_closed'
-    const def = this.skins.house ? skinDef(this.skins.house) : undefined
+    const def = equippedSkinDef(this.skins, 'house')
     const k = def ? (night ? def.frames.night : this.doorHover ? def.frames.open : def.frames.closed) : null
     return (k ? assets.get(k) : null) ?? assets.get(base)
   }
@@ -892,7 +896,7 @@ export class PixelEngine {
   /** 鐘樓的圖（滑鼠在門上換開門版）：穿了外觀就用外觀的 */
   private towerSprite(): Sprite | null {
     const base = this.towerHover ? 'clocktower_open' : 'clocktower'
-    const def = this.skins.tower ? skinDef(this.skins.tower) : undefined
+    const def = equippedSkinDef(this.skins, 'tower')
     const k = def ? (this.towerHover ? def.frames.open : def.frames.closed) : null
     return (k ? assets.get(k) : null) ?? assets.get(base)
   }
@@ -1518,12 +1522,32 @@ export class PixelEngine {
     }
   }
 
-  /** 物件種類的素材（住家、鐘樓依目前狀態挑圖） */
+  /** 物件種類的素材（住家、鐘樓依目前狀態挑圖；4.0-B1：池塘、公佈欄、狗窩、貓跳台、食盆穿了外殼就用外殼的圖） */
   private kindSprite(kind: LayoutKind): Sprite | null {
     if (kind === 'house') return this.houseSprite(this.isHouseLit(this.lastFrame.hour))
     if (kind === 'tower') return this.towerSprite()
+    if ((SKIN_PARTS as readonly string[]).includes(kind)) {
+      const s = this.skinFrame(kind as SkinPart)
+      if (s) return s
+    }
     const key = KIND_GEOM[kind].sprite
     return key ? assets.get(key) : null
+  }
+
+  /** 4.0-B1：某個部位穿著的外殼圖（只看 closed；沒穿或圖集還沒載入 = null，呼叫端退回預設圖） */
+  private skinFrame(part: SkinPart): Sprite | null {
+    const d = equippedSkinDef(this.skins, part)
+    return d ? assets.get(d.frames.closed) : null
+  }
+
+  /** 4.0-B1：狗窩門洞、貓跳台座位跟著畫面上真的畫出來的圖（外殼圖載入後才換，之前用預設） */
+  private lastGeom: unknown = null
+  private syncSkinGeometry(): void {
+    const door = this.skinFrame('kennel')?.meta?.door ?? null
+    const seats = this.skinFrame('catTree')?.meta?.seats ?? null
+    if (this.lastGeom && (this.lastGeom as { door: unknown; seats: unknown }).door === door && (this.lastGeom as { door: unknown; seats: unknown }).seats === seats) return
+    this.lastGeom = { door, seats }
+    setSkinGeometry(door, seats)
   }
 
   /** 素材的紅色版本（不合法的位置）：不透明像素疊半透明紅色，快取 */
